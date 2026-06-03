@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../packages/config-tsconfig/base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    // moduleResolution: Node — compatible with NestJS CommonJS build.
+    // Workspace packages (shared-types, prisma-tenant-extension) are ESM but
+    // the runtime interop is handled by Node.js require-of-ESM (which Node 22 supports).
+    // skipLibCheck: true prevents TS from failing on ESM type declarations.
+    // Subpath exports are avoided in favor of root imports to stay within Node resolution.
+    "moduleResolution": "Node",
+    "target": "ES2022",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    // exactOptionalPropertyTypes disabled: NestJS decorators and Prisma generated
+    // types emit optional properties that conflict with exactOptionalPropertyTypes.
+    // strict:true + noUncheckedIndexedAccess remain enforced.
+    "exactOptionalPropertyTypes": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "baseUrl": ".",
+    // Map subpath imports of workspace ESM packages to their dist declaration files.
+    // This is required with moduleResolution: Node (which doesn't read package.json exports).
+    "paths": {
+      "@gestion-publica/shared-types": [
+        "../../packages/shared-types/dist/index.d.ts"
+      ],
+      "@gestion-publica/shared-types/common": [
+        "../../packages/shared-types/dist/common/index.d.ts"
+      ],
+      "@gestion-publica/shared-types/auth": [
+        "../../packages/shared-types/dist/auth/index.d.ts"
+      ],
+      "@gestion-publica/shared-types/okr": [
+        "../../packages/shared-types/dist/okr/index.d.ts"
+      ],
+      "@gestion-publica/shared-types/core": [
+        "../../packages/shared-types/dist/core/index.d.ts"
+      ],
+      "@gestion-publica/shared-types/audit": [
+        "../../packages/shared-types/dist/audit/index.d.ts"
+      ],
+      "@gestion-publica/prisma-tenant-extension": [
+        "../../packages/prisma-tenant-extension/dist/index.d.ts"
+      ]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.e2e-spec.ts", "test/**"]
+}

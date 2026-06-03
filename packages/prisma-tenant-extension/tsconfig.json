@@ -1,0 +1,10 @@
+{
+  "extends": "@gestion-publica/config-tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*", "test/**/*"]
+}

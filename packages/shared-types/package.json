@@ -1,0 +1,56 @@
+{
+  "name": "@gestion-publica/shared-types",
+  "private": true,
+  "version": "0.0.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    },
+    "./okr": {
+      "types": "./dist/okr/index.d.ts",
+      "require": "./dist/okr/index.js",
+      "import": "./dist/okr/index.mjs"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "require": "./dist/core/index.js",
+      "import": "./dist/core/index.mjs"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "require": "./dist/auth/index.js",
+      "import": "./dist/auth/index.mjs"
+    },
+    "./audit": {
+      "types": "./dist/audit/index.d.ts",
+      "require": "./dist/audit/index.js",
+      "import": "./dist/audit/index.mjs"
+    },
+    "./common": {
+      "types": "./dist/common/index.d.ts",
+      "require": "./dist/common/index.js",
+      "import": "./dist/common/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/okr/index.ts src/core/index.ts src/auth/index.ts src/audit/index.ts src/common/index.ts --format cjs,esm --dts --out-dir dist --no-splitting",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src test"
+  },
+  "devDependencies": {
+    "@gestion-publica/config-eslint": "workspace:*",
+    "@gestion-publica/config-tsconfig": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3"
+  }
+}

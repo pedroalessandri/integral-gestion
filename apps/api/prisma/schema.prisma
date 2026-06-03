@@ -1,0 +1,381 @@
+// ─────────────────────────────────────────────────────────────
+// Prisma schema — gestion-publica
+//
+// Multi-schema setup: core, auth, okr, audit
+// Numeric weights and percentages use Decimal (never Float).
+// All business tables carry organizationId for multi-tenant scoping.
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets   = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["core", "auth", "okr", "audit", "ai"]
+}
+
+// ─────────────────────────────────────────────────────────────
+// core schema — Organizations, Periods, Users, Memberships, Modules
+// ─────────────────────────────────────────────────────────────
+
+model Organization {
+  id                  String    @id @default(cuid())
+  slug                String    @unique @db.VarChar(50)
+  name                String    @db.VarChar(200)
+  /// 'active' | 'inactive' — CHECK constraint in migration
+  status              String    @default("active") @db.VarChar(10)
+  deactivatedAt       DateTime? @map("deactivated_at")
+  deactivatedByUserId String?   @map("deactivated_by_user_id")
+  /// Organizational context for AI copilot (D3 ADR-0005)
+  mission             String?   @db.Text
+  vision              String?   @db.Text
+  values              String?   @db.Text
+  /// Arbitrary additional context for the LLM (strategic priorities, etc.)
+  context             String?   @db.Text
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  periods          Period[]
+  memberships      UserOrganizationRole[]
+  modules          OrganizationModule[]
+  objectives       Objective[]
+  keyResults       KeyResult[]
+  tasks            Task[]
+  aiSettings       OrganizationAiSettings?
+  aiPromptLogs     PromptLog[]
+  aiUsageCounters  UsageCounter[]
+
+  @@index([status], map: "idx_organization_status")
+  @@map("organization")
+  @@schema("core")
+}
+
+model Period {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  /// Free-form label (1–50 chars). No format constraint after migration 20260428000001.
+  code           String    @db.VarChar(50)
+  /// 'open' | 'closed' | 'future' — CHECK constraint in migration
+  status         String    @db.VarChar(10)
+  startsAt       DateTime  @map("starts_at")
+  endsAt         DateTime  @map("ends_at")
+  closedAt       DateTime? @map("closed_at")
+  closedByUserId String?   @map("closed_by_user_id")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  objectives   Objective[]
+
+  // Partial unique index uq_period_org_one_open ON (organization_id) WHERE status = 'open' AND deleted_at IS NULL
+  // cannot be expressed in Prisma — added manually in migration SQL (D3-A).
+  @@unique([organizationId, code], map: "uq_period_org_code")
+  @@index([organizationId, status], map: "idx_period_org_status")
+  @@index([deletedAt], map: "idx_period_deleted_at")
+  @@map("period")
+  @@schema("core")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  /// JWT 'sub' claim from Auth0
+  auth0Sub     String    @unique @map("auth0_sub")
+  email        String    @unique
+  displayName  String    @map("display_name") @db.VarChar(200)
+  isSuperadmin Boolean   @default(false) @map("is_superadmin")
+  lastSeenAt   DateTime? @map("last_seen_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  memberships      UserOrganizationRole[]
+  ownedObjectives  Objective[] @relation("ObjectiveOwner")
+  ownedKeyResults  KeyResult[] @relation("KrOwner")
+  ownedTasks       Task[]      @relation("TaskOwner")
+  aiPromptLogs     PromptLog[]
+
+  @@index([isSuperadmin], map: "idx_user_superadmin")
+  @@map("user")
+  @@schema("core")
+}
+
+model UserOrganizationRole {
+  userId         String   @map("user_id")
+  organizationId String   @map("organization_id")
+  roleId         String   @map("role_id")
+  assignedAt     DateTime @default(now()) @map("assigned_at")
+  assignedByUserId String @map("assigned_by_user_id")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  @@id([userId, organizationId])
+  @@index([organizationId], map: "idx_uor_org")
+  @@index([roleId], map: "idx_uor_role")
+  @@map("user_organization_role")
+  @@schema("core")
+}
+
+model OrganizationModule {
+  organizationId   String    @map("organization_id")
+  moduleKey        String    @map("module_key")
+  enabledAt        DateTime  @default(now()) @map("enabled_at")
+  enabledByUserId  String    @map("enabled_by_user_id")
+  disabledAt       DateTime? @map("disabled_at")
+  disabledByUserId String?   @map("disabled_by_user_id")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  module       Module       @relation(fields: [moduleKey], references: [key], onDelete: Restrict)
+
+  @@id([organizationId, moduleKey])
+  @@index([organizationId, disabledAt], map: "idx_om_org_active")
+  @@map("organization_module")
+  @@schema("core")
+}
+
+model Module {
+  key         String   @id @db.VarChar(64)
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  enablements OrganizationModule[]
+
+  @@map("module")
+  @@schema("core")
+}
+
+// ─────────────────────────────────────────────────────────────
+// auth schema — Roles, Permissions, Role-Permission assignments
+// ─────────────────────────────────────────────────────────────
+
+model Role {
+  id              String           @id @default(cuid())
+  key             String           @unique @db.VarChar(64)
+  name            String           @db.VarChar(120)
+  description     String?          @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at")
+  rolePermissions RolePermission[]
+  memberships     UserOrganizationRole[]
+
+  @@map("role")
+  @@schema("auth")
+}
+
+model Permission {
+  key             String           @id @db.VarChar(64)
+  description     String           @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at")
+  rolePermissions RolePermission[]
+
+  @@map("permission")
+  @@schema("auth")
+}
+
+model RolePermission {
+  roleId        String     @map("role_id")
+  permissionKey String     @map("permission_key")
+  assignedAt    DateTime   @default(now()) @map("assigned_at")
+  role          Role       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  permission    Permission @relation(fields: [permissionKey], references: [key], onDelete: Restrict)
+
+  @@id([roleId, permissionKey])
+  @@index([permissionKey], map: "idx_role_permission_key")
+  @@map("role_permission")
+  @@schema("auth")
+}
+
+// ─────────────────────────────────────────────────────────────
+// audit schema — append-only event log
+// ─────────────────────────────────────────────────────────────
+
+model AuditEvent {
+  id             String   @id @default(cuid())
+  occurredAt     DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  actorId        String   @map("actor_id") @db.VarChar(64)
+  organizationId String?  @map("organization_id")
+  entityType     String   @map("entity_type") @db.VarChar(64)
+  entityId       String   @map("entity_id") @db.VarChar(64)
+  action         String   @db.VarChar(80)
+  diff           Json     @db.JsonB
+  requestId      String   @map("request_id") @db.Uuid
+
+  // No @relation annotations — cross-schema FKs added via raw SQL in migration.
+
+  @@index([organizationId, occurredAt(sort: Desc)], map: "idx_event_org_occurred")
+  @@index([entityType, entityId, occurredAt(sort: Desc)], map: "idx_event_entity")
+  @@index([actorId, occurredAt(sort: Desc)], map: "idx_event_actor_occurred")
+  @@index([occurredAt(sort: Desc)], map: "idx_event_occurred")
+  @@index([requestId], map: "idx_event_request")
+  @@map("event")
+  @@schema("audit")
+}
+
+// ─────────────────────────────────────────────────────────────
+// okr schema — Objectives, Key Results, Tasks
+// Weights and progress in basis points (Int 0..10000).
+// Cascade math lives in packages/okr-domain (pure functions).
+// ─────────────────────────────────────────────────────────────
+
+model Objective {
+  id               String    @id @default(cuid())
+  organizationId   String    @map("organization_id")
+  periodId         String    @map("period_id")
+  title            String    @db.VarChar(200)
+  description      String?   @db.Text
+  ownerUserId      String?   @map("owner_user_id")
+  progressCachedBp Int       @default(0) @map("progress_cached_bp")
+  deletedAt        DateTime? @map("deleted_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  period       Period       @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  owner        User?        @relation("ObjectiveOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  keyResults   KeyResult[]
+
+  @@index([organizationId, periodId], map: "idx_objective_org_period")
+  @@index([periodId], map: "idx_objective_period")
+  @@index([ownerUserId], map: "idx_objective_owner")
+  @@map("objective")
+  @@schema("okr")
+}
+
+model KeyResult {
+  id               String    @id @default(cuid())
+  objectiveId      String    @map("objective_id")
+  organizationId   String    @map("organization_id")
+  title            String    @db.VarChar(200)
+  description      String?   @db.Text
+  ownerUserId      String?   @map("owner_user_id")
+  weightBp         Int       @map("weight_bp")
+  progressCachedBp Int       @default(0) @map("progress_cached_bp")
+  deletedAt        DateTime? @map("deleted_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  objective    Objective    @relation(fields: [objectiveId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  owner        User?        @relation("KrOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  tasks        Task[]
+
+  @@index([objectiveId], map: "idx_kr_objective")
+  @@index([ownerUserId], map: "idx_kr_owner_user")
+  @@map("key_result")
+  @@schema("okr")
+}
+
+model Task {
+  id             String    @id @default(cuid())
+  keyResultId    String    @map("key_result_id")
+  organizationId String    @map("organization_id")
+  title          String    @db.VarChar(200)
+  description    String?   @db.Text
+  ownerUserId    String?   @map("owner_user_id")
+  weightBp       Int       @map("weight_bp")
+  progressBp     Int       @default(0) @map("progress_bp")
+  /// Scheduled start date for this task. Must be >= parent Period.startsAt.
+  startsAt       DateTime  @map("starts_at") @db.Timestamptz(6)
+  /// Scheduled end date for this task. Must be <= parent Period.endsAt.
+  endsAt         DateTime  @map("ends_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  keyResult    KeyResult    @relation(fields: [keyResultId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  owner        User?        @relation("TaskOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+
+  @@index([keyResultId], map: "idx_task_kr")
+  @@index([ownerUserId], map: "idx_task_owner_user")
+  @@map("task")
+  @@schema("okr")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ai schema — AI Copilot config, prompt log, usage counters
+// Per ADR 0005: provider abstraction, quota enforcement, append-only prompt log
+// ─────────────────────────────────────────────────────────────
+
+model OrganizationAiSettings {
+  /// One row per organization — organizationId is the PK
+  organizationId      String   @id @map("organization_id")
+  /// 'anthropic' | 'openai' — CHECK constraint in migration
+  provider            String   @default("anthropic") @db.VarChar(16)
+  /// Model name. Default is Haiku to keep costs low; orgs can opt into Sonnet via settings.
+  modelName           String   @default("claude-haiku-4-5-20251001") @map("model_name") @db.VarChar(64)
+  /// Soft monthly token quota — 0 means unlimited (superadmin bypass)
+  monthlyTokenQuota   Int      @default(500000) @map("monthly_token_quota")
+  /// Soft monthly call quota
+  monthlyCallQuota    Int      @default(1000) @map("monthly_call_quota")
+  /// Whether AI copilot is enabled for this org
+  enabled             Boolean  @default(true)
+  /// Reserved for future BYOK iteration (D11)
+  byokApiKeyEncrypted String?  @db.Text @map("byok_api_key_encrypted")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_ai_settings")
+  @@schema("ai")
+}
+
+model PromptLog {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  userId         String   @map("user_id")
+  /// 'draft' | 'validate' — CHECK constraint in migration
+  operationType  String   @db.VarChar(16) @map("operation_type")
+  /// 'objective' | 'key_result' — CHECK constraint in migration
+  entityType     String   @db.VarChar(32) @map("entity_type")
+  /// 'anthropic' | 'openai'
+  provider       String   @db.VarChar(16)
+  model          String   @db.VarChar(64)
+  /// SHA-256 hex of the normalized user prompt (for cache lookup D9)
+  promptHash     String   @db.VarChar(64) @map("prompt_hash")
+  promptText     String   @db.Text @map("prompt_text")
+  responseText   String   @db.Text @map("response_text")
+  tokensIn       Int      @map("tokens_in")
+  tokensOut      Int      @map("tokens_out")
+  latencyMs      Int      @map("latency_ms")
+  /// True when this response was served from cache
+  cacheHit       Boolean  @default(false) @map("cache_hit")
+  success        Boolean  @default(true)
+  errorCode      String?  @db.VarChar(64) @map("error_code")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt(sort: Desc)], map: "idx_prompt_log_org_created")
+  @@index([organizationId, entityType, promptHash, createdAt(sort: Desc)], map: "idx_prompt_log_cache_lookup")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_prompt_log_user_created")
+  @@map("prompt_log")
+  @@schema("ai")
+}
+
+model UsageCounter {
+  organizationId String   @map("organization_id")
+  /// Format 'YYYY-MM' — CHECK constraint in migration
+  yearMonth      String   @db.VarChar(7) @map("year_month")
+  /// 'draft' | 'validate'
+  operationType  String   @db.VarChar(16) @map("operation_type")
+  callsCount     Int      @default(0) @map("calls_count")
+  tokensInTotal  Int      @default(0) @map("tokens_in_total")
+  tokensOutTotal Int      @default(0) @map("tokens_out_total")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, yearMonth, operationType])
+  @@index([organizationId, yearMonth], map: "idx_usage_counter_org_month")
+  @@map("usage_counter")
+  @@schema("ai")
+}

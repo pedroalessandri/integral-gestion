@@ -1,0 +1,14 @@
+{
+  "name": "@gestion-publica/config-eslint",
+  "private": true,
+  "version": "0.0.0",
+  "main": "index.js",
+  "type": "module",
+  "peerDependencies": {
+    "eslint": ">=9"
+  },
+  "dependencies": {
+    "eslint-config-prettier": "^10.1.5",
+    "typescript-eslint": "^8.32.0"
+  }
+}
