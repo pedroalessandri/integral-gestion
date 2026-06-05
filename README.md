@@ -1,4 +1,7 @@
-# Gestión Integral
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pedroalessandri/integral-platform/main/brand/logo/gestion-dark.svg">
+  <img src="https://raw.githubusercontent.com/pedroalessandri/integral-platform/main/brand/logo/gestion-light.svg" alt="Gestión Integral" width="240">
+</picture>
 
 **De la estrategia a la tarea, sin perder de vista a las personas.**
 
