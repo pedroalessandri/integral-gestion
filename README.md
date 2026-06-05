@@ -34,3 +34,7 @@ Node.js. Para detalles técnicos completos, ver la carpeta `docs/` y el código 
 ## Parte del ecosistema Integral
 
 Este repositorio es uno de los productos del [ecosistema Integral](https://github.com/pedroalessandri/integral-platform): software soberano para instituciones que sirven a la gente.
+
+## Licencia
+
+Este proyecto se distribuye bajo la licencia [Apache 2.0](LICENSE). Ver también el archivo [NOTICE](NOTICE).
