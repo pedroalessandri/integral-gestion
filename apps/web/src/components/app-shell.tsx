@@ -143,6 +143,14 @@ export function AppShell({ user, me, initialOrgId, aiUsage, children }: AppShell
           });
           })()}
         </nav>
+
+        {/* Version marker — bump per release; used to confirm which build is live in prod */}
+        <div
+          className="px-4 py-3 border-t text-xs"
+          style={{ borderColor: 'var(--color-neutral-200)', color: 'var(--color-neutral-400)' }}
+        >
+          v0.1.0
+        </div>
       </aside>
 
       {/* Main */}
