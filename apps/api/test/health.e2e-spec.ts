@@ -43,6 +43,7 @@ describe('GET /api/v1/health', () => {
     expect(res.body).toMatchObject({
       status: 'ok',
     });
+    expect(typeof res.body.version).toBe('string');
     expect(typeof res.body.timestamp).toBe('string');
     // Should also echo back request id header
     expect(res.headers).toHaveProperty('x-request-id');

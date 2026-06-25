@@ -13,6 +13,13 @@ import { Public } from '../auth/decorators/public.decorator.js';
  * work without a valid JWT. This is a deliberate exception to the default-deny rule;
  * no business data is exposed.
  */
+/**
+ * App version marker. Bumped per release; surfaced by the liveness probe so the
+ * deployed build is identifiable from `GET /api/v1/health` without auth — mirrors
+ * the sidebar version marker on the web app.
+ */
+const APP_VERSION = '0.1.0';
+
 @Public()
 @SkipThrottle()
 @Controller({ path: 'health', version: '1' })
@@ -24,9 +31,10 @@ export class HealthController {
    * Returns 200 as long as the process is running (no DB check).
    */
   @Get()
-  liveness(): { status: string; timestamp: string } {
+  liveness(): { status: string; version: string; timestamp: string } {
     return {
       status: 'ok',
+      version: APP_VERSION,
       timestamp: new Date().toISOString(),
     };
   }
