@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/audit-event-emitter.service.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
@@ -42,39 +43,13 @@ export class UserSyncService {
   ) {}
 
   /**
-   * Upserts a user from a JWT payload. Called on every authenticated request.
-   * Idempotent and safe to call concurrently (uses upsert with conflict key auth0_sub).
+   * Resolves the local user from a JWT payload. Called on every authenticated request.
+   * Idempotent and safe to call concurrently (P2002 races fall back to a refresh).
    */
   async upsertFromJwt(payload: JwtPayload): Promise<SyncedUser> {
     const displayName = payload.name ?? payload.email;
 
-    // Upsert by auth0_sub; update email/displayName/lastSeenAt on every call
-    const user = await this.prismaService.raw.user.upsert({
-      where: { auth0Sub: payload.auth0_sub },
-      create: {
-        auth0Sub: payload.auth0_sub,
-        email: payload.email,
-        displayName,
-        isSuperadmin: false,
-        lastSeenAt: new Date(),
-      },
-      update: {
-        email: payload.email,
-        displayName,
-        lastSeenAt: new Date(),
-      },
-    });
-
-    const wasNewUser = user.createdAt.getTime() === user.updatedAt.getTime() ||
-      // Heuristic: if lastSeenAt was just set (within 1 second of updatedAt)
-      // and it equals createdAt, it's a new user
-      Math.abs(user.createdAt.getTime() - (user.lastSeenAt?.getTime() ?? 0)) < 1000;
-
-    // Emit user.created if this was a new user
-    if (wasNewUser || user.createdAt.getTime() === user.updatedAt.getTime()) {
-      // We can't reliably distinguish create vs update from upsert without checking before.
-      // Use a simpler approach: check if created_at ~= updated_at (within 1 second)
-    }
+    const user = await this.resolveOrProvisionUser(payload, displayName);
 
     // Bootstrap superadmin D5
     await this.maybeBootstrapSuperadmin(user.id, user.email, user.isSuperadmin);
@@ -91,6 +66,80 @@ export class UserSyncService {
       displayName: finalUser.displayName,
       isSuperadmin: finalUser.isSuperadmin,
     };
+  }
+
+  /**
+   * Resolves the local core.user for a JWT, provisioning or reconciling as needed:
+   *  1. Match by auth0_sub → returning user; refresh email/displayName/lastSeenAt.
+   *  2. Else match by email → a placeholder created by MemberService.inviteByEmail
+   *     (auth0Sub = "pending:<email>"). Claim it by binding the real auth0_sub.
+   *  3. Else → brand-new user; create.
+   *
+   * Step 2 is what bridges an admin-invited member to their first Auth0 login.
+   * Without it, the create in step 3 collides with the placeholder's unique email
+   * (P2002 → 409) on every request, breaking the user entirely.
+   */
+  private async resolveOrProvisionUser(
+    payload: JwtPayload,
+    displayName: string,
+  ): Promise<{ id: string; email: string; isSuperadmin: boolean }> {
+    const now = new Date();
+
+    // 1. Returning user, keyed by the real Auth0 sub.
+    const bySub = await this.prismaService.raw.user.findUnique({
+      where: { auth0Sub: payload.auth0_sub },
+    });
+    if (bySub) {
+      return this.prismaService.raw.user.update({
+        where: { id: bySub.id },
+        data: { email: payload.email, displayName, lastSeenAt: now },
+      });
+    }
+
+    // 2. Invited-but-never-logged-in user: claim the placeholder by email,
+    //    binding the real auth0_sub (the placeholder had "pending:<email>").
+    const byEmail = await this.prismaService.raw.user.findUnique({
+      where: { email: payload.email },
+    });
+    if (byEmail) {
+      return this.prismaService.raw.user.update({
+        where: { id: byEmail.id },
+        data: { auth0Sub: payload.auth0_sub, displayName, lastSeenAt: now },
+      });
+    }
+
+    // 3. Genuinely new user.
+    try {
+      return await this.prismaService.raw.user.create({
+        data: {
+          auth0Sub: payload.auth0_sub,
+          email: payload.email,
+          displayName,
+          isSuperadmin: false,
+          lastSeenAt: now,
+        },
+      });
+    } catch (err) {
+      // Race: a concurrent request provisioned this user between our reads and the
+      // create. Re-resolve and refresh instead of surfacing the P2002 as a 409.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        const existing = await this.prismaService.raw.user.findFirst({
+          where: {
+            OR: [{ auth0Sub: payload.auth0_sub }, { email: payload.email }],
+          },
+        });
+        if (existing) {
+          return this.prismaService.raw.user.update({
+            where: { id: existing.id },
+            data: { auth0Sub: payload.auth0_sub, email: payload.email, displayName, lastSeenAt: now },
+          });
+        }
+      }
+      throw err;
+    }
   }
 
   /**
