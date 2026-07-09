@@ -9,4 +9,4 @@ export { parseDecimal4, formatDecimal4, InvalidDecimalError, DECIMAL_SCALE } fro
 export { buildBuckets, isValidBucketDate, toUTCMidnight } from './buckets';
 export { cumulativeSeries, cumulativeToDate } from './accumulate';
 export { expectedAt } from './expected';
-export { progressBp, deviationBp } from './progress';
+export { progressBp, deviationBp, computeAutomaticKrProgressBp } from './progress';
