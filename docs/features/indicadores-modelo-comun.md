@@ -3,7 +3,7 @@
 > Documento de alcance. Define el modelo de datos compartido por los módulos
 > "Indicadores de gestión" (Módulo 1) e "Indicadores en OKRs" (Módulo 2), el
 > sistema de feature flags por organización y el guard de módulo.
-> Estado: **pendiente de aprobación**. No implementar hasta aprobación explícita.
+> Estado: **aprobado por Pedro el 9 de julio de 2026** (decisiones D-A1, D-M2, D-O2, D-O3 resueltas en la revisión).
 
 ## 1. Alcance
 

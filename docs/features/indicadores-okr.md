@@ -4,7 +4,7 @@
 > **Módulo 1 esté implementado completo** (`indicadores-gestion.md`).
 > Módulos requeridos (via `core.organization_module`): `indicadores-okr`
 > **y** `indicadores-gestion` (dependencia validada en `enableModule`).
-> Estado: **pendiente de aprobación**.
+> Estado: **aprobado por Pedro el 9 de julio de 2026**. Bloqueado hasta que el Módulo 1 esté mergeado.
 
 ## 1. Alcance
 

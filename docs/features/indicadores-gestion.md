@@ -3,7 +3,7 @@
 > Documento de alcance. Depende de `indicadores-modelo-comun.md` (modelo de
 > datos, habilitación de módulos, permisos, `metrics-domain`).
 > Módulo: `indicadores-gestion` (seed en `core.module`).
-> Estado: **pendiente de aprobación**. Se implementa completo ANTES del Módulo 2.
+> Estado: **aprobado por Pedro el 9 de julio de 2026**. Se implementa completo ANTES del Módulo 2.
 
 ## 1. Alcance
 
