@@ -72,6 +72,8 @@ const mockTx = {
   keyResult: {
     findMany: vi.fn().mockResolvedValue([]),
     update: mockKeyResultUpdate,
+    // Branch-aware recompute (M2) reads progress_mode first; manual → recompute from tasks.
+    findFirstOrThrow: vi.fn().mockResolvedValue({ objectiveId: 'obj-1', progressMode: 'manual' }),
   },
   objective: {
     update: mockObjectiveUpdate,

@@ -77,4 +77,17 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
    * same reason as KeyResult/Task.
    */
   'MetricEntry',
+
+  /**
+   * `metrics.metric_kr_link` — per docs/features/indicadores-okr.md (M2).
+   * Links a Metric to a KeyResult within one organization. organizationId
+   * is required and non-mutable.
+   */
+  'MetricKrLink',
+
+  /**
+   * `metrics.metric_objective_context` — per docs/features/indicadores-okr.md (M2).
+   * Visual-only association of a Metric to an Objective, scoped per org.
+   */
+  'MetricObjectiveContext',
 ]);

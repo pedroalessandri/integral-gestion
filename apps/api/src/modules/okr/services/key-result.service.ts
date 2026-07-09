@@ -2,16 +2,18 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import type { KeyResultDetailDto, KeyResultSummaryDto } from '@gestion-publica/shared-types/okr';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
-import { computeProgressStatus } from '@gestion-publica/okr-domain';
+import { computeProgressStatus, computeObjectiveProgress } from '@gestion-publica/okr-domain';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import type { CreateKeyResultDto } from '../dto/create-key-result.dto.js';
 import type { UpdateKeyResultDto } from '../dto/update-key-result.dto.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
+import { recomputeObjectiveFromKrs } from './recompute.js';
 
 type PeriodRow = { id: string; code: string; status: string };
 
@@ -264,6 +266,176 @@ export class KeyResultService {
             before: { deletedAt: null },
             after: { deletedAt: new Date().toISOString() },
           },
+        });
+      }),
+    );
+  }
+
+  /**
+   * OKR module's public entry point for the metrics module (M2 hook, per
+   * docs/features/indicadores-okr.md §3, D-O1). Sets an automatic KR's cached
+   * progress directly from its linked indicator, then cascades to the parent
+   * Objective. Tasks under the KR are NOT consulted (RN-O4).
+   *
+   * Preconditions enforced here:
+   *  - progressBp is an integer in [0, 10000].
+   *  - The KR exists, is not soft-deleted, and belongs to authContext.organizationId.
+   *  - The KR is in 'automatic' mode (a manual KR must never be driven by an
+   *    indicator — that would be a caller bug; we surface it as 409).
+   *
+   * Runs in its own transaction with the tenant ALS context re-entered, so it
+   * can be safely invoked from the metrics post-save hook (D-O5: synchronous).
+   */
+  async applyAutomaticKrProgress(
+    keyResultId: string,
+    progressBp: number,
+    authContext: AuthContext,
+  ): Promise<void> {
+    if (!Number.isInteger(progressBp) || progressBp < 0 || progressBp > 10000) {
+      throw new UnprocessableEntityException(
+        `El progreso debe ser un entero entre 0 y 10000. Se recibió ${progressBp}.`,
+      );
+    }
+    const orgId = authContext.organizationId;
+    if (orgId === null) {
+      throw new ConflictException(
+        'No se puede recalcular el progreso automático sin contexto de organización.',
+      );
+    }
+
+    await tenantContextStorage.run(authContext, () =>
+      this.prisma.runInTransaction(async (tx) => {
+        const kr = await tx.keyResult.findFirst({
+          where: { id: keyResultId, organizationId: orgId, deletedAt: null },
+          select: { id: true, objectiveId: true, progressMode: true, progressCachedBp: true },
+        });
+        if (!kr) {
+          throw new NotFoundException(`Key result ${keyResultId} not found`);
+        }
+        const krRow = kr as {
+          objectiveId: string;
+          progressMode: string;
+          progressCachedBp: number;
+        };
+        if (krRow.progressMode !== 'automatic') {
+          throw new ConflictException(
+            `El Key Result ${keyResultId} no está en modo automático; no puede recalcularse desde un indicador.`,
+          );
+        }
+
+        const before = krRow.progressCachedBp;
+        if (before !== progressBp) {
+          await tx.keyResult.update({
+            where: { id: keyResultId },
+            data: { progressCachedBp: progressBp },
+          });
+        }
+
+        await recomputeObjectiveFromKrs(
+          tx,
+          krRow.objectiveId,
+          orgId,
+          computeObjectiveProgress,
+        );
+
+        await this.auditEmitter.emit({
+          action: 'kr.progress_recomputed_from_metric',
+          entityType: 'okr.key_result',
+          entityId: keyResultId,
+          diff: {
+            before: { progressCachedBp: before },
+            after: { progressCachedBp: progressBp },
+          },
+        });
+      }),
+    );
+  }
+
+  /**
+   * Transition a KR to 'automatic' mode and set its indicator-derived progress,
+   * then cascade to the parent Objective. Used by the metrics module when a
+   * MetricKrLink is created/replaced or its snapshot edited (RN-O2/RN-O9).
+   *
+   * Ownership of KR mutations stays in the OKR module (D-O1); metrics never
+   * writes okr.key_result directly. The metrics side audits the link lifecycle
+   * (kr.metric_linked / kr.metric_link_updated); here we audit the progress
+   * recompute (kr.progress_recomputed_from_metric).
+   */
+  async attachAutomaticKr(
+    keyResultId: string,
+    progressBp: number,
+    authContext: AuthContext,
+  ): Promise<void> {
+    if (!Number.isInteger(progressBp) || progressBp < 0 || progressBp > 10000) {
+      throw new UnprocessableEntityException(
+        `El progreso debe ser un entero entre 0 y 10000. Se recibió ${progressBp}.`,
+      );
+    }
+    const orgId = authContext.organizationId;
+    if (orgId === null) {
+      throw new ConflictException('No se puede vincular un KR sin contexto de organización.');
+    }
+
+    await tenantContextStorage.run(authContext, () =>
+      this.prisma.runInTransaction(async (tx) => {
+        const kr = await tx.keyResult.findFirst({
+          where: { id: keyResultId, organizationId: orgId, deletedAt: null },
+          select: { objectiveId: true, progressCachedBp: true },
+        });
+        if (!kr) {
+          throw new NotFoundException(`Key result ${keyResultId} not found`);
+        }
+        const krRow = kr as { objectiveId: string; progressCachedBp: number };
+        const before = krRow.progressCachedBp;
+
+        await tx.keyResult.update({
+          where: { id: keyResultId },
+          data: { progressMode: 'automatic', progressCachedBp: progressBp },
+        });
+
+        await recomputeObjectiveFromKrs(tx, krRow.objectiveId, orgId, computeObjectiveProgress);
+
+        await this.auditEmitter.emit({
+          action: 'kr.progress_recomputed_from_metric',
+          entityType: 'okr.key_result',
+          entityId: keyResultId,
+          diff: {
+            before: { progressCachedBp: before },
+            after: { progressCachedBp: progressBp },
+          },
+        });
+      }),
+    );
+  }
+
+  /**
+   * Revert a KR to 'manual' mode, KEEPING its last cached progress (RN-O5).
+   * Used by the metrics module on unlink. The KR cache is unchanged, so the
+   * parent Objective aggregation is unaffected — no recompute needed. The
+   * unlink is audited on the metrics side (kr.metric_unlinked).
+   */
+  async detachAutomaticKr(keyResultId: string, authContext: AuthContext): Promise<void> {
+    const orgId = authContext.organizationId;
+    if (orgId === null) {
+      throw new ConflictException('No se puede desvincular un KR sin contexto de organización.');
+    }
+
+    await tenantContextStorage.run(authContext, () =>
+      this.prisma.runInTransaction(async (tx) => {
+        const kr = await tx.keyResult.findFirst({
+          where: { id: keyResultId, organizationId: orgId, deletedAt: null },
+          select: { progressMode: true },
+        });
+        if (!kr) {
+          throw new NotFoundException(`Key result ${keyResultId} not found`);
+        }
+        if ((kr as { progressMode: string }).progressMode !== 'automatic') {
+          return; // already manual — nothing to do.
+        }
+
+        await tx.keyResult.update({
+          where: { id: keyResultId },
+          data: { progressMode: 'manual' }, // progressCachedBp preserved (RN-O5).
         });
       }),
     );

@@ -14,10 +14,10 @@ import {
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
-import type { PrismaTransactionClient } from '../../audit/context/transaction-context-storage.js';
 import type { CreateTaskDto } from '../dto/create-task.dto.js';
 import type { UpdateTaskDto } from '../dto/update-task.dto.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
+import { recomputeKrAndObjectiveProgress } from './recompute.js';
 
 type PeriodRow = {
   id: string;
@@ -42,71 +42,6 @@ type TaskRow = {
   createdAt: Date;
   updatedAt: Date;
 };
-
-/**
- * Recompute KR progressCachedBp from its active tasks, then recompute the parent
- * Objective progressCachedBp from its active KRs.
- *
- * Short-circuit rule (mirrors computeKrProgress / computeObjectiveProgress):
- *  - If no active tasks → KR progress = 0.
- *  - If active tasks don't sum to 10000bp → KR progress = 0 (plan imbalanced).
- *  - Same logic for Objective from KRs.
- *
- * Must be called inside an active transaction.
- */
-async function recomputeKrAndObjectiveProgress(
-  tx: PrismaTransactionClient,
-  keyResultId: string,
-  organizationId: string,
-  computeKrProgressFn: (tasks: Array<{ weightBp: number; progressBp: number }>) => number,
-  computeObjectiveProgressFn: (krs: Array<{ weightBp: number; progressBp: number }>) => number,
-): Promise<void> {
-  const allKrTasks = await tx.task.findMany({
-    where: { keyResultId, organizationId, deletedAt: null },
-    select: { weightBp: true, progressBp: true },
-  });
-
-  const krTaskSum = (allKrTasks as Array<{ weightBp: number }>).reduce(
-    (acc, t) => acc + t.weightBp,
-    0,
-  );
-  let newKrProgressBp = 0;
-  if (allKrTasks.length > 0 && krTaskSum === 10000) {
-    newKrProgressBp = computeKrProgressFn(
-      allKrTasks as Array<{ weightBp: number; progressBp: number }>,
-    );
-  }
-
-  const updatedKr = await tx.keyResult.update({
-    where: { id: keyResultId },
-    data: { progressCachedBp: newKrProgressBp },
-    select: { objectiveId: true, progressCachedBp: true },
-  });
-
-  const allObjKrs = await tx.keyResult.findMany({
-    where: { objectiveId: updatedKr.objectiveId, organizationId, deletedAt: null },
-    select: { weightBp: true, progressCachedBp: true },
-  });
-
-  const krSum = (allObjKrs as Array<{ weightBp: number }>).reduce(
-    (acc, kr) => acc + kr.weightBp,
-    0,
-  );
-  let newObjProgressBp = 0;
-  if (allObjKrs.length > 0 && krSum === 10000) {
-    newObjProgressBp = computeObjectiveProgressFn(
-      (allObjKrs as Array<{ weightBp: number; progressCachedBp: number }>).map((kr) => ({
-        weightBp: kr.weightBp,
-        progressBp: kr.progressCachedBp,
-      })),
-    );
-  }
-
-  await tx.objective.update({
-    where: { id: updatedKr.objectiveId },
-    data: { progressCachedBp: newObjProgressBp },
-  });
-}
 
 /** Validate that task dates are within the parent period's range. */
 function assertTaskDatesWithinPeriod(

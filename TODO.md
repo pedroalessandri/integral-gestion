@@ -11,10 +11,12 @@
 - Al mergear el frontend: mover este ítem a "Recientemente completados" con la fecha.
 - Nota: el kebab del catálogo y del historial ya aplica el fix del bug [B] "kebab queda abierto tras cerrar dialog" (DropdownMenu controlado por el padre). El bug [B] sigue abierto para los kebabs de objetivos/KRs/tareas.
 
-### [F] Implementar Módulo 2 "Indicadores en OKRs"
-- Por qué: KRs con progreso automático derivado de indicadores. Alcance en docs/features/indicadores-okr.md (pendiente de aprobación).
-- Detalles: `progress_mode` en KR, MetricKrLink (baseline/target snapshot), hook de recálculo vía API pública del módulo OKR (la cascada existente no se toca), indicadores de contexto a nivel objetivo. Requiere Módulo 1 (backend + frontend) mergeado y módulo `indicadores-gestion` habilitado.
-- Estimado: corrida grande. Bloqueado por el ítem anterior.
+### [F] Módulo 2 "Indicadores en OKRs" — backend en branch (pendiente de merge), falta frontend
+- Por qué: KRs con progreso automático derivado de indicadores. Alcance en docs/features/indicadores-okr.md (aprobado).
+- Estado backend (branch `feature/indicadores-m2-backend`, pendiente de merge): `progress_mode` en KR + modelos `metric_kr_link` y `metric_objective_context` (migración schema-qualified); interpolación `computeAutomaticKrProgressBp` en metrics-domain; recálculo branch por `progress_mode` (KR automático no cascadea desde tareas, RN-O4); API pública OKR `applyAutomaticKrProgress`/`attachAutomaticKr`/`detachAutomaticKr`; hook post-guardado de MetricEntry que recalcula los KR vinculados; 7 endpoints de vínculo/contexto bajo `@RequiresModule('indicadores-okr','indicadores-gestion')` con todas las reglas de borde (RN-O2..O10); cascade DTO extendido con `progressMode` + `metricLink`. Unit tests en verde; e2e de integración escrito (requiere DATABASE_URL).
+- Falta: frontend (Pantalla 3 — vincular indicador a KR, badge de modo automático/sin-datos, contexto a nivel objetivo). Requiere el backend de M1 y M2 mergeados y ambos módulos habilitados.
+- Al mergear el backend: mover la parte backend a "Recientemente completados" con la fecha; dejar el frontend como pendiente.
+- Estimado: frontend = corrida media.
 
 ## 🟡 Prioridad media — próximas semanas
 

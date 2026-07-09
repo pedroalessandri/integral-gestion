@@ -202,6 +202,16 @@ export class MetricService {
     const existing = await this.findActiveOrThrow(id, orgId);
     assertPeriodOpen(this.toMinimalPeriod(existing.period));
 
+    // RN-O7: a metric with active KR links cannot be deleted — unlink first.
+    const activeLinks = await this.prisma.scoped.metricKrLink.count({
+      where: { metricId: id, organizationId: orgId },
+    });
+    if (activeLinks > 0) {
+      throw new ConflictException(
+        `No se puede eliminar el indicador: tiene ${activeLinks} vínculo(s) activo(s) con Key Results. Desvinculá primero.`,
+      );
+    }
+
     await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         await tx.metric.update({

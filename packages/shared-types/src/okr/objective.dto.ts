@@ -1,5 +1,6 @@
 import type { ProgressStatus } from './key-result.dto.js';
 import type { TaskStatus } from './task.dto.js';
+import type { MetricKrLinkDto } from '../metrics/metric-link.dto.js';
 
 /** Minimal period info embedded in Objective responses for read-only mode determination. */
 export interface PeriodStatusDto {
@@ -130,6 +131,16 @@ export interface KeyResultInCascadeDto {
    * Used to render the per-KR imbalance indicator.
    */
   tasksImbalanced: boolean;
+  /**
+   * Progress mode (M2). 'manual' → % derives from tasks; 'automatic' → % comes
+   * solely from the linked indicator (RN-O1/RN-O4).
+   */
+  progressMode: 'manual' | 'automatic';
+  /**
+   * Embedded metric link when progressMode === 'automatic' (Pantalla 3 without
+   * an extra fetch). Null for manual KRs. docs/features/indicadores-okr.md §5.
+   */
+  metricLink: MetricKrLinkDto | null;
 }
 
 /**

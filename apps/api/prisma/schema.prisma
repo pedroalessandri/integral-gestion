@@ -39,17 +39,19 @@ model Organization {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  periods         Period[]
-  memberships     UserOrganizationRole[]
-  modules         OrganizationModule[]
-  objectives      Objective[]
-  keyResults      KeyResult[]
-  tasks           Task[]
-  aiSettings      OrganizationAiSettings?
-  aiPromptLogs    PromptLog[]
-  aiUsageCounters UsageCounter[]
-  metrics         Metric[]
-  metricEntries   MetricEntry[]
+  periods                 Period[]
+  memberships             UserOrganizationRole[]
+  modules                 OrganizationModule[]
+  objectives              Objective[]
+  keyResults              KeyResult[]
+  tasks                   Task[]
+  aiSettings              OrganizationAiSettings?
+  aiPromptLogs            PromptLog[]
+  aiUsageCounters         UsageCounter[]
+  metrics                 Metric[]
+  metricEntries           MetricEntry[]
+  metricKrLinks           MetricKrLink[]
+  metricObjectiveContexts MetricObjectiveContext[]
 
   @@index([status], map: "idx_organization_status")
   @@map("organization")
@@ -259,6 +261,8 @@ model KeyResult {
   ownerUserId      String?   @map("owner_user_id")
   weightBp         Int       @map("weight_bp")
   progressCachedBp Int       @default(0) @map("progress_cached_bp")
+  /// 'manual' (progress from tasks) | 'automatic' (progress from a linked Metric) — CHECK constraint in migration. Default 'manual' (M2).
+  progressMode     String    @default("manual") @map("progress_mode") @db.VarChar(10)
   deletedAt        DateTime? @map("deleted_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
@@ -267,6 +271,8 @@ model KeyResult {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   owner        User?        @relation("KrOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   tasks        Task[]
+  // metric_kr_link references key_result via a cross-schema FK added in raw SQL
+  // (no @relation — mirrors the audit.event → core.* pattern).
 
   @@index([objectiveId], map: "idx_kr_objective")
   @@index([ownerUserId], map: "idx_kr_owner_user")
@@ -326,9 +332,11 @@ model Metric {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  period       Period        @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  entries      MetricEntry[]
+  organization      Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  period            Period                   @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  entries           MetricEntry[]
+  krLinks           MetricKrLink[]
+  objectiveContexts MetricObjectiveContext[]
 
   // Case-insensitive partial unique index uq_metric_org_period_name ON
   // (organization_id, period_id, lower(name)) WHERE deleted_at IS NULL
@@ -336,6 +344,52 @@ model Metric {
   @@index([organizationId, periodId], map: "idx_metric_org_period")
   @@index([deletedAt], map: "idx_metric_deleted_at")
   @@map("metric")
+  @@schema("metrics")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Módulo 2 "Indicadores en OKRs" — Metric ↔ KR link + objective context.
+// FKs to okr.* are cross-schema and added via raw SQL in the migration.
+// Per docs/features/indicadores-okr.md.
+// ─────────────────────────────────────────────────────────────
+
+model MetricKrLink {
+  id              String   @id @default(cuid())
+  metricId        String   @map("metric_id")
+  /// A KR has at most one link (unique). FK to okr.key_result via raw SQL.
+  keyResultId     String   @unique @map("key_result_id")
+  organizationId  String   @map("organization_id")
+  /// Snapshot at link time (default: metric's current accumulated value). Editable (D-O4).
+  baselineValue   Decimal  @map("baseline_value") @db.Decimal(18, 4)
+  targetValue     Decimal  @map("target_value") @db.Decimal(18, 4)
+  /// 'increasing' | 'decreasing' — inherited from the Metric at link time, editable. CHECK in migration.
+  direction       String   @db.VarChar(10)
+  createdByUserId String   @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  metric       Metric       @relation(fields: [metricId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([metricId], map: "idx_mkl_metric")
+  @@index([organizationId], map: "idx_mkl_org")
+  @@map("metric_kr_link")
+  @@schema("metrics")
+}
+
+model MetricObjectiveContext {
+  metricId        String   @map("metric_id")
+  objectiveId     String   @map("objective_id")
+  organizationId  String   @map("organization_id")
+  createdByUserId String   @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  metric       Metric       @relation(fields: [metricId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@id([metricId, objectiveId])
+  @@index([objectiveId], map: "idx_moc_objective")
+  @@map("metric_objective_context")
   @@schema("metrics")
 }
 

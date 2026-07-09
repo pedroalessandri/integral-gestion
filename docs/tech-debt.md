@@ -11,6 +11,12 @@
 - **Posible solución**: reemplazar checks `isSuperadmin` por `hasPermission(user, 'period:manage')` o equivalente. Definir el permiso en el sistema RBAC (ADR-0004).
 - **Prioridad**: media. Activa cuando se agreguen usuarios no-superadmin reales.
 
+### Cálculo de acumulado del indicador duplicado (M2)
+- **Qué**: la lógica "acumulado = baseline + Σ incrementos" e interpolación del % vive en `MetricLinkService.currentCumulative` (módulo metrics) y está duplicada en `ObjectiveService.loadAutomaticLinks` (módulo okr), que la reimplementa para poblar el `metricLink` embebido del cascade DTO.
+- **Por qué importa**: el módulo okr no puede depender del módulo metrics (metrics ya depende de okr por D-O1 → sería ciclo), así que okr no puede reusar el service; reimplementa el cálculo leyendo las tablas de metrics directo. Si cambia la fórmula de acumulado, hay que tocar dos lugares.
+- **Posible solución**: extraer el acumulado a una función pura en `packages/metrics-domain` (p. ej. `accumulate(baseline, increments)`) y que ambos services la usen; o mover el embed del `metricLink` a un paso de composición fuera de okr. Ver docs/features/indicadores-okr.md D-O1.
+- **Prioridad**: baja. Ambos caminos están cubiertos por tests; el riesgo es drift si se edita la fórmula.
+
 ## Naming
 
 ### Rename completo `gestion-publica` → `gestion-integral`
