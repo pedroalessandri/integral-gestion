@@ -16,7 +16,11 @@ export type PermissionKey =
   | 'audit:read:all'
   // AI copilot permissions (ADR-0005)
   | 'ai:use'
-  | 'ai:admin';
+  | 'ai:admin'
+  // Metrics permissions (docs/features/indicadores-modelo-comun.md §5)
+  | 'metrics:read'
+  | 'metrics:write'
+  | 'metrics:entry:write';
 
 /**
  * Definitive catalog of role keys per ADR 0004 D7.
