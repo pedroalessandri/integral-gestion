@@ -23,6 +23,7 @@ import {
   progressBp,
   toUTCMidnight,
   type PeriodRange,
+  type CumulativePoint,
 } from '@gestion-publica/metrics-domain';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
@@ -255,12 +256,12 @@ export class MetricService {
     if (samplePoints[samplePoints.length - 1]?.getTime() !== endPoint.getTime()) {
       samplePoints.push(endPoint);
     }
-    const expected = samplePoints.map((d) => ({
+    const expected = samplePoints.map((d: Date) => ({
       date: d.toISOString(),
       value: expectedAt(d, range, baseline, target),
     }));
 
-    const actual = cumulativeSeries(domainEntries, baseline).map((p) => ({
+    const actual = cumulativeSeries(domainEntries, baseline).map((p: CumulativePoint) => ({
       bucketDate: p.bucketDate.toISOString(),
       cumulativeValue: p.cumulativeValue,
     }));
@@ -385,7 +386,7 @@ export class MetricService {
       organizationId: metric.organizationId,
       periodId: metric.periodId,
       buckets: buildBuckets(this.toRange(metric.period), metric.frequency as MetricFrequency).map(
-        (d) => d.toISOString(),
+        (d: Date) => d.toISOString(),
       ),
       updatedAt: metric.updatedAt.toISOString(),
     };
