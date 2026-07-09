@@ -20,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     email: string;
     displayName: string;
     isSuperadmin: boolean;
-    orgs: Array<{ id: string; slug: string; name: string }>;
+    orgs: Array<{ id: string; slug: string; name: string; enabledModules?: string[] }>;
   } | null = null;
   try {
     const res = await apiFetch('/api/v1/me');
