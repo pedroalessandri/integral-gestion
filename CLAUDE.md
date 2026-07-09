@@ -147,7 +147,8 @@ docs: actualizar estructura en CLAUDE.md
 - **Ciclos**: trimestrales (Q). Un Objetivo pertenece a un período único.
 - **Jerarquía entre unidades**: fuera de alcance por ahora.
 - **Audit log**: activo desde el arranque.
-- **Cascada siempre por tareas**: incluso los KR de métrica se modelan creando tareas que representen los hitos de la métrica. **No hay** entrada directa de "% del KR"; el % de un KR se deriva siempre de sus tareas.
+- **Cascada por tareas (modo `manual`)**: en un KR `manual` no hay entrada directa de "% del KR"; su % se deriva siempre de sus tareas. Los KR de métrica manuales se modelan creando tareas que representen los hitos de la métrica.
+- **Excepción — modo `automatic` (Módulo 2)**: un KR vinculado a un indicador (`progress_mode = 'automatic'`) toma su % **solo del indicador**; sus tareas se permiten pero son informativas (no alimentan el %). Ver RN-O4 en docs/features/indicadores-okr.md.
 
 ## TODO.md handling
 
