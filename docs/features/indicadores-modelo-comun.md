@@ -10,8 +10,10 @@
 - Un solo modelo de datos para ambos módulos: `Metric` (catálogo por organización)
   + `MetricEntry` (cargas). El Módulo 1 lo usa suelto; el Módulo 2 agrega el
   vínculo a KRs (ver `indicadores-okr.md`).
-- Tabla genérica `feature_flags` para habilitación de módulos por organización,
-  pensada para módulos futuros, administrada solo por superadmin.
+- Habilitación por organización **reutilizando la infraestructura existente**
+  `core.module` + `core.organization_module` (`ModuleEnablementService`,
+  `OrganizationModuleController`, `enabledModules` en `/me`), administrada
+  solo por superadmin. Sin tabla nueva (D-A1 resuelta).
 - Guard liviano de módulo en la API + ocultamiento en navegación.
 - Paquete de lógica pura `packages/metrics-domain` (curva esperada, acumulados,
   interpolación), testeable sin DB, espejo del patrón `okr-domain`.
@@ -30,7 +32,8 @@
 
 Nuevo schema Postgres **`metrics`** (se agrega a `schemas` del datasource en
 `apps/api/prisma/schema.prisma`, hoy `["core","auth","okr","audit","ai"]`).
-La tabla de flags es transversal → vive en **`core`**.
+La habilitación por organización no agrega tablas: usa `core.module` +
+`core.organization_module` existentes.
 
 Convenciones heredadas del schema existente: cuid como PK, `snake_case` con
 `@map`, enums como `VarChar` + CHECK constraint en la migración SQL
@@ -94,23 +97,9 @@ model MetricEntry {
   @@schema("metrics")
 }
 
-model FeatureFlag {
-  organizationId  String   @map("organization_id")
-  moduleKey       String   @map("module_key") @db.VarChar(64)
-  enabled         Boolean  @default(false)
-  updatedByUserId String   @map("updated_by_user_id")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-
-  @@id([organizationId, moduleKey])
-  @@map("feature_flag")
-  @@schema("core")
-}
 ```
 
-Además: registrar `Metric`, `MetricEntry` y `FeatureFlag` en
+Además: registrar `Metric` y `MetricEntry` en
 `packages/prisma-tenant-extension/src/tenant-scoped-models.ts` para el scoping
 automático por `organizationId`.
 
@@ -126,43 +115,67 @@ automático por `organizationId`.
 8. **RN-C8** — Curva esperada: **SIEMPRE lineal** de `baselineValue` a `targetValue` entre `period.startsAt` y `period.endsAt`. Es referencia visual, no configurable, no se persiste (se calcula en `metrics-domain`).
 9. **RN-C9** — Read-only en período cerrado: mismo comportamiento que OKRs. Toda mutación de `Metric`/`MetricEntry` pasa por el patrón `assertPeriodOpen` (hoy en `apps/api/src/modules/okr/services/period-guard.ts`; se extrae copia local al módulo metrics para no romper boundaries, o se promueve a `common/` — ver Decisiones).
 10. **RN-C10** — Soft-delete con `deletedAt`, igual que Objetivos/KRs/Tasks. Borrar un `Metric` no borra físicamente sus entries (quedan bajo el metric borrado). Restricción adicional del Módulo 2: bloqueado si tiene vínculos activos a KRs.
-11. **RN-C11** — Auditoría append-only de toda mutación: `metric.created|updated|deleted`, `metric.entry.created|updated|deleted`, `feature_flag.enabled|disabled` (entityType `metrics.metric`, `metrics.metric_entry`, `core.feature_flag`).
+11. **RN-C11** — Auditoría append-only de toda mutación: `metric.created|updated|deleted`, `metric.entry.created|updated|deleted` (entityType `metrics.metric`, `metrics.metric_entry`). La habilitación de módulos ya emite `organization_module.enabled|disabled` en el service existente — no se agrega nada.
 
-## 4. Feature flags y guard de módulo
+## 4. Habilitación de módulos y guard
 
-### Claves de módulo
+Se **reutiliza la infraestructura existente** de module enablement (ADR-0002):
+registro `core.module`, toggle `core.organization_module`,
+`ModuleEnablementService` (`apps/api/src/modules/core/services/module-enablement.service.ts`)
+y `OrganizationModuleController`
+(`apps/api/src/modules/core/controllers/organization-module.controller.ts`).
+No se crea ninguna tabla nueva (D-A1 resuelta: `feature_flag` descartada).
+
+### Claves de módulo — seed en `core.module`
+
+Nueva migración de seed (mismo patrón que `20260421000002_seed_okr_module`):
 
 - `indicadores-gestion` (Módulo 1)
 - `indicadores-okr` (Módulo 2)
 
 ### Semántica
 
-- Sin fila en `feature_flag` o `enabled=false` ⇒ módulo **apagado** (default deny).
+- Habilitado = fila en `organization_module` con `disabled_at IS NULL`
+  (semántica ya implementada en `ModuleEnablementService.isEnabled()`).
+  Sin fila o deshabilitado ⇒ módulo **apagado** (default deny).
 - Módulo apagado ⇒ desaparece del nav lateral **y** la API rechaza con 403 `ModuleDisabled`.
-- **Dependencia**: `indicadores-okr` requiere `indicadores-gestion` activo.
-  - Encender `indicadores-okr` con `indicadores-gestion` apagado → 409.
-  - Apagar `indicadores-gestion` con `indicadores-okr` encendido → 409 (apagar primero el dependiente). Sin cascada silenciosa.
-- Administración: **solo superadmin** (guard `SuperAdminOnlyGuard` existente, `apps/api/src/modules/auth/guards/superadmin-only.guard.ts`).
+- **Regla de dependencia — se agrega dentro de `enableModule`/`disableModule`**:
+  - `enableModule('indicadores-okr')` con `indicadores-gestion` apagado → 409.
+  - `disableModule('indicadores-gestion')` con `indicadores-okr` encendido → 409
+    (apagar primero el dependiente). Sin cascada silenciosa.
+  - La dependencia se declara en una constante del módulo core
+    (`MODULE_DEPENDENCIES: Record<moduleKey, moduleKey[]>`), no hardcodeada
+    en los ifs, para módulos futuros.
+- Administración: **solo superadmin**. ⚠ El controller existente tiene los
+  guards pendientes (comentarios `TODO(ADR-0004)` en el archivo): la corrida
+  de implementación DEBE agregar `SuperAdminOnlyGuard` a enable/disable antes
+  de exponer la tab Módulos.
 
 ### Guard
 
 Nuevo `ModuleEnabledGuard` + decorator `@RequiresModule('indicadores-gestion')`
-en `apps/api/src/common/` (es transversal, como `@CurrentUser`). Lee el
-`organizationId` del `AuthContext` (ALS `tenantContextStorage`) y consulta la
-flag (cacheable en memoria con TTL corto; la invalidación fina no es crítica:
-un toggle de superadmin puede tardar segundos en propagar). Se aplica a todos
-los controllers de metrics; el Módulo 2 exige **ambas** flags.
+en `apps/api/src/common/` (transversal, como `@CurrentUser`), **implementado
+sobre `ModuleEnablementService.isEnabled()`**: lee el `organizationId` del
+`AuthContext` (ALS `tenantContextStorage`) y consulta el enablement (cacheable
+en memoria con TTL corto; un toggle de superadmin puede tardar segundos en
+propagar). Se aplica a todos los controllers de metrics; el Módulo 2 exige
+**ambos** módulos activos.
 
-### Endpoints de administración
+### Endpoints de administración (existentes, sin cambios de contrato)
 
-| Método | Ruta | Permiso | Respuesta |
+| Método | Ruta | Permiso | Notas |
 |---|---|---|---|
-| GET | `/orgs/:orgId/feature-flags` | superadmin | `{ items: FeatureFlagDto[] }` |
-| PUT | `/orgs/:orgId/feature-flags/:moduleKey` | superadmin | `FeatureFlagDto` (body `{ enabled: boolean }`) |
+| GET | `/orgs/:orgId/modules` | superadmin (guard a agregar) | lista módulos habilitados y deshabilitados |
+| POST | `/orgs/:orgId/modules/:moduleKey/enable` | superadmin (guard a agregar) | valida dependencia (409) |
+| POST | `/orgs/:orgId/modules/:moduleKey/disable` | superadmin (guard a agregar) | valida dependientes (409) |
 
-`FeatureFlagDto = { moduleKey, enabled, updatedAt, updatedByUserId }`. El GET
-devuelve las claves conocidas del catálogo aunque no exista fila (enabled=false
-implícito).
+La auditoría ya existe: `organization_module.enabled|disabled`.
+
+### Lectura para el nav
+
+`/me` **ya devuelve** `enabledModules: string[]` por organización
+(`MeService`, `apps/api/src/modules/core/services/me.service.ts`). El frontend
+no necesita ningún endpoint ni fetch nuevo (resuelve también D-M2).
 
 ### UI de administración — tab nueva en Configuración
 
@@ -172,9 +185,9 @@ Tabs (Radix `@radix-ui/react-tabs`, ya en dependencias):
 
 1. **General** — `OrgContextForm` actual (nombre, misión, visión, valores, contexto adicional).
 2. **Copilot AI** — `AiUsageCard` actual (uso del mes).
-3. **Módulos** — nueva, **visible solo superadmin**: los toggles de feature flags (Pantalla 4, abajo).
+3. **Módulos** — nueva, **visible solo superadmin**: toggles sobre los endpoints enable/disable existentes (Pantalla 4, abajo).
 
-### Pantalla 4 · Feature flags (mockup validado por Pedro)
+### Pantalla 4 · Módulos (mockup validado por Pedro)
 
 Por organización, dos toggles: "Indicadores de gestión" e "Indicadores en
 OKRs". El segundo aparece **atenuado y bloqueado** si el primero está apagado,
@@ -219,23 +232,22 @@ Sobre la org demo existente, en el período abierto: 3 indicadores —
 "Tasa de reclamos" (percent, decreasing, monthly, 12→8),
 "Recaudación propia" (currency, increasing, monthly, 0→45.000.000) — con
 cargas parciales (~60% del período transcurrido, un bucket vacío intencional).
-Flags: `indicadores-gestion` ON e `indicadores-okr` ON en la org demo.
+Enablement: ambos módulos habilitados en la org demo vía `organization_module`.
 
 ## 8. Secuenciación
 
-1. Este modelo común (migraciones `metrics` + `feature_flag`, guard, tab Módulos, permisos, `metrics-domain`).
+1. Este modelo común (migración `metrics` + seed de module keys, guard, guards pendientes del controller de módulos, tab Módulos, permisos, `metrics-domain`).
 2. **Módulo 1 completo** (`indicadores-gestion.md`) — implementado y aprobado antes de empezar el 3.
 3. **Módulo 2** (`indicadores-okr.md`).
 
 ## Decisiones del architect
 
-- **D-A1 · Superposición con `core.organization_module`**: ya existe
-  `core.organization_module` + `core.module` (habilitación de módulos del
-  backoffice, `module-enablement.service.ts`). La decisión tomada (tabla nueva
-  `feature_flags` genérica) se documenta tal cual, pero dejo constancia de la
-  redundancia conceptual. Propongo tratar `feature_flag` como el mecanismo
-  vigente para módulos nuevos y evaluar en una corrida futura la convergencia
-  de `organization_module` hacia `feature_flag`. **Revisar en la aprobación.**
+- **D-A1 · RESUELTA (por Pedro)**: se descarta la tabla `feature_flag`. Se
+  reutiliza `core.module` + `core.organization_module` con su
+  `ModuleEnablementService`, controller y la exposición de `enabledModules`
+  en `/me`. `ModuleEnabledGuard` + `@RequiresModule` se mantienen pero
+  implementados sobre `ModuleEnablementService.isEnabled()`. La regla de
+  dependencia vive dentro de `enableModule`/`disableModule`.
 - **D-A2 · Schema `metrics` propio** (no meter las tablas en `okr`): respeta
   el patrón "schema por módulo" y deja al Módulo 1 sin dependencia de `okr`.
 - **D-A3 · Múltiples entries por bucket**: permitidas (el acumulado es la
@@ -253,5 +265,6 @@ Flags: `indicadores-gestion` ON e `indicadores-okr` ON en la org demo.
 - **D-A8 · Baseline en el modelo común** (`baselineValue` en `Metric`, default
   0): la letra dice "lineal de 0 (o baseline) al target"; lo modelo como campo
   explícito con default 0 en vez de sobrecargar `targetValue`.
-- **D-A9 · Cache del guard de módulo** con TTL corto (~30s) para no pegar a la
-  DB en cada request; el toggle es una operación rara de superadmin.
+- **D-A9 · Cache del guard de módulo** con TTL corto (~30s) sobre
+  `isEnabled()` para no pegar a la DB en cada request; el toggle es una
+  operación rara de superadmin.

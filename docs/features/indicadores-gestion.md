@@ -1,7 +1,8 @@
 # Módulo 1 — Indicadores de gestión
 
 > Documento de alcance. Depende de `indicadores-modelo-comun.md` (modelo de
-> datos, flags, permisos, `metrics-domain`). Flag: `indicadores-gestion`.
+> datos, habilitación de módulos, permisos, `metrics-domain`).
+> Módulo: `indicadores-gestion` (seed en `core.module`).
 > Estado: **pendiente de aprobación**. Se implementa completo ANTES del Módulo 2.
 
 ## 1. Alcance
@@ -9,7 +10,7 @@
 - ABM de indicadores (catálogo por organización y período).
 - Carga periódica de avances (incrementos por bucket, retroactiva permitida).
 - Visualización esperado vs. real (curva lineal esperada vs. acumulado real).
-- Entrada nueva en el nav lateral, visible solo con la flag activa.
+- Entrada nueva en el nav lateral, visible solo con el módulo habilitado.
 
 ### No-alcance
 
@@ -42,7 +43,8 @@ apps/api/src/modules/metrics/
 
 Guards en todos los endpoints (default deny, regla 8 de CLAUDE.md):
 `AuthGuard` (global) + `TenantGuard` + `PermissionsGuard` + nuevo
-`ModuleEnabledGuard` con `@RequiresModule('indicadores-gestion')`.
+`ModuleEnabledGuard` con `@RequiresModule('indicadores-gestion')`
+(implementado sobre `ModuleEnablementService.isEnabled()`).
 Mutaciones dentro de `prisma.runInTransaction` + `auditEmitter.emit`, con
 `tenantContextStorage.run(authContext, ...)` — mismo patrón que
 `ObjectiveService` (`apps/api/src/modules/okr/services/objective.service.ts`).
@@ -100,10 +102,10 @@ contratos, regla 7); el frontend formatea según `unit`.
 
 - **Modificar** `apps/web/src/components/app-shell.tsx`: agregar item
   `{ href: '/metrics', label: 'Indicadores', requiresOrg: true }` a `navItems`,
-  condicionado a la flag. El shell recibe una prop nueva `enabledModules:
-  string[]` que el layout server (`apps/web/src/app/(app)/layout.tsx`) obtiene
-  junto al `me` (nuevo fetch a `/orgs/:orgId/feature-flags` público de lectura
-  para miembros — ver Decisiones D-M2).
+  condicionado al módulo habilitado. No hay fetch nuevo: `/me` **ya devuelve**
+  `enabledModules: string[]` por organización; solo hay que sumar ese campo al
+  tipo de la prop `me.orgs` del shell (hoy la omite) y filtrar el item por
+  `activeOrg.enabledModules.includes('indicadores-gestion')`.
 
 ### Rutas nuevas
 
@@ -153,14 +155,16 @@ crea/edita/borra indicadores; `org-user` y `org-admin` cargan avances;
 ## 6. Seeds de demo
 
 Los del modelo común §7 (3 indicadores con cargas parciales y un bucket vacío
-intencional, flag ON en la org demo).
+intencional, módulo habilitado en la org demo vía `organization_module`).
 
 ## 7. Secuenciación
 
 Primera corrida implementable tras aprobar los tres docs: modelo común +
 este módulo, en este orden: (1) migración + prisma generate, (2)
 `metrics-domain` con tests, (3) módulo NestJS + tests de integración
-(testcontainers), (4) flags + guard + tab Módulos, (5) frontend, (6) seeds.
+(testcontainers), (4) seed de module keys + dependencia en
+`ModuleEnablementService` + `ModuleEnabledGuard` + guards pendientes del
+controller de módulos + tab Módulos, (5) frontend, (6) seeds.
 **El Módulo 2 no arranca hasta que esto esté mergeado y aprobado.**
 
 ## Decisiones del architect
@@ -169,11 +173,9 @@ este módulo, en este orden: (1) migración + prisma generate, (2)
   (no dependencias pesadas sin justificación) y ya existe el precedente del
   Gantt hecho a mano (`apps/web/src/components/gantt/`). Dos polilíneas + una
   línea de referencia no justifican una librería.
-- **D-M2 · Lectura de flags para el nav**: `GET /orgs/:orgId/feature-flags` es
-  superadmin-only (administración). Para el nav, el layout necesita saber qué
-  módulos están activos: se expone la lectura a cualquier miembro autenticado
-  de la org (solo lectura de flags no es sensible) manteniendo el PUT
-  superadmin-only. Alternativa descartada: duplicar el dato en `/me`.
+- **D-M2 · RESUELTA (por Pedro, vía D-A1)**: el nav lee `enabledModules` del
+  `/me` existente, que ya lo devuelve por organización. Sin endpoint ni fetch
+  nuevo.
 - **D-M3 · `progressPct` del catálogo** se calcula server-side en el
   summary DTO (trunc a entero en presentación), para que la tabla no tenga
   que traer todas las entries.

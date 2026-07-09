@@ -2,7 +2,8 @@
 
 > Documento de alcance. Depende de `indicadores-modelo-comun.md` y de que el
 > **Módulo 1 esté implementado completo** (`indicadores-gestion.md`).
-> Flags requeridas: `indicadores-okr` **y** `indicadores-gestion`.
+> Módulos requeridos (via `core.organization_module`): `indicadores-okr`
+> **y** `indicadores-gestion` (dependencia validada en `enableModule`).
 > Estado: **pendiente de aprobación**.
 
 ## 1. Alcance
@@ -119,17 +120,17 @@ La cascada Objetivo←KRs no cambia ni una línea: solo cambia quién escribe el
 
 ## 4. Reglas de negocio (RN-O)
 
-1. **RN-O1** — Un KR en modo `automatic` tiene exactamente un `MetricKrLink`; el slider/las tareas dejan de determinar su progreso. Un KR `manual` se comporta exactamente como hoy.
+1. **RN-O1** — Un KR en modo `automatic` tiene exactamente un `MetricKrLink`; su progreso viene **solo del indicador**. Un KR `manual` se comporta exactamente como hoy.
 2. **RN-O2** — Al vincular: baseline default = acumulado actual del indicador (editable), target obligatorio, dirección heredada del Metric (editable). El KR pasa a `automatic` y su `progressCachedBp` se recalcula de inmediato.
 3. **RN-O3** — Metric y KR deben pertenecer a la **misma organización y mismo período** (422 si no).
-4. **RN-O4** — Un KR automático **no admite tareas activas**: para vincular, el KR no debe tener tareas sin borrar (409 con mensaje accionable); con el modo activo se oculta "+ Tarea". Ver D-O2 — excepción deliberada a "cascada siempre por tareas", requiere actualizar la nota de dominio en CLAUDE.md/AGENTS.md en la corrida de implementación.
+4. **RN-O4** — En modo automático las tareas bajo el KR **se permiten pero son informativas**: conservan su avance y sus sliders, pero NO alimentan el % del KR (nota visual en la UI: "estas tareas no impactan el avance del KR"). El servicio de recálculo **branchea por `progress_mode`**: `manual` → `computeKrProgress(tasks)` como hoy; `automatic` → valor derivado del indicador. La cascada KR→Objetivo queda intacta en ambos modos. Ver D-O2 — matiza la nota de dominio "cascada siempre por tareas" de CLAUDE.md/AGENTS.md; actualizarla en la corrida de implementación.
 5. **RN-O5 (caso a)** — Desvincular → el KR **conserva el último % calculado** en `progressCachedBp` y vuelve a `manual`.
 6. **RN-O6 (caso b)** — Indicador sin datos (sin entries) → KR en 0% con estado **"sin datos"** (badge en UI; `progressCachedBp = 0`).
 7. **RN-O7 (caso c)** — Soft-delete de un Metric con vínculos activos → **bloqueado** (409): primero desvincular. (Endurece RN-M8 del Módulo 1.)
 8. **RN-O8 (caso d)** — Cierre de período → % del KR **congelado** al último valor calculado; el vínculo queda read-only (crear/editar/borrar vínculos exige período abierto, `assertPeriodOpen`).
 9. **RN-O9 (caso e)** — Editar baseline/target a mitad de período → **permitido**, recálculo inmediato del KR y su Objetivo, evento de auditoría con diff.
 10. **RN-O10** — Vínculo a nivel Objetivo (`MetricObjectiveContext`): solo lectura visual, sin efecto en ningún cálculo. El patrón "el objetivo ES el indicador" se logra con un objetivo de **un único KR automático** (documentar en UI/help).
-11. **RN-O11** — Todos los endpoints del módulo exigen ambas flags (`indicadores-okr` + `indicadores-gestion`) vía `@RequiresModule`.
+11. **RN-O11** — Todos los endpoints del módulo exigen ambos módulos habilitados (`indicadores-okr` + `indicadores-gestion`) vía `@RequiresModule` sobre `ModuleEnablementService.isEnabled()`.
 
 ## 5. Endpoints REST
 
@@ -162,8 +163,9 @@ sin fetch extra).
 - `apps/web/src/components/objectives/kr-card-actions.tsx` — kebab del KR:
   acciones "Vincular indicador…" / "Editar vínculo…" / "Desvincular".
 - `apps/web/src/components/objectives/task-progress-slider.tsx` — sin cambios
-  (los sliders son de tareas y un KR automático no tiene tareas activas, RN-O4);
-  la barra del KR automático es un componente nuevo.
+  (los sliders de tareas siguen operativos también bajo un KR automático; sus
+  tareas son informativas y no alimentan el %, RN-O4); la barra del KR
+  automático es un componente nuevo.
 - `apps/web/src/components/objectives/actions.ts` — server actions nuevas.
 
 ### Componentes nuevos (`apps/web/src/components/objectives/`)
@@ -178,7 +180,9 @@ sin fetch extra).
 En el detalle de objetivo existente, el KR vinculado muestra: badge
 "⚡ Automático", la leyenda "Vinculado al indicador X · baseline → target ·
 último valor", barra de progreso **sin** slider, y nota de cómo se calcula
-(interpolación lineal, clamp 0–100). Los KRs manuales no cambian en nada.
+(interpolación lineal, clamp 0–100). Si el KR automático tiene tareas, se
+muestran con la nota "informativas — no impactan el avance del KR" (RN-O4).
+Los KRs manuales no cambian en nada.
 Bloque aparte "Indicadores de contexto del objetivo": lista de indicadores
 solo lectura con último valor, **marcado explícitamente como sin impacto en
 el cálculo**.
@@ -213,15 +217,15 @@ inválido), (3) API pública OKR `applyAutomaticKrProgress` + hook en
   público `applyAutomaticKrProgress(krId, progressBp, authContext)` y metrics
   lo consume vía DI. Alternativa descartada: eventos internos (EventEmitter) —
   más desacoplado pero pierde la transaccionalidad simple y es prematuro.
-- **D-O2 · KR automático sin tareas activas** (RN-O4): la letra pedía
-  "slider deshabilitado"; como los sliders viven en las tareas, la
-  interpretación consistente es que un KR automático no computa por tareas.
-  Permitir tareas "decorativas" que no suman confundiría; bloqueo explícito
-  con mensaje. **Impacta la nota de dominio "cascada siempre por tareas" de
-  CLAUDE.md — revisar en la aprobación.**
-- **D-O3 · Unlink = hard delete del vínculo** + evento de auditoría con diff
-  completo (el vínculo no es entidad de negocio visible post-mortem; su
-  historia vive en `audit.event`). Re-vincular crea fila nueva.
+- **D-O2 · RESUELTA (por Pedro)**: en modo automático el progreso del KR
+  viene **solo del indicador**; las tareas bajo ese KR **se permiten pero son
+  informativas** (no alimentan el %), con nota visual. El servicio de
+  recálculo branchea por `progress_mode`; la cascada KR→Objetivo queda
+  intacta. La nota de dominio "cascada siempre por tareas" de
+  CLAUDE.md/AGENTS.md se matiza en la corrida de implementación.
+- **D-O3 · APROBADA (por Pedro)**: unlink = hard delete del vínculo + evento
+  de auditoría con diff completo (el vínculo no es entidad de negocio visible
+  post-mortem; su historia vive en `audit.event`). Re-vincular crea fila nueva.
 - **D-O4 · Baseline/target/direction viven en el LINK** (snapshot editable),
   no se leen del Metric en tiempo de cálculo: permite que dos KRs usen el
   mismo indicador con metas distintas y aísla al KR de ediciones posteriores
