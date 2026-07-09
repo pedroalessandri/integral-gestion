@@ -15,6 +15,7 @@ import type {
   PeriodStatusDto,
 } from '@gestion-publica/shared-types/okr';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
+import type { MetricKrLinkDto } from '@gestion-publica/shared-types/metrics';
 import {
   computeKrProgress,
   computeObjectiveProgress,
@@ -22,6 +23,11 @@ import {
   computeProgressStatus,
   computeTaskStatus,
 } from '@gestion-publica/okr-domain';
+import {
+  computeAutomaticKrProgressBp,
+  formatDecimal4,
+  parseDecimal4,
+} from '@gestion-publica/metrics-domain';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
@@ -60,6 +66,7 @@ type KeyResultRow = {
   owner: { id: string; displayName: string } | null;
   weightBp: number;
   progressCachedBp: number;
+  progressMode: string;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -591,27 +598,39 @@ export class ObjectiveService {
     return { id: owner.id, displayName: owner.displayName, email: owner.email };
   }
 
-  private buildCascadeDto(
+  private async buildCascadeDto(
     obj: ObjectiveRow & { keyResults: KeyResultRow[] },
-  ): ObjectiveCascadeDto {
+  ): Promise<ObjectiveCascadeDto> {
+    // Pre-load embedded metric links for automatic KRs (M2, §5). Read directly
+    // from the metrics table (no metrics-module import — that would be circular,
+    // since metrics already depends on okr via D-O1).
+    const metricLinksByKrId = await this.loadAutomaticLinks(
+      obj.keyResults.filter((kr) => kr.deletedAt === null),
+      obj.organizationId,
+    );
+
     const keyResultsWithProgress = obj.keyResults.map((kr) => {
+      const isAutomatic = kr.progressMode === 'automatic';
       const activeTasks = kr.tasks.filter((t) => t.deletedAt === null);
       const taskSum = activeTasks.reduce((acc, t) => acc + t.weightBp, 0);
       const tasksBalanced = activeTasks.length > 0 && taskSum === 10000;
-      const tasksImbalanced = activeTasks.length > 0 && !tasksBalanced;
+      // Automatic KRs draw progress from the indicator; task weights are
+      // informative only (RN-O4), so they never flag imbalance.
+      const tasksImbalanced = !isAutomatic && activeTasks.length > 0 && !tasksBalanced;
       let krProgressBp: number;
 
-      if (activeTasks.length === 0) {
+      if (isAutomatic) {
+        // RN-O1/RN-O4: % comes solely from the linked indicator (cached).
+        krProgressBp = kr.progressCachedBp;
+      } else if (activeTasks.length === 0) {
         krProgressBp = 0;
+      } else if (tasksBalanced) {
+        krProgressBp = computeKrProgress(
+          activeTasks.map((t) => ({ weightBp: t.weightBp, progressBp: t.progressBp })),
+        );
       } else {
-        if (tasksBalanced) {
-          krProgressBp = computeKrProgress(
-            activeTasks.map((t) => ({ weightBp: t.weightBp, progressBp: t.progressBp })),
-          );
-        } else {
-          // Weights don't sum to 10000 — use cached value (plan incomplete)
-          krProgressBp = kr.progressCachedBp;
-        }
+        // Weights don't sum to 10000 — use cached value (plan incomplete)
+        krProgressBp = kr.progressCachedBp;
       }
 
       // Derived dates from tasks
@@ -636,6 +655,8 @@ export class ObjectiveService {
         startsAt: krStartsAt,
         endsAt: krEndsAt,
         tasksImbalanced,
+        progressMode: (isAutomatic ? 'automatic' : 'manual') as 'manual' | 'automatic',
+        metricLink: metricLinksByKrId.get(kr.id) ?? null,
         tasks: activeTasks.map((t) => ({
           id: t.id,
           title: t.title,
@@ -669,9 +690,11 @@ export class ObjectiveService {
       }
     }
 
+    // Automatic KRs may legitimately have no tasks (RN-O4) — they don't count
+    // toward "plan incomplete"; only manual KRs without tasks do.
     const planIncomplete =
       activeKrs.length === 0 ||
-      keyResultsWithProgress.some((kr) => !kr.hasActiveTasks);
+      keyResultsWithProgress.some((kr) => kr.progressMode === 'manual' && !kr.hasActiveTasks);
 
     const imbalancedKrCount = keyResultsWithProgress.filter((kr) => kr.tasksImbalanced).length;
 
@@ -705,6 +728,81 @@ export class ObjectiveService {
       planIncomplete,
       imbalancedKrCount,
     };
+  }
+
+  /**
+   * Build the embedded MetricKrLinkDto for each automatic KR of an objective
+   * (M2, §5). Reads the metrics tables directly (no metrics-module import — that
+   * would be a circular dependency) and computes progress with the pure
+   * metrics-domain functions.
+   *
+   * NOTE (tech debt): the cumulative/progress computation is duplicated with
+   * MetricLinkService because okr cannot depend on the metrics module. See
+   * docs/tech-debt.md.
+   */
+  private async loadAutomaticLinks(
+    krs: Array<{ id: string; progressMode: string }>,
+    orgId: string,
+  ): Promise<Map<string, MetricKrLinkDto>> {
+    const autoKrIds = krs.filter((kr) => kr.progressMode === 'automatic').map((kr) => kr.id);
+    const map = new Map<string, MetricKrLinkDto>();
+    if (autoKrIds.length === 0) return map;
+
+    const links = (await this.prisma.scoped.metricKrLink.findMany({
+      where: { keyResultId: { in: autoKrIds }, organizationId: orgId },
+    })) as Array<{
+      id: string;
+      metricId: string;
+      keyResultId: string;
+      baselineValue: { toString(): string };
+      targetValue: { toString(): string };
+      direction: string;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+
+    for (const link of links) {
+      const metric = (await this.prisma.scoped.metric.findFirst({
+        where: { id: link.metricId, organizationId: orgId, deletedAt: null },
+        select: { name: true, baselineValue: true },
+      })) as { name: string; baselineValue: { toString(): string } } | null;
+      if (!metric) continue;
+
+      const entries = (await this.prisma.scoped.metricEntry.findMany({
+        where: { metricId: link.metricId, deletedAt: null },
+        select: { incrementValue: true },
+      })) as Array<{ incrementValue: { toString(): string } }>;
+
+      let running = parseDecimal4(metric.baselineValue.toString());
+      for (const entry of entries) {
+        running += parseDecimal4(entry.incrementValue.toString());
+      }
+      const actual = formatDecimal4(running);
+      const hasData = entries.length > 0;
+      const computedProgressBp = hasData
+        ? computeAutomaticKrProgressBp({
+            actual,
+            baseline: link.baselineValue.toString(),
+            target: link.targetValue.toString(),
+          })
+        : 0;
+
+      map.set(link.keyResultId, {
+        id: link.id,
+        metricId: link.metricId,
+        metricName: metric.name,
+        keyResultId: link.keyResultId,
+        baselineValue: link.baselineValue.toString(),
+        targetValue: link.targetValue.toString(),
+        direction: link.direction as MetricKrLinkDto['direction'],
+        lastValue: actual,
+        computedProgressBp,
+        estado: hasData ? 'ok' : 'sin-datos',
+        createdAt: link.createdAt.toISOString(),
+        updatedAt: link.updatedAt.toISOString(),
+      });
+    }
+    return map;
   }
 
   private toSummaryDto(o: ObjectiveRow): ObjectiveSummaryDto {

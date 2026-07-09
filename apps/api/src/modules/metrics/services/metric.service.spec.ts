@@ -11,6 +11,7 @@ import { MetricService } from './metric.service.js';
 const mockScoped = {
   metric: { findMany: vi.fn(), findFirst: vi.fn() },
   metricEntry: { findMany: vi.fn() },
+  metricKrLink: { count: vi.fn().mockResolvedValue(0) },
 };
 const mockTx = {
   metric: { create: vi.fn(), update: vi.fn() },
@@ -210,6 +211,16 @@ describe('MetricService', () => {
       expect(mockAuditEmitter.emit).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'metric.deleted' }),
       );
+    });
+
+    it('RN-O7: blocks (409) when the metric has active KR links', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue(metricRow);
+      mockScoped.metricKrLink.count.mockResolvedValueOnce(2);
+
+      await expect(service.softDelete('metric-1', 'org-1', authContext)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(mockTx.metric.update).not.toHaveBeenCalled();
     });
   });
 
