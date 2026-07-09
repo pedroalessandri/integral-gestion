@@ -14,6 +14,7 @@ import { CoreModule } from './modules/core/index.js';
 import { OkrModule } from './modules/okr/index.js';
 import { HealthModule } from './modules/health/index.js';
 import { AiModule } from './modules/ai/index.js';
+import { MetricsModule } from './modules/metrics/index.js';
 
 /**
  * Root application module.
@@ -56,6 +57,7 @@ import { AiModule } from './modules/ai/index.js';
     OkrModule,
     HealthModule,
     AiModule,
+    MetricsModule,
   ],
   providers: [
     {

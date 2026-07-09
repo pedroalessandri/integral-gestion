@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.0",
+    "@gestion-publica/metrics-domain": "workspace:*",
     "@gestion-publica/okr-domain": "workspace:*",
     "@gestion-publica/prisma-tenant-extension": "workspace:*",
     "@gestion-publica/shared-types": "workspace:*",

@@ -63,4 +63,18 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
    * be visible to other organizations.
    */
   'OrganizationModule',
+
+  /**
+   * `metrics.metric` — per docs/features/indicadores-modelo-comun.md.
+   * Every Metric belongs to exactly one organization and one period.
+   * organizationId is required and non-mutable.
+   */
+  'Metric',
+
+  /**
+   * `metrics.metric_entry` — per docs/features/indicadores-modelo-comun.md.
+   * An entry belongs to a Metric. organizationId is denormalized for the
+   * same reason as KeyResult/Task.
+   */
+  'MetricEntry',
 ]);

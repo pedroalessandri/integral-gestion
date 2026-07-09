@@ -17,7 +17,7 @@ import { tenantContextStorage } from '../../auth/context/tenant-context-storage.
 import type { PrismaTransactionClient } from '../../audit/context/transaction-context-storage.js';
 import type { CreateTaskDto } from '../dto/create-task.dto.js';
 import type { UpdateTaskDto } from '../dto/update-task.dto.js';
-import { assertPeriodOpen } from './period-guard.js';
+import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 
 type PeriodRow = {
   id: string;

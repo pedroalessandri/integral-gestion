@@ -38,6 +38,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.91.0
         version: 0.91.0(zod@4.3.6)
+      '@gestion-publica/metrics-domain':
+        specifier: workspace:*
+        version: link:../../packages/metrics-domain
       '@gestion-publica/okr-domain':
         specifier: workspace:*
         version: link:../../packages/okr-domain

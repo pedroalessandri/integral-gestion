@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { assertPeriodOpen } from './period-guard.js';
+import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 import type {
   ObjectiveCascadeDto,
   ObjectiveDetailDto,

@@ -1,7 +1,8 @@
 /**
  * Discriminated union of all domain events emitted by the system.
  *
- * Total variants: 29 (18 core + 11 okr) per ADR 0002 and ADR 0001 audit event tables.
+ * Total variants: 35 (18 core + 11 okr + 6 metrics) per ADR 0002, ADR 0001 and
+ * the indicadores docs (docs/features/indicadores-modelo-comun.md).
  * Discriminator: `action` (globally unique per entity+verb convention).
  *
  * Additional export `DomainEventAction = DomainEvent['action']` is provided for ergonomics
@@ -314,6 +315,66 @@ type TaskProgressUpdatedEvent = BaseEvent<
 >;
 
 // ---------------------------------------------------------------------------
+// Metrics events (Módulo 1 "Indicadores de gestión")
+// ---------------------------------------------------------------------------
+
+type MetricCreatedEvent = BaseEvent<
+  'metric.created',
+  'metrics.metric',
+  {
+    before: null;
+    after: {
+      name: string;
+      unit: string;
+      direction: string;
+      frequency: string;
+      baselineValue: string;
+      targetValue: string;
+      periodId: string;
+    };
+  }
+>;
+
+type MetricUpdatedEvent = BaseEvent<
+  'metric.updated',
+  'metrics.metric',
+  {
+    before: Partial<{ name: string; baselineValue: string; targetValue: string }>;
+    after: Partial<{ name: string; baselineValue: string; targetValue: string }>;
+  }
+>;
+
+type MetricDeletedEvent = BaseEvent<
+  'metric.deleted',
+  'metrics.metric',
+  { before: { deletedAt: null }; after: { deletedAt: string } }
+>;
+
+type MetricEntryCreatedEvent = BaseEvent<
+  'metric.entry.created',
+  'metrics.metric_entry',
+  {
+    before: null;
+    after: { metricId: string; bucketDate: string; incrementValue: string; comment: string | null };
+  }
+>;
+
+type MetricEntryUpdatedEvent = BaseEvent<
+  'metric.entry.updated',
+  'metrics.metric_entry',
+  {
+    before: Partial<{ incrementValue: string; comment: string | null }>;
+    after: Partial<{ incrementValue: string; comment: string | null }>;
+  }
+>;
+
+type MetricEntryDeletedEvent = BaseEvent<
+  'metric.entry.deleted',
+  'metrics.metric_entry',
+  { before: { deletedAt: null }; after: { deletedAt: string } }
+>;
+
+// ---------------------------------------------------------------------------
 // Discriminated union
 // ---------------------------------------------------------------------------
 
@@ -357,7 +418,15 @@ export type DomainEvent =
   | TaskCreatedEvent
   | TaskUpdatedEvent
   | TaskDeletedEvent
-  | TaskProgressUpdatedEvent;
+  | TaskProgressUpdatedEvent
+  // Metrics — metric (3)
+  | MetricCreatedEvent
+  | MetricUpdatedEvent
+  | MetricDeletedEvent
+  // Metrics — metric_entry (3)
+  | MetricEntryCreatedEvent
+  | MetricEntryUpdatedEvent
+  | MetricEntryDeletedEvent;
 
 /**
  * Union of all valid action strings. Useful for typed switch statements.

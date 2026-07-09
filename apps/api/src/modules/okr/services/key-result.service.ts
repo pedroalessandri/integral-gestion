@@ -11,7 +11,7 @@ import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import type { CreateKeyResultDto } from '../dto/create-key-result.dto.js';
 import type { UpdateKeyResultDto } from '../dto/update-key-result.dto.js';
-import { assertPeriodOpen } from './period-guard.js';
+import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 
 type PeriodRow = { id: string; code: string; status: string };
 
