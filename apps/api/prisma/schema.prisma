@@ -15,7 +15,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["core", "auth", "okr", "audit", "ai"]
+  schemas  = ["core", "auth", "okr", "audit", "ai", "metrics"]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -39,15 +39,17 @@ model Organization {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  periods          Period[]
-  memberships      UserOrganizationRole[]
-  modules          OrganizationModule[]
-  objectives       Objective[]
-  keyResults       KeyResult[]
-  tasks            Task[]
-  aiSettings       OrganizationAiSettings?
-  aiPromptLogs     PromptLog[]
-  aiUsageCounters  UsageCounter[]
+  periods         Period[]
+  memberships     UserOrganizationRole[]
+  modules         OrganizationModule[]
+  objectives      Objective[]
+  keyResults      KeyResult[]
+  tasks           Task[]
+  aiSettings      OrganizationAiSettings?
+  aiPromptLogs    PromptLog[]
+  aiUsageCounters UsageCounter[]
+  metrics         Metric[]
+  metricEntries   MetricEntry[]
 
   @@index([status], map: "idx_organization_status")
   @@map("organization")
@@ -71,6 +73,7 @@ model Period {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   objectives   Objective[]
+  metrics      Metric[]
 
   // Partial unique index uq_period_org_one_open ON (organization_id) WHERE status = 'open' AND deleted_at IS NULL
   // cannot be expressed in Prisma — added manually in migration SQL (D3-A).
@@ -92,11 +95,11 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  memberships      UserOrganizationRole[]
-  ownedObjectives  Objective[] @relation("ObjectiveOwner")
-  ownedKeyResults  KeyResult[] @relation("KrOwner")
-  ownedTasks       Task[]      @relation("TaskOwner")
-  aiPromptLogs     PromptLog[]
+  memberships     UserOrganizationRole[]
+  ownedObjectives Objective[]            @relation("ObjectiveOwner")
+  ownedKeyResults KeyResult[]            @relation("KrOwner")
+  ownedTasks      Task[]                 @relation("TaskOwner")
+  aiPromptLogs    PromptLog[]
 
   @@index([isSuperadmin], map: "idx_user_superadmin")
   @@map("user")
@@ -104,12 +107,12 @@ model User {
 }
 
 model UserOrganizationRole {
-  userId         String   @map("user_id")
-  organizationId String   @map("organization_id")
-  roleId         String   @map("role_id")
-  assignedAt     DateTime @default(now()) @map("assigned_at")
-  assignedByUserId String @map("assigned_by_user_id")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  userId           String   @map("user_id")
+  organizationId   String   @map("organization_id")
+  roleId           String   @map("role_id")
+  assignedAt       DateTime @default(now()) @map("assigned_at")
+  assignedByUserId String   @map("assigned_by_user_id")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -156,11 +159,11 @@ model Module {
 // ─────────────────────────────────────────────────────────────
 
 model Role {
-  id              String           @id @default(cuid())
-  key             String           @unique @db.VarChar(64)
-  name            String           @db.VarChar(120)
-  description     String?          @db.Text
-  createdAt       DateTime         @default(now()) @map("created_at")
+  id              String                 @id @default(cuid())
+  key             String                 @unique @db.VarChar(64)
+  name            String                 @db.VarChar(120)
+  description     String?                @db.Text
+  createdAt       DateTime               @default(now()) @map("created_at")
   rolePermissions RolePermission[]
   memberships     UserOrganizationRole[]
 
@@ -299,6 +302,67 @@ model Task {
 }
 
 // ─────────────────────────────────────────────────────────────
+// metrics schema — Metric catalog + entries (Módulo 1 "Indicadores de gestión")
+// Values use Decimal(18,4) — never Float. Increments, not accumulated values.
+// Per docs/features/indicadores-modelo-comun.md.
+// ─────────────────────────────────────────────────────────────
+
+model Metric {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  periodId       String    @map("period_id")
+  name           String    @db.VarChar(200)
+  /// 'number' | 'percent' | 'currency' — CHECK constraint in migration
+  unit           String    @db.VarChar(10)
+  /// 'increasing' | 'decreasing' — CHECK constraint in migration
+  direction      String    @db.VarChar(10)
+  /// 'weekly' | 'biweekly' | 'monthly' — CHECK constraint in migration. Immutable after creation (RN-M2).
+  frequency      String    @db.VarChar(10)
+  /// Starting value of the expected linear curve. Default 0.
+  baselineValue  Decimal   @default(0) @map("baseline_value") @db.Decimal(18, 4)
+  /// Period target value.
+  targetValue    Decimal   @map("target_value") @db.Decimal(18, 4)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  period       Period        @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  entries      MetricEntry[]
+
+  // Case-insensitive partial unique index uq_metric_org_period_name ON
+  // (organization_id, period_id, lower(name)) WHERE deleted_at IS NULL
+  // cannot be expressed in Prisma — added manually in migration SQL (RN-M1).
+  @@index([organizationId, periodId], map: "idx_metric_org_period")
+  @@index([deletedAt], map: "idx_metric_deleted_at")
+  @@map("metric")
+  @@schema("metrics")
+}
+
+model MetricEntry {
+  id              String    @id @default(cuid())
+  metricId        String    @map("metric_id")
+  organizationId  String    @map("organization_id")
+  /// First day of the bucket (DATE, UTC). Must be a valid bucket boundary (RN-C4).
+  bucketDate      DateTime  @map("bucket_date") @db.Date
+  /// INCREMENT for the bucket (not accumulated). May be negative (correction, RN-C6).
+  incrementValue  Decimal   @map("increment_value") @db.Decimal(18, 4)
+  comment         String?   @db.Text
+  createdByUserId String    @map("created_by_user_id")
+  deletedAt       DateTime? @map("deleted_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  metric       Metric       @relation(fields: [metricId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([metricId, bucketDate], map: "idx_metric_entry_metric_bucket")
+  @@index([organizationId], map: "idx_metric_entry_org")
+  @@map("metric_entry")
+  @@schema("metrics")
+}
+
+// ─────────────────────────────────────────────────────────────
 // ai schema — AI Copilot config, prompt log, usage counters
 // Per ADR 0005: provider abstraction, quota enforcement, append-only prompt log
 // ─────────────────────────────────────────────────────────────
@@ -317,7 +381,7 @@ model OrganizationAiSettings {
   /// Whether AI copilot is enabled for this org
   enabled             Boolean  @default(true)
   /// Reserved for future BYOK iteration (D11)
-  byokApiKeyEncrypted String?  @db.Text @map("byok_api_key_encrypted")
+  byokApiKeyEncrypted String?  @map("byok_api_key_encrypted") @db.Text
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
@@ -332,23 +396,23 @@ model PromptLog {
   organizationId String   @map("organization_id")
   userId         String   @map("user_id")
   /// 'draft' | 'validate' — CHECK constraint in migration
-  operationType  String   @db.VarChar(16) @map("operation_type")
+  operationType  String   @map("operation_type") @db.VarChar(16)
   /// 'objective' | 'key_result' — CHECK constraint in migration
-  entityType     String   @db.VarChar(32) @map("entity_type")
+  entityType     String   @map("entity_type") @db.VarChar(32)
   /// 'anthropic' | 'openai'
   provider       String   @db.VarChar(16)
   model          String   @db.VarChar(64)
   /// SHA-256 hex of the normalized user prompt (for cache lookup D9)
-  promptHash     String   @db.VarChar(64) @map("prompt_hash")
-  promptText     String   @db.Text @map("prompt_text")
-  responseText   String   @db.Text @map("response_text")
+  promptHash     String   @map("prompt_hash") @db.VarChar(64)
+  promptText     String   @map("prompt_text") @db.Text
+  responseText   String   @map("response_text") @db.Text
   tokensIn       Int      @map("tokens_in")
   tokensOut      Int      @map("tokens_out")
   latencyMs      Int      @map("latency_ms")
   /// True when this response was served from cache
   cacheHit       Boolean  @default(false) @map("cache_hit")
   success        Boolean  @default(true)
-  errorCode      String?  @db.VarChar(64) @map("error_code")
+  errorCode      String?  @map("error_code") @db.VarChar(64)
   createdAt      DateTime @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -364,9 +428,9 @@ model PromptLog {
 model UsageCounter {
   organizationId String   @map("organization_id")
   /// Format 'YYYY-MM' — CHECK constraint in migration
-  yearMonth      String   @db.VarChar(7) @map("year_month")
+  yearMonth      String   @map("year_month") @db.VarChar(7)
   /// 'draft' | 'validate'
-  operationType  String   @db.VarChar(16) @map("operation_type")
+  operationType  String   @map("operation_type") @db.VarChar(16)
   callsCount     Int      @default(0) @map("calls_count")
   tokensInTotal  Int      @default(0) @map("tokens_in_total")
   tokensOutTotal Int      @default(0) @map("tokens_out_total")
