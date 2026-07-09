@@ -24,6 +24,7 @@ const mockPrismaService = {
   runInTransaction: vi.fn().mockImplementation((fn: (tx: any) => Promise<any>) => fn(mockTx)),
 };
 const mockAuditEmitter = { emit: vi.fn().mockResolvedValue(undefined) };
+const mockMetricLinkService = { recalcLinkedKrs: vi.fn().mockResolvedValue(undefined) };
 
 const authContext: AuthContext = {
   userId: 'user-1',
@@ -81,6 +82,8 @@ describe('MetricEntryService', () => {
       mockPrismaService as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockAuditEmitter as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockMetricLinkService as any,
     );
   });
 

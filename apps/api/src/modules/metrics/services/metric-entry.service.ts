@@ -15,6 +15,7 @@ import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
+import { MetricLinkService } from './metric-link.service.js';
 
 type PeriodInclude = {
   id: string;
@@ -58,6 +59,7 @@ export class MetricEntryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
+    private readonly metricLinkService: MetricLinkService,
   ) {}
 
   async list(metricId: string, orgId: string): Promise<MetricEntryDto[]> {
@@ -110,6 +112,9 @@ export class MetricEntryService {
       }),
     );
 
+    // M2 hook: after commit, recompute any automatic KR linked to this metric.
+    await this.metricLinkService.recalcLinkedKrs(metricId, orgId, authContext);
+
     return this.toDtoWithCumulative(metric, created);
   }
 
@@ -160,6 +165,9 @@ export class MetricEntryService {
       }),
     );
 
+    // M2 hook: after commit, recompute any automatic KR linked to this metric.
+    await this.metricLinkService.recalcLinkedKrs(metricId, orgId, authContext);
+
     return this.toDtoWithCumulative(metric, updated);
   }
 
@@ -191,6 +199,9 @@ export class MetricEntryService {
         });
       }),
     );
+
+    // M2 hook: deleting an entry changes the accumulated value → recompute KRs.
+    await this.metricLinkService.recalcLinkedKrs(metricId, orgId, authContext);
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
