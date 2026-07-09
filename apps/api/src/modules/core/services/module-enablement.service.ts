@@ -18,6 +18,16 @@ export interface OrganizationModuleInfo {
 }
 
 /**
+ * Declarative module dependency map: moduleKey → modules it requires.
+ * Enforced in enableModule (409 if a required module is disabled) and in
+ * disableModule (409 if an enabled module depends on the one being disabled).
+ * Per docs/features/indicadores-modelo-comun.md §4.
+ */
+export const MODULE_DEPENDENCIES: Readonly<Record<string, readonly string[]>> = {
+  'indicadores-okr': ['indicadores-gestion'],
+};
+
+/**
  * ModuleEnablementService — manages which modules are enabled for an organization.
  *
  * Per ADR 0002 D4-B: module_key is a row in core.module; enabling/disabling
@@ -64,6 +74,15 @@ export class ModuleEnablementService {
 
     if (!moduleExists) {
       throw new NotFoundException(`Module "${moduleKey}" is not in the module registry.`);
+    }
+
+    // Dependency rule: every required module must be enabled first.
+    for (const requiredKey of MODULE_DEPENDENCIES[moduleKey] ?? []) {
+      if (!(await this.isEnabled(organizationId, requiredKey))) {
+        throw new ConflictException(
+          `Module "${moduleKey}" requires module "${requiredKey}" to be enabled first.`,
+        );
+      }
     }
 
     const enabledAt = new Date();
@@ -132,6 +151,19 @@ export class ModuleEnablementService {
       throw new ConflictException(
         `Module "${moduleKey}" is not currently enabled for this organization.`,
       );
+    }
+
+    // Dependency rule: cannot disable a module while an enabled module depends on it.
+    // No silent cascade — the dependent module must be disabled first.
+    for (const [dependentKey, requiredKeys] of Object.entries(MODULE_DEPENDENCIES)) {
+      if (
+        requiredKeys.includes(moduleKey) &&
+        (await this.isEnabled(organizationId, dependentKey))
+      ) {
+        throw new ConflictException(
+          `Module "${moduleKey}" cannot be disabled: module "${dependentKey}" depends on it. Disable "${dependentKey}" first.`,
+        );
+      }
     }
 
     const disabledAt = new Date();

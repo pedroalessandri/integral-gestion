@@ -87,6 +87,30 @@ describe('ModuleEnablementService', () => {
         expect.objectContaining({ action: 'organization_module.enabled' }),
       );
     });
+
+    it('throws ConflictException when enabling indicadores-okr without indicadores-gestion', async () => {
+      mockPrismaRaw.module.findUnique.mockResolvedValue({ key: 'indicadores-okr', name: 'Indicadores en OKRs' });
+      // isEnabled('org-1', 'indicadores-gestion') → no active row
+      mockPrismaRaw.organizationModule.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.enableModule('org-1', 'indicadores-okr', mockAuthContext),
+      ).rejects.toThrow(ConflictException);
+      expect(mockTx.organizationModule.upsert).not.toHaveBeenCalled();
+    });
+
+    it('enables indicadores-okr when indicadores-gestion is enabled', async () => {
+      mockPrismaRaw.module.findUnique.mockResolvedValue({ key: 'indicadores-okr', name: 'Indicadores en OKRs' });
+      mockPrismaRaw.organizationModule.findFirst.mockResolvedValue({
+        ...enabledRow,
+        moduleKey: 'indicadores-gestion',
+      });
+      const okrRow = { ...enabledRow, moduleKey: 'indicadores-okr' };
+      mockTx.organizationModule.upsert.mockResolvedValue(okrRow);
+
+      const result = await service.enableModule('org-1', 'indicadores-okr', mockAuthContext);
+      expect(result.moduleKey).toBe('indicadores-okr');
+    });
   });
 
   describe('disableModule', () => {
@@ -94,6 +118,42 @@ describe('ModuleEnablementService', () => {
       mockPrismaRaw.module.findUnique.mockResolvedValue({ key: 'okr', name: 'OKR' });
       mockPrismaRaw.organizationModule.findUnique.mockResolvedValue(null);
       await expect(service.disableModule('org-1', 'okr', mockAuthContext)).rejects.toThrow(ConflictException);
+    });
+
+    it('throws ConflictException when disabling indicadores-gestion while indicadores-okr is enabled', async () => {
+      mockPrismaRaw.module.findUnique.mockResolvedValue({ key: 'indicadores-gestion', name: 'Indicadores de gestión' });
+      mockPrismaRaw.organizationModule.findUnique.mockResolvedValue({
+        ...enabledRow,
+        moduleKey: 'indicadores-gestion',
+      });
+      // isEnabled('org-1', 'indicadores-okr') → active row exists
+      mockPrismaRaw.organizationModule.findFirst.mockResolvedValue({
+        ...enabledRow,
+        moduleKey: 'indicadores-okr',
+      });
+
+      await expect(
+        service.disableModule('org-1', 'indicadores-gestion', mockAuthContext),
+      ).rejects.toThrow(ConflictException);
+      expect(mockTx.organizationModule.update).not.toHaveBeenCalled();
+    });
+
+    it('disables indicadores-gestion when indicadores-okr is not enabled', async () => {
+      mockPrismaRaw.module.findUnique.mockResolvedValue({ key: 'indicadores-gestion', name: 'Indicadores de gestión' });
+      const gestionRow = { ...enabledRow, moduleKey: 'indicadores-gestion' };
+      mockPrismaRaw.organizationModule.findUnique.mockResolvedValue(gestionRow);
+      mockPrismaRaw.organizationModule.findFirst.mockResolvedValue(null);
+      mockTx.organizationModule.update.mockResolvedValue({
+        ...gestionRow,
+        disabledAt: new Date('2026-07-09T00:00:00Z'),
+        disabledByUserId: 'user-1',
+      });
+
+      const result = await service.disableModule('org-1', 'indicadores-gestion', mockAuthContext);
+      expect(result.disabledAt).not.toBeNull();
+      expect(mockAuditEmitter.emit).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'organization_module.disabled' }),
+      );
     });
   });
 });
