@@ -6,7 +6,15 @@
 
 ## 🔥 Prioridad alta — próxima sesión
 
-(empty for now — to be populated as new items arise)
+### [F] Implementar modelo común de Indicadores + Módulo 1 "Indicadores de gestión"
+- Por qué: primer módulo nuevo activable por organización sobre el eje métricas/indicadores. Alcance definido y validado en docs/features/indicadores-modelo-comun.md y docs/features/indicadores-gestion.md (pendientes de aprobación).
+- Detalles: schema Postgres `metrics` (Metric + MetricEntry), tabla genérica `core.feature_flag` + ModuleEnabledGuard, permisos `metrics:*`, package `metrics-domain`, tab "Módulos" en Configuración, nav "Indicadores", catálogo + detalle con gráfico esperado vs. real.
+- Estimado: corrida grande (varias sesiones). Se implementa completo antes del Módulo 2.
+
+### [F] Implementar Módulo 2 "Indicadores en OKRs"
+- Por qué: KRs con progreso automático derivado de indicadores. Alcance en docs/features/indicadores-okr.md (pendiente de aprobación).
+- Detalles: `progress_mode` en KR, MetricKrLink (baseline/target snapshot), hook de recálculo vía API pública del módulo OKR (la cascada existente no se toca), indicadores de contexto a nivel objetivo. Requiere Módulo 1 mergeado y flag `indicadores-gestion` activa.
+- Estimado: corrida grande. Bloqueado por el ítem anterior.
 
 ## 🟡 Prioridad media — próximas semanas
 
