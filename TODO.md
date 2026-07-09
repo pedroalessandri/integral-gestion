@@ -6,11 +6,10 @@
 
 ## 🔥 Prioridad alta — próxima sesión
 
-### [F] Frontend del Módulo 1 "Indicadores de gestión"
-- Por qué: el backend + modelo común ya están implementados en el branch `feature/indicadores-m1-backend` (schema `metrics`, feature-gating vía `core.module`/`organization_module` + ModuleEnabledGuard, permisos `metrics:*`, package `metrics-domain`, endpoints ABM + carga con serie esperado-vs-real). Falta la UI, según docs/features/indicadores-gestion.md §4.
-- Detalles: tab "Módulos" en Configuración (toggles enable/disable, superadmin), nav "Indicadores" leyendo `enabledModules` de /me, catálogo (Pantalla 1) y detalle (Pantalla 2: gráfico esperado vs. real + panel de carga + historial). Consumir los endpoints ya expuestos: `GET/POST /orgs/:orgId/metrics`, `GET/PATCH/DELETE /metrics/:id`, `GET /metrics/:id/series|entries`, `POST/PATCH/DELETE /metrics/:id/entries`.
-- Estimado: corrida grande. Se completa antes del Módulo 2.
-- Nota: al construir el kebab del catálogo, aplicar desde el inicio el fix del bug [B] "kebab queda abierto tras cerrar dialog" (DropdownMenu controlado por el padre).
+### [F] Módulo 1 "Indicadores de gestión" — backend en main, frontend en branch (pendiente de merge)
+- Estado: backend + modelo común mergeados a main (schema `metrics`, feature-gating vía `core.module`/`organization_module` + ModuleEnabledGuard, permisos `metrics:*`, package `metrics-domain`, endpoints ABM + carga con serie esperado-vs-real). Frontend implementado en el branch `feature/indicadores-m1-frontend`, pendiente de merge: nav "Indicadores de gestión" gated por `enabledModules` de /me, catálogo (Pantalla 1), detalle (Pantalla 2: gráfico SVG esperado vs. real + panel de carga + historial), tab "Módulos" en Configuración (toggles enable/disable superadmin con la dependencia indicadores-okr → indicadores-gestion).
+- Al mergear el frontend: mover este ítem a "Recientemente completados" con la fecha.
+- Nota: el kebab del catálogo y del historial ya aplica el fix del bug [B] "kebab queda abierto tras cerrar dialog" (DropdownMenu controlado por el padre). El bug [B] sigue abierto para los kebabs de objetivos/KRs/tareas.
 
 ### [F] Implementar Módulo 2 "Indicadores en OKRs"
 - Por qué: KRs con progreso automático derivado de indicadores. Alcance en docs/features/indicadores-okr.md (pendiente de aprobación).
