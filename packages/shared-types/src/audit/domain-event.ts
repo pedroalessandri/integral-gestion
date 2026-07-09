@@ -1,8 +1,8 @@
 /**
  * Discriminated union of all domain events emitted by the system.
  *
- * Total variants: 35 (18 core + 11 okr + 6 metrics) per ADR 0002, ADR 0001 and
- * the indicadores docs (docs/features/indicadores-modelo-comun.md).
+ * Total variants: 41 (18 core + 11 okr + 6 metrics + 6 metrics↔okr) per ADR 0002,
+ * ADR 0001 and the indicadores docs (docs/features/indicadores-*.md).
  * Discriminator: `action` (globally unique per entity+verb convention).
  *
  * Additional export `DomainEventAction = DomainEvent['action']` is provided for ergonomics
@@ -375,6 +375,67 @@ type MetricEntryDeletedEvent = BaseEvent<
 >;
 
 // ---------------------------------------------------------------------------
+// Metrics ↔ OKR events (Módulo 2 "Indicadores en OKRs")
+// docs/features/indicadores-okr.md §5
+// ---------------------------------------------------------------------------
+
+type KrMetricLinkedEvent = BaseEvent<
+  'kr.metric_linked',
+  'okr.key_result',
+  {
+    before: null;
+    after: {
+      metricId: string;
+      baselineValue: string;
+      targetValue: string;
+      direction: string;
+    };
+  }
+>;
+
+type KrMetricLinkUpdatedEvent = BaseEvent<
+  'kr.metric_link_updated',
+  'okr.key_result',
+  {
+    before: Partial<{ baselineValue: string; targetValue: string }>;
+    after: Partial<{ baselineValue: string; targetValue: string }>;
+  }
+>;
+
+/** Unlink is a hard delete audited with the full snapshot (D-O3). */
+type KrMetricUnlinkedEvent = BaseEvent<
+  'kr.metric_unlinked',
+  'okr.key_result',
+  {
+    before: {
+      metricId: string;
+      baselineValue: string;
+      targetValue: string;
+      direction: string;
+    };
+    after: null;
+  }
+>;
+
+type KrProgressRecomputedFromMetricEvent = BaseEvent<
+  'kr.progress_recomputed_from_metric',
+  'okr.key_result',
+  { before: { progressCachedBp: number }; after: { progressCachedBp: number } }
+>;
+
+type MetricObjectiveContextLinkedEvent = BaseEvent<
+  'metric_objective_context.linked',
+  'metrics.metric_objective_context',
+  { before: null; after: { metricId: string; objectiveId: string } }
+>;
+
+type MetricObjectiveContextUnlinkedEvent = BaseEvent<
+  'metric_objective_context.unlinked',
+  'metrics.metric_objective_context',
+  { before: { metricId: string; objectiveId: string }; after: null }
+>;
+
+// ---------------------------------------------------------------------------
 // Discriminated union
 // ---------------------------------------------------------------------------
 
@@ -426,7 +487,14 @@ export type DomainEvent =
   // Metrics — metric_entry (3)
   | MetricEntryCreatedEvent
   | MetricEntryUpdatedEvent
-  | MetricEntryDeletedEvent;
+  | MetricEntryDeletedEvent
+  // Metrics ↔ OKR — M2 (6)
+  | KrMetricLinkedEvent
+  | KrMetricLinkUpdatedEvent
+  | KrMetricUnlinkedEvent
+  | KrProgressRecomputedFromMetricEvent
+  | MetricObjectiveContextLinkedEvent
+  | MetricObjectiveContextUnlinkedEvent;
 
 /**
  * Union of all valid action strings. Useful for typed switch statements.

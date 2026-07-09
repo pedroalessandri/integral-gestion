@@ -384,7 +384,26 @@ export class ObjectiveService {
       },
     });
 
-    return (objectives as Array<ObjectiveRow & { keyResults: Array<KeyResultRow & { tasks: TaskRow[] }> }>).map(
+    type GanttTaskRow = {
+      id: string;
+      title: string;
+      progressBp: number;
+      startsAt: Date;
+      endsAt: Date;
+    };
+    type GanttObjectiveRow = {
+      id: string;
+      title: string;
+      progressCachedBp: number;
+      keyResults: Array<{
+        id: string;
+        title: string;
+        progressCachedBp: number;
+        tasks: GanttTaskRow[];
+      }>;
+    };
+
+    return (objectives as GanttObjectiveRow[]).map(
       (obj) => {
         const keyResults = obj.keyResults.map((kr) => {
           // Derive KR-level dates from tasks
