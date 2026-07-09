@@ -35,7 +35,8 @@ interface AppShellProps {
     email: string;
     displayName: string;
     isSuperadmin: boolean;
-    orgs: Array<{ id: string; slug: string; name: string }>;
+    /** enabledModules gates module-specific nav entries (e.g. 'indicadores-gestion'). */
+    orgs: Array<{ id: string; slug: string; name: string; enabledModules?: string[] }>;
   } | null;
   initialOrgId: string | null;
   aiUsage?: AiUsage | null;
@@ -62,17 +63,28 @@ export function AppShell({ user, me, initialOrgId, aiUsage, children }: AppShell
 
   const settingsHref = activeOrgId ? `/orgs/${activeOrgId}/settings` : null;
 
-  const navItems = [
+  interface NavItem {
+    href: string;
+    label: string;
+    superadminOnly?: boolean;
+    requiresOrg?: boolean;
+    /** Only shown when the active org has this module in enabledModules. */
+    requiresModule?: string;
+  }
+
+  const navItems: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/orgs', label: 'Organizaciones', superadminOnly: true },
     { href: '/objectives', label: 'Objetivos', requiresOrg: true },
     { href: '/objectives/executive', label: 'Vista Ejecutiva', requiresOrg: true },
+    { href: '/metrics', label: 'Indicadores de gestión', requiresOrg: true, requiresModule: 'indicadores-gestion' },
     ...(settingsHref ? [{ href: settingsHref, label: 'Configuración', requiresOrg: true }] : []),
   ];
 
   const visibleNavItems = navItems.filter((item) => {
     if (item.superadminOnly && !me?.isSuperadmin) return false;
     if (item.requiresOrg && !activeOrg) return false;
+    if (item.requiresModule && !activeOrg?.enabledModules?.includes(item.requiresModule)) return false;
     return true;
   });
 
