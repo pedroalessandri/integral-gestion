@@ -33,3 +33,9 @@
 - **Posible solución**: investigar incompatibilidad entre `eslint-config-next@16.x` (Next 15+ flat config) y `eslint-plugin-import`. Probable fix: actualizar `eslint-import-resolver-typescript` o downgrade alguno de los dos.
 - **Prioridad**: media. Activa cuando alguien intente correr lint local o cuando se quiera meter en CI.
 
+### Lint preexistente: variable sin usar en task.service.spec.ts
+- **Qué**: `pnpm --filter api lint` falla con 1 error: `mockKeyResultFindFirst` asignada pero nunca usada en `apps/api/src/modules/okr/services/task.service.spec.ts:61`. Existe en `main` (no lo introdujo la corrida de indicadores M1). Hay además un warning preexistente de `eslint-disable` sin uso en `ai/providers/openai.provider.ts:12`.
+- **Por qué importa**: `pnpm --filter api lint` sale con exit 1 por este error ajeno; enmascara errores de lint nuevos en corridas del api.
+- **Posible solución**: borrar el mock sin usar (o prefijarlo con `_`) y quitar el `eslint-disable` sobrante. Corrida trivial.
+- **Prioridad**: baja. No afecta typecheck, tests ni build (todos verdes).
+
