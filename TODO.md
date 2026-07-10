@@ -11,12 +11,12 @@
 - Al mergear el frontend: mover este ítem a "Recientemente completados" con la fecha.
 - Nota: el kebab del catálogo y del historial ya aplica el fix del bug [B] "kebab queda abierto tras cerrar dialog" (DropdownMenu controlado por el padre). El bug [B] sigue abierto para los kebabs de objetivos/KRs/tareas.
 
-### [F] Módulo 2 "Indicadores en OKRs" — backend en branch (pendiente de merge), falta frontend
+### [F] Módulo 2 "Indicadores en OKRs" — backend en main, frontend en branch (pendiente de merge)
 - Por qué: KRs con progreso automático derivado de indicadores. Alcance en docs/features/indicadores-okr.md (aprobado).
-- Estado backend (branch `feature/indicadores-m2-backend`, pendiente de merge): `progress_mode` en KR + modelos `metric_kr_link` y `metric_objective_context` (migración schema-qualified); interpolación `computeAutomaticKrProgressBp` en metrics-domain; recálculo branch por `progress_mode` (KR automático no cascadea desde tareas, RN-O4); API pública OKR `applyAutomaticKrProgress`/`attachAutomaticKr`/`detachAutomaticKr`; hook post-guardado de MetricEntry que recalcula los KR vinculados; 7 endpoints de vínculo/contexto bajo `@RequiresModule('indicadores-okr','indicadores-gestion')` con todas las reglas de borde (RN-O2..O10); cascade DTO extendido con `progressMode` + `metricLink`. Unit tests en verde; e2e de integración escrito (requiere DATABASE_URL).
-- Falta: frontend (Pantalla 3 — vincular indicador a KR, badge de modo automático/sin-datos, contexto a nivel objetivo). Requiere el backend de M1 y M2 mergeados y ambos módulos habilitados.
-- Al mergear el backend: mover la parte backend a "Recientemente completados" con la fecha; dejar el frontend como pendiente.
-- Estimado: frontend = corrida media.
+- Estado backend (mergeado a main): `progress_mode` en KR + modelos `metric_kr_link` y `metric_objective_context`; interpolación `computeAutomaticKrProgressBp` en metrics-domain; recálculo branch por `progress_mode` (RN-O4); API pública OKR `applyAutomaticKrProgress`/`attachAutomaticKr`/`detachAutomaticKr`; hook post-guardado de MetricEntry; 7 endpoints de vínculo/contexto bajo `@RequiresModule('indicadores-okr','indicadores-gestion')` con reglas de borde RN-O2..O10; cascade DTO con `progressMode` + `metricLink`.
+- Estado frontend (branch `feature/indicadores-m2-frontend`, pendiente de merge): selector "Modo de progreso" (Manual|Automático) en el alta de KR gated por `indicadores-okr`, con selector de indicador del período + baseline (prellenado con último valor) + target + dirección; vista de KR automático en el detalle de objetivo (badge "⚡ Automático", leyenda, barra sin slider, link al indicador, nota de cálculo, estado "sin datos"); nota RN-O4 en tareas de KR automático; bloque "Indicadores de contexto del objetivo" (read-only, marcado sin impacto, con dialogs de agregar/quitar); vincular/editar vínculo/desvincular desde el kebab del KR (desvincular con confirmación que explica el retorno a manual conservando el %). Período cerrado → todo read-only.
+- Al mergear el frontend: mover este ítem a "Recientemente completados" con la fecha.
+- Nota: el kebab del KR (`kr-card-actions.tsx`) ya aplica el fix del bug [B] "kebab queda abierto tras cerrar dialog" (DropdownMenu controlado). El bug [B] sigue abierto para el kebab de tareas.
 
 ## 🟡 Prioridad media — próximas semanas
 
@@ -35,6 +35,7 @@
 ### [R] Convergir CascadeResponse local en (app)/objectives/[id]/page.tsx con ObjectiveCascadeDto
 - Por qué: deuda flagueada en la corrida feat/objective-owner-assignment. El detail page usa un type local en lugar del DTO compartido.
 - Posible solución: importar ObjectiveCascadeDto desde @gestion-publica/shared-types y borrar el type local.
+- Nota (M2): el type local se extendió con `progressMode` + `metricLink` (referenciando `MetricKrLinkDto` del DTO compartido), pero la convergencia total al DTO sigue pendiente.
 - Estimado: corrida cortita (~10 min).
 
 ### [F] Mostrar avatar de owner en Vista Ejecutiva (Gantt)
