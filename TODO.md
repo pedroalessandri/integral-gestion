@@ -6,17 +6,7 @@
 
 ## 🔥 Prioridad alta — próxima sesión
 
-### [F] Módulo 1 "Indicadores de gestión" — backend en main, frontend en branch (pendiente de merge)
-- Estado: backend + modelo común mergeados a main (schema `metrics`, feature-gating vía `core.module`/`organization_module` + ModuleEnabledGuard, permisos `metrics:*`, package `metrics-domain`, endpoints ABM + carga con serie esperado-vs-real). Frontend implementado en el branch `feature/indicadores-m1-frontend`, pendiente de merge: nav "Indicadores de gestión" gated por `enabledModules` de /me, catálogo (Pantalla 1), detalle (Pantalla 2: gráfico SVG esperado vs. real + panel de carga + historial), tab "Módulos" en Configuración (toggles enable/disable superadmin con la dependencia indicadores-okr → indicadores-gestion).
-- Al mergear el frontend: mover este ítem a "Recientemente completados" con la fecha.
-- Nota: el kebab del catálogo y del historial ya aplica el fix del bug [B] "kebab queda abierto tras cerrar dialog" (DropdownMenu controlado por el padre). El bug [B] sigue abierto para los kebabs de objetivos/KRs/tareas.
-
-### [F] Módulo 2 "Indicadores en OKRs" — backend en main, frontend en branch (pendiente de merge)
-- Por qué: KRs con progreso automático derivado de indicadores. Alcance en docs/features/indicadores-okr.md (aprobado).
-- Estado backend (mergeado a main): `progress_mode` en KR + modelos `metric_kr_link` y `metric_objective_context`; interpolación `computeAutomaticKrProgressBp` en metrics-domain; recálculo branch por `progress_mode` (RN-O4); API pública OKR `applyAutomaticKrProgress`/`attachAutomaticKr`/`detachAutomaticKr`; hook post-guardado de MetricEntry; 7 endpoints de vínculo/contexto bajo `@RequiresModule('indicadores-okr','indicadores-gestion')` con reglas de borde RN-O2..O10; cascade DTO con `progressMode` + `metricLink`.
-- Estado frontend (branch `feature/indicadores-m2-frontend`, pendiente de merge): selector "Modo de progreso" (Manual|Automático) en el alta de KR gated por `indicadores-okr`, con selector de indicador del período + baseline (prellenado con último valor) + target + dirección; vista de KR automático en el detalle de objetivo (badge "⚡ Automático", leyenda, barra sin slider, link al indicador, nota de cálculo, estado "sin datos"); nota RN-O4 en tareas de KR automático; bloque "Indicadores de contexto del objetivo" (read-only, marcado sin impacto, con dialogs de agregar/quitar); vincular/editar vínculo/desvincular desde el kebab del KR (desvincular con confirmación que explica el retorno a manual conservando el %). Período cerrado → todo read-only.
-- Al mergear el frontend: mover este ítem a "Recientemente completados" con la fecha.
-- Nota: el kebab del KR (`kr-card-actions.tsx`) ya aplica el fix del bug [B] "kebab queda abierto tras cerrar dialog" (DropdownMenu controlado). El bug [B] sigue abierto para el kebab de tareas.
+_(sin ítems de prioridad alta pendientes)_
 
 ## 🟡 Prioridad media — próximas semanas
 
@@ -25,8 +15,9 @@
 - Posible solución: mostrar un skeleton o disabled+spinner hasta que el fetch resuelva. El estado `loading` ya está en OwnerSelect, solo falta usarlo visualmente.
 - Estimado: corrida muy chica (~10 min).
 
-### [B] Kebab menu de tareas y KRs queda abierto al cerrar dialog
-- Por qué: click en los 3 puntitos abre el DropdownMenu; al elegir una opción se abre un Dialog (ej. Editar); cuando se cierra el Dialog, el DropdownMenu queda visible. Pasa en tareas Y key results.
+### [B] Kebab menu de tareas queda abierto al cerrar dialog
+- Por qué: click en los 3 puntitos abre el DropdownMenu; al elegir una opción se abre un Dialog (ej. Editar); cuando se cierra el Dialog, el DropdownMenu queda visible.
+- Estado: el kebab de **key results** (`kr-card-actions.tsx`) ya quedó arreglado en la corrida del Módulo 2 (DropdownMenu controlado). Falta solo el de **tareas** (`task-row-actions.tsx`).
 - Posible solución: controlar el state del DropdownMenu desde el padre y forzar `setMenuOpen(false)` en el `onSelect` antes de abrir el Dialog. Patrón típico de shadcn cuando un MenuItem dispara un Dialog.
 - Estimado: corrida chica (~15-20 min).
 
@@ -49,6 +40,8 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [F] Módulo 2 "Indicadores en OKRs" completo (backend + frontend): `progress_mode` en KR, vínculo métrica↔KR con progreso automático (interpolación baseline→target), hook de recálculo, contexto a nivel objetivo, y la Pantalla 3 (badge automático, barra sin slider, sin-datos, editar/desvincular). Seed de demo + smoke checklist en docs/features/indicadores-smoke-checklist.md — mergeado el 10 julio 2026
+- [F] Módulo 1 "Indicadores de gestión" completo (backend + frontend): schema `metrics`, feature-gating por org (ModuleEnabledGuard), package `metrics-domain`, ABM + carga periódica con curva esperado-vs-real, nav gated y tab "Módulos" en Configuración — mergeado el 9 julio 2026
 - [F] Vista Ejecutiva: banda de meses sobre el eje del Gantt (reemplaza el ajuste pedido de formato "d MMM") — mergeado el 11 mayo 2026
 - [F] Detalle objetivo: zona peligrosa removida + suma de pesos minimizada cuando balancea — mergeado el 11 mayo 2026
 - [F] Vista Ejecutiva Gantt — mergeado el 2 mayo 2026
