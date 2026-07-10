@@ -12,9 +12,17 @@ import { KrCardActions } from '@/components/objectives/kr-card-actions';
 import { TaskRowActions } from '@/components/objectives/task-row-actions';
 import { ObjectiveHeaderActions } from '@/components/objectives/objective-header-actions';
 import { StatusIcon } from '@/components/objectives/status-icon';
+import { KrAutomaticProgress } from '@/components/objectives/kr-automatic-progress';
+import { ObjectiveContextMetrics } from '@/components/objectives/objective-context-metrics';
 import { ProgressRing } from '@/components/progress-ring';
 import { EmptyState } from '@/components/empty-state';
 import type { TaskStatus, ProgressStatus, OwnerSummaryDto } from '@gestion-publica/shared-types/okr';
+import type {
+  MetricKrLinkDto,
+  MetricContextDto,
+  MetricSummaryDto,
+  MetricUnit,
+} from '@gestion-publica/shared-types/metrics';
 
 interface CascadeResponse {
   objective: {
@@ -55,6 +63,10 @@ interface CascadeResponse {
     endsAt?: string | null;
     /** True when task weights do not sum to 10000bp. */
     tasksImbalanced?: boolean;
+    /** M2: 'automatic' when the KR is driven by a linked indicator (RN-O1). */
+    progressMode?: 'manual' | 'automatic';
+    /** M2: embedded link when progressMode === 'automatic'. */
+    metricLink?: MetricKrLinkDto | null;
     tasks: Array<{
       id: string;
       title: string;
@@ -77,9 +89,10 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
   const orgId = await getActiveOrgId();
   if (!orgId) notFound();
 
-  const [res, aiStatus] = await Promise.all([
+  const [res, aiStatus, meRes] = await Promise.all([
     apiFetch(`/api/v1/okr/objectives/${id}/cascade`, { orgId }),
     getAiStatusAction(orgId),
+    apiFetch('/api/v1/me'),
   ]);
   if (res.status === 404) notFound();
   if (!res.ok) {
@@ -102,6 +115,43 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
   const isReadOnly = objective.period.status !== 'open';
   const periodStartsAt = objective.period.startsAt;
   const periodEndsAt = objective.period.endsAt;
+  const periodId = objective.period.id;
+
+  // M2: does this org have "Indicadores en OKRs" enabled?
+  let indicadoresOkrEnabled = false;
+  if (meRes.ok) {
+    const me = (await meRes.json()) as {
+      orgs?: Array<{ id: string; enabledModules?: string[] }>;
+    };
+    indicadoresOkrEnabled =
+      me.orgs?.find((o) => o.id === orgId)?.enabledModules?.includes('indicadores-okr') ?? false;
+  }
+
+  // Period metrics (for unit formatting + context enrichment/add) and the
+  // objective's context indicators — only when the module is on (else 403).
+  let periodMetrics: MetricSummaryDto[] = [];
+  let contextMetrics: MetricContextDto[] = [];
+  if (indicadoresOkrEnabled) {
+    const [metricsRes, contextRes] = await Promise.all([
+      apiFetch(`/api/v1/orgs/${orgId}/metrics`, { orgId }),
+      apiFetch(`/api/v1/objectives/${id}/context-metrics`, { orgId }),
+    ]);
+    if (metricsRes.ok) {
+      const body: unknown = await metricsRes.json();
+      const items = Array.isArray(body)
+        ? (body as MetricSummaryDto[])
+        : ((body as { items?: MetricSummaryDto[] }).items ?? []);
+      periodMetrics = items.filter((m) => m.period.id === periodId);
+    }
+    if (contextRes.ok) {
+      const body: unknown = await contextRes.json();
+      contextMetrics = Array.isArray(body)
+        ? (body as MetricContextDto[])
+        : ((body as { items?: MetricContextDto[] }).items ?? []);
+    }
+  }
+
+  const unitByMetricId = new Map<string, MetricUnit>(periodMetrics.map((m) => [m.id, m.unit]));
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -191,6 +241,8 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
                 weightBp: kr.weightBp,
               }))}
               aiEnabled={aiStatus.enabled}
+              indicadoresOkrEnabled={indicadoresOkrEnabled}
+              periodId={periodId}
             />
           )}
         </div>
@@ -202,7 +254,14 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
             description="Los Resultados Clave definen cómo vas a medir el logro del objetivo."
             action={
               !isReadOnly ? (
-                <CreateKrButton orgId={orgId} objectiveId={objective.id} objectiveContext={objective.title} aiEnabled={aiStatus.enabled} />
+                <CreateKrButton
+                  orgId={orgId}
+                  objectiveId={objective.id}
+                  objectiveContext={objective.title}
+                  aiEnabled={aiStatus.enabled}
+                  indicadoresOkrEnabled={indicadoresOkrEnabled}
+                  periodId={periodId}
+                />
               ) : undefined
             }
           />
@@ -218,6 +277,9 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
                 aiEnabled={aiStatus.enabled}
                 periodStartsAt={periodStartsAt}
                 periodEndsAt={periodEndsAt}
+                indicadoresOkrEnabled={indicadoresOkrEnabled}
+                periodId={periodId}
+                unit={kr.metricLink ? unitByMetricId.get(kr.metricLink.metricId) : undefined}
               />
             ))}
             <WeightSumBanner keyResults={keyResults} />
@@ -228,6 +290,15 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
         )}
       </div>
 
+      {indicadoresOkrEnabled && (
+        <ObjectiveContextMetrics
+          orgId={orgId}
+          objectiveId={objective.id}
+          contextItems={contextMetrics}
+          periodMetrics={periodMetrics}
+          canManage={!isReadOnly}
+        />
+      )}
     </div>
   );
 }
@@ -240,6 +311,9 @@ function KrCard({
   aiEnabled,
   periodStartsAt,
   periodEndsAt,
+  indicadoresOkrEnabled,
+  periodId,
+  unit,
 }: {
   kr: CascadeResponse['keyResults'][0];
   orgId: string;
@@ -248,9 +322,13 @@ function KrCard({
   aiEnabled: boolean;
   periodStartsAt?: string;
   periodEndsAt?: string;
+  indicadoresOkrEnabled: boolean;
+  periodId: string;
+  unit?: MetricUnit;
 }) {
   const weightPct = kr.weightBp / 100;
   const progressPct = kr.progressCachedBp / 100;
+  const isAutomatic = kr.progressMode === 'automatic' && !!kr.metricLink;
 
   return (
     <div
@@ -293,19 +371,21 @@ function KrCard({
             >
               {progressPct.toFixed(1)}%
             </div>
-            <div
-              className="w-24 rounded-full h-1.5 mt-1"
-              style={{ backgroundColor: 'var(--color-neutral-200)' }}
-            >
+            {!isAutomatic && (
               <div
-                className="h-1.5 rounded-full"
-                style={{
-                  width: `${Math.min(100, progressPct)}%`,
-                  background: 'linear-gradient(to right, var(--color-primary-500), var(--color-primary-600))',
-                  transition: 'width 500ms ease',
-                }}
-              />
-            </div>
+                className="w-24 rounded-full h-1.5 mt-1"
+                style={{ backgroundColor: 'var(--color-neutral-200)' }}
+              >
+                <div
+                  className="h-1.5 rounded-full"
+                  style={{
+                    width: `${Math.min(100, progressPct)}%`,
+                    background: 'linear-gradient(to right, var(--color-primary-500), var(--color-primary-600))',
+                    transition: 'width 500ms ease',
+                  }}
+                />
+              </div>
+            )}
           </div>
           {!isReadOnly && (
             <KrCardActions
@@ -321,15 +401,35 @@ function KrCard({
               aiEnabled={aiEnabled}
               periodStartsAt={periodStartsAt}
               periodEndsAt={periodEndsAt}
+              indicadoresOkrEnabled={indicadoresOkrEnabled}
+              periodId={periodId}
+              progressMode={kr.progressMode ?? 'manual'}
+              metricLink={kr.metricLink ?? null}
             />
           )}
         </div>
       </div>
 
+      {isAutomatic && kr.metricLink && (
+        <KrAutomaticProgress link={kr.metricLink} unit={unit} />
+      )}
+
       <div className="pl-4 space-y-2">
         <h4 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-neutral-500)' }}>
           Tareas
         </h4>
+        {isAutomatic && kr.tasks.length > 0 && (
+          <p
+            className="text-xs rounded-md px-2.5 py-1.5"
+            style={{
+              backgroundColor: 'var(--color-neutral-100)',
+              color: 'var(--color-neutral-600)',
+            }}
+          >
+            Estas tareas son informativas — <strong>no impactan el avance</strong> de este Resultado
+            Clave, que se calcula desde el indicador (RN-O4).
+          </p>
+        )}
         {kr.tasks.length === 0 ? (
           <p className="text-xs py-2" style={{ color: 'var(--color-neutral-500)' }}>
             {isReadOnly

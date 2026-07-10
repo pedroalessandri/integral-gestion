@@ -23,7 +23,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { CreateKrButton } from './create-kr-button';
 import { CreateTaskButton } from './create-task-button';
-import { deleteKrAction } from './actions';
+import { KrMetricLinkDialog } from './kr-metric-link-dialog';
+import { deleteKrAction, unlinkKrMetricAction } from './actions';
+import type { MetricKrLinkDto } from '@gestion-publica/shared-types/metrics';
 
 interface KrData {
   id: string;
@@ -41,6 +43,14 @@ interface Props {
   /** Period bounds — forwarded to the "Nueva tarea" dialog. */
   periodStartsAt?: string;
   periodEndsAt?: string;
+  /** M2: metric-link management is offered only when 'indicadores-okr' is enabled. */
+  indicadoresOkrEnabled?: boolean;
+  /** Period id — required to scope the metric selector (RN-O3). */
+  periodId?: string;
+  /** 'automatic' when the KR is driven by an indicator. */
+  progressMode?: 'manual' | 'automatic';
+  /** The embedded link when the KR is automatic. */
+  metricLink?: MetricKrLinkDto | null;
 }
 
 export function KrCardActions({
@@ -50,13 +60,29 @@ export function KrCardActions({
   aiEnabled = true,
   periodStartsAt,
   periodEndsAt,
+  indicadoresOkrEnabled = false,
+  periodId,
+  progressMode = 'manual',
+  metricLink = null,
 }: Props) {
   const router = useRouter();
+  // Controlled menu: force-close before opening a dialog so the kebab doesn't
+  // stay visible/focused after the dialog closes (known bug).
+  const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [editLinkOpen, setEditLinkOpen] = useState(false);
+  const [unlinkOpen, setUnlinkOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [unlinking, setUnlinking] = useState(false);
+  const [unlinkError, setUnlinkError] = useState<string | null>(null);
+
+  const isAutomatic = progressMode === 'automatic';
+  const canManageLink = indicadoresOkrEnabled && !!periodId;
+  const lastPct = metricLink ? (metricLink.computedProgressBp / 100).toFixed(1) : '0.0';
 
   async function handleDelete() {
     setDeleting(true);
@@ -71,9 +97,22 @@ export function KrCardActions({
     router.refresh();
   }
 
+  async function handleUnlink() {
+    setUnlinking(true);
+    setUnlinkError(null);
+    const result = await unlinkKrMetricAction({ orgId, krId: kr.id });
+    setUnlinking(false);
+    if (result.error) {
+      setUnlinkError(result.error);
+      return;
+    }
+    setUnlinkOpen(false);
+    router.refresh();
+  }
+
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
@@ -88,16 +127,57 @@ export function KrCardActions({
           <DropdownMenuItem
             onSelect={(e) => {
               e.preventDefault();
+              setMenuOpen(false);
               setNewTaskOpen(true);
             }}
             className="font-semibold"
           >
             + Nueva tarea
           </DropdownMenuItem>
+
+          {canManageLink && (
+            <>
+              <DropdownMenuSeparator />
+              {isAutomatic ? (
+                <>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setMenuOpen(false);
+                      setEditLinkOpen(true);
+                    }}
+                  >
+                    Editar vínculo…
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setMenuOpen(false);
+                      setUnlinkOpen(true);
+                    }}
+                  >
+                    Desvincular indicador
+                  </DropdownMenuItem>
+                </>
+              ) : (
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setMenuOpen(false);
+                    setLinkOpen(true);
+                  }}
+                >
+                  Vincular indicador…
+                </DropdownMenuItem>
+              )}
+            </>
+          )}
+
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={(e) => {
               e.preventDefault();
+              setMenuOpen(false);
               setEditOpen(true);
             }}
           >
@@ -106,6 +186,7 @@ export function KrCardActions({
           <DropdownMenuItem
             onSelect={(e) => {
               e.preventDefault();
+              setMenuOpen(false);
               setDeleteOpen(true);
             }}
             className="text-red-600 focus:text-red-600"
@@ -133,6 +214,48 @@ export function KrCardActions({
         onOpenChange={setEditOpen}
         aiEnabled={aiEnabled}
       />
+
+      {canManageLink && periodId && (
+        <>
+          <KrMetricLinkDialog
+            orgId={orgId}
+            krId={kr.id}
+            periodId={periodId}
+            open={linkOpen}
+            onOpenChange={setLinkOpen}
+            mode="link"
+          />
+          <KrMetricLinkDialog
+            orgId={orgId}
+            krId={kr.id}
+            periodId={periodId}
+            open={editLinkOpen}
+            onOpenChange={setEditLinkOpen}
+            mode="edit"
+            initialLink={metricLink}
+          />
+        </>
+      )}
+
+      <AlertDialog open={unlinkOpen} onOpenChange={setUnlinkOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Desvincular el indicador?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El Resultado Clave <strong>{kr.title}</strong> volverá a modo <strong>manual</strong> y
+              conservará su último porcentaje calculado (<strong>{lastPct}%</strong>). El indicador
+              dejará de actualizar su avance; después podrás volver a medirlo con tareas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {unlinkError && <p className="text-sm text-red-600">{unlinkError}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unlinking}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleUnlink} disabled={unlinking}>
+              {unlinking ? 'Desvinculando...' : 'Desvincular'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>

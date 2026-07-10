@@ -1,6 +1,11 @@
 'use server';
 
 import { apiFetch } from '@/lib/api-client';
+import type {
+  MetricKrLinkDto,
+  MetricContextDto,
+  MetricDirection,
+} from '@gestion-publica/shared-types/metrics';
 
 /* ------------------------------------------------------------------ */
 /* Owner member list                                                    */
@@ -480,6 +485,148 @@ export async function deletePeriodAction(input: {
     });
     if (!res.ok && res.status !== 204) {
       const err = await res.json().catch(() => ({})) as { message?: string };
+      return { error: err.message ?? `HTTP ${res.status}` };
+    }
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconocido' };
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Metric ↔ KR link actions (Módulo 2 "Indicadores en OKRs")            */
+/* ------------------------------------------------------------------ */
+
+/** PUT /key-results/:id/metric-link — create or replace the link (RN-O2). */
+export async function upsertKrMetricLinkAction(input: {
+  orgId: string;
+  krId: string;
+  metricId: string;
+  baselineValue?: string;
+  targetValue: string;
+  direction?: MetricDirection;
+}): Promise<{ error?: string; link?: MetricKrLinkDto }> {
+  try {
+    const { orgId, krId, ...body } = input;
+    const res = await apiFetch(`/api/v1/key-results/${krId}/metric-link`, {
+      method: 'PUT',
+      orgId,
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { message?: string };
+      return { error: err.message ?? `HTTP ${res.status}` };
+    }
+    return { link: (await res.json()) as MetricKrLinkDto };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconocido' };
+  }
+}
+
+/** PATCH /key-results/:id/metric-link — edit baseline/target/direction (RN-O9). */
+export async function updateKrMetricLinkAction(input: {
+  orgId: string;
+  krId: string;
+  baselineValue?: string;
+  targetValue?: string;
+  direction?: MetricDirection;
+}): Promise<{ error?: string; link?: MetricKrLinkDto }> {
+  try {
+    const { orgId, krId, ...body } = input;
+    const res = await apiFetch(`/api/v1/key-results/${krId}/metric-link`, {
+      method: 'PATCH',
+      orgId,
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { message?: string };
+      return { error: err.message ?? `HTTP ${res.status}` };
+    }
+    return { link: (await res.json()) as MetricKrLinkDto };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconocido' };
+  }
+}
+
+/** DELETE /key-results/:id/metric-link — unlink; KR keeps last % and reverts to manual (RN-O5). */
+export async function unlinkKrMetricAction(input: {
+  orgId: string;
+  krId: string;
+}): Promise<{ error?: string }> {
+  try {
+    const res = await apiFetch(`/api/v1/key-results/${input.krId}/metric-link`, {
+      method: 'DELETE',
+      orgId: input.orgId,
+    });
+    if (!res.ok && res.status !== 204) {
+      const err = (await res.json().catch(() => ({}))) as { message?: string };
+      return { error: err.message ?? `HTTP ${res.status}` };
+    }
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconocido' };
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Objective context metrics (visual-only, RN-O10)                      */
+/* ------------------------------------------------------------------ */
+
+export async function listObjectiveContextMetricsAction(input: {
+  orgId: string;
+  objectiveId: string;
+}): Promise<{ error?: string; items?: MetricContextDto[] }> {
+  try {
+    const res = await apiFetch(
+      `/api/v1/objectives/${input.objectiveId}/context-metrics`,
+      { orgId: input.orgId },
+    );
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { message?: string };
+      return { error: err.message ?? `HTTP ${res.status}` };
+    }
+    const data: unknown = await res.json();
+    const items = Array.isArray(data)
+      ? (data as MetricContextDto[])
+      : ((data as { items?: MetricContextDto[] }).items ?? []);
+    return { items };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconocido' };
+  }
+}
+
+export async function addObjectiveContextMetricAction(input: {
+  orgId: string;
+  objectiveId: string;
+  metricId: string;
+}): Promise<{ error?: string }> {
+  try {
+    const res = await apiFetch(
+      `/api/v1/objectives/${input.objectiveId}/context-metrics/${input.metricId}`,
+      { method: 'PUT', orgId: input.orgId },
+    );
+    if (!res.ok && res.status !== 204) {
+      const err = (await res.json().catch(() => ({}))) as { message?: string };
+      return { error: err.message ?? `HTTP ${res.status}` };
+    }
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Error desconocido' };
+  }
+}
+
+export async function removeObjectiveContextMetricAction(input: {
+  orgId: string;
+  objectiveId: string;
+  metricId: string;
+}): Promise<{ error?: string }> {
+  try {
+    const res = await apiFetch(
+      `/api/v1/objectives/${input.objectiveId}/context-metrics/${input.metricId}`,
+      { method: 'DELETE', orgId: input.orgId },
+    );
+    if (!res.ok && res.status !== 204) {
+      const err = (await res.json().catch(() => ({}))) as { message?: string };
       return { error: err.message ?? `HTTP ${res.status}` };
     }
     return {};

@@ -16,9 +16,14 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { OwnerSelect } from './owner-select';
-import { createKrAction, updateKrAction } from './actions';
+import { createKrAction, updateKrAction, upsertKrMetricLinkAction } from './actions';
 import { AiSuggestPanel } from '@/components/ai/ai-suggest-panel';
 import { SmartFeedbackPanel } from '@/components/ai/smart-feedback-panel';
+import {
+  KrMetricLinkFields,
+  validateMetricLinkFields,
+  type MetricLinkFieldsValue,
+} from './kr-metric-link-fields';
 
 interface KrInitialValues {
   id: string;
@@ -39,6 +44,10 @@ interface CreateProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   aiEnabled?: boolean;
+  /** M2: when enabled (and periodId present), the "Modo de progreso" selector appears. */
+  indicadoresOkrEnabled?: boolean;
+  /** Period of the objective — needed to scope the linkable indicators (RN-O3). */
+  periodId?: string;
 }
 
 /** Edit mode — controlled: caller manages open state */
@@ -51,6 +60,8 @@ interface EditProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   aiEnabled?: boolean;
+  indicadoresOkrEnabled?: boolean;
+  periodId?: string;
 }
 
 type Props = CreateProps | EditProps;
@@ -79,6 +90,23 @@ export function CreateKrButton(props: Props) {
     props.initialValues ? String(props.initialValues.weightBp / 100) : '50',
   );
 
+  // M2: progress mode is only selectable on CREATE, when the module is enabled
+  // and the objective's period is known. Editing an existing link is done from
+  // the KR kebab (Editar vínculo / Desvincular), so it stays out of the edit form.
+  const canPickMode = !isEdit && !!props.indicadoresOkrEnabled && !!props.periodId;
+  const [progressMode, setProgressMode] = useState<'manual' | 'automatic'>('manual');
+  const [linkValue, setLinkValue] = useState<MetricLinkFieldsValue>({
+    metricId: '',
+    baselineValue: '',
+    targetValue: '',
+    direction: 'increasing',
+  });
+
+  function resetLinkState() {
+    setProgressMode('manual');
+    setLinkValue({ metricId: '', baselineValue: '', targetValue: '', direction: 'increasing' });
+  }
+
   function handleOpenChange(next: boolean) {
     setOpen(next);
     if (next && isEdit && props.initialValues) {
@@ -87,6 +115,7 @@ export function CreateKrButton(props: Props) {
       setOwnerUserId(props.initialValues.ownerUserId ?? null);
       setWeightPct(String(props.initialValues.weightBp / 100));
     }
+    if (next && !isEdit) resetLinkState();
     if (!next) setError(null);
   }
 
@@ -102,10 +131,18 @@ export function CreateKrButton(props: Props) {
       return;
     }
 
-    let result: { error?: string };
+    const wantsAutomatic = canPickMode && progressMode === 'automatic';
+    if (wantsAutomatic) {
+      const linkError = validateMetricLinkFields(linkValue, { requireMetric: true });
+      if (linkError) {
+        setError(linkError);
+        setLoading(false);
+        return;
+      }
+    }
 
     if (isEdit && props.initialValues) {
-      result = await updateKrAction({
+      const result = await updateKrAction({
         orgId: props.orgId,
         krId: props.initialValues.id,
         title,
@@ -113,30 +150,61 @@ export function CreateKrButton(props: Props) {
         ownerUserId: ownerUserId || null,
         weightBp,
       });
-    } else {
-      result = await createKrAction({
-        orgId: props.orgId,
-        objectiveId: props.objectiveId,
-        title,
-        ownerUserId: ownerUserId || null,
-        weightBp,
-      });
-    }
-
-    setLoading(false);
-
-    if (result.error) {
-      setError(result.error);
+      setLoading(false);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setOpen(false);
+      router.refresh();
       return;
     }
 
-    setOpen(false);
-    if (!isEdit) {
-      setTitle('');
-      setDescription('');
-      setOwnerUserId(null);
-      setWeightPct('50');
+    // Create flow — create the KR first, then (if automatic) link the indicator.
+    const created = await createKrAction({
+      orgId: props.orgId,
+      objectiveId: props.objectiveId,
+      title,
+      ownerUserId: ownerUserId || null,
+      weightBp,
+    });
+    if (created.error) {
+      setLoading(false);
+      setError(created.error);
+      return;
     }
+
+    if (wantsAutomatic) {
+      const krId = (created.kr as { id?: string } | undefined)?.id;
+      if (!krId) {
+        setLoading(false);
+        setError('El Resultado Clave se creó pero no se pudo vincular el indicador (falta id).');
+        router.refresh();
+        return;
+      }
+      const linkResult = await upsertKrMetricLinkAction({
+        orgId: props.orgId,
+        krId,
+        metricId: linkValue.metricId,
+        baselineValue: linkValue.baselineValue,
+        targetValue: linkValue.targetValue,
+        direction: linkValue.direction,
+      });
+      if (linkResult.error) {
+        setLoading(false);
+        setError(`El Resultado Clave se creó pero no se pudo vincular el indicador: ${linkResult.error}`);
+        router.refresh();
+        return;
+      }
+    }
+
+    setLoading(false);
+    setOpen(false);
+    setTitle('');
+    setDescription('');
+    setOwnerUserId(null);
+    setWeightPct('50');
+    resetLinkState();
     router.refresh();
   }
 
@@ -197,6 +265,31 @@ export function CreateKrButton(props: Props) {
           <Label>Responsable (opcional)</Label>
           <OwnerSelect orgId={props.orgId} value={ownerUserId} onChange={setOwnerUserId} />
         </div>
+        {canPickMode && (
+          <div className="space-y-2">
+            <Label htmlFor="kr-progress-mode">Modo de progreso</Label>
+            <select
+              id="kr-progress-mode"
+              value={progressMode}
+              onChange={(e) => setProgressMode(e.target.value as 'manual' | 'automatic')}
+              disabled={loading}
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:opacity-50"
+            >
+              <option value="manual">Manual — el avance se mide con tareas</option>
+              <option value="automatic">Automático — el avance viene de un indicador</option>
+            </select>
+            {progressMode === 'automatic' && props.periodId && (
+              <KrMetricLinkFields
+                orgId={props.orgId}
+                periodId={props.periodId}
+                value={linkValue}
+                onChange={setLinkValue}
+                mode="link"
+                disabled={loading}
+              />
+            )}
+          </div>
+        )}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded p-3">
             <p className="text-red-700 text-sm">{error}</p>
