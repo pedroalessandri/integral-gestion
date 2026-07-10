@@ -25,6 +25,9 @@ interface Props {
   /** Used by both the rebalance dialog and the AI suggest panel inside CreateKr. */
   keyResults: KrLite[];
   aiEnabled?: boolean;
+  /** M2: forwarded to CreateKrButton to show the "Modo de progreso" selector. */
+  indicadoresOkrEnabled?: boolean;
+  periodId?: string;
 }
 
 /** Header-level kebab for the "Resultados Clave" card.
@@ -41,6 +44,8 @@ export function KrSectionMenu({
   objectiveTitle,
   keyResults,
   aiEnabled = true,
+  indicadoresOkrEnabled = false,
+  periodId,
 }: Props) {
   const [newKrOpen, setNewKrOpen] = useState(false);
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
@@ -89,6 +94,8 @@ export function KrSectionMenu({
         aiEnabled={aiEnabled}
         open={newKrOpen}
         onOpenChange={setNewKrOpen}
+        indicadoresOkrEnabled={indicadoresOkrEnabled}
+        periodId={periodId}
       />
 
       {canRebalance && (
