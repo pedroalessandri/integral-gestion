@@ -108,6 +108,7 @@ pnpm --filter api prisma:studio
 - **Errores**: excepciones tipadas, `HttpException` o derivadas. No devolver `null` como "error silencioso".
 - **Decimales** en OKR (% y pesos): **`Prisma.Decimal`**, nunca `Float`/`number`. Redondeo solo en la capa de presentación.
 - **Multi-tenant**: toda query de negocio filtra por `organizationId`. Implementado vía **Prisma extension** + guard de Nest que inyecta el contexto.
+- **AuthContext en guards**: los guards nuevos deben leer `AuthContext` desde `request.authContext` (`ExecutionContext` → `getRequest()`), con `tenantContextStorage.getStore()` **solo** como fallback — nunca leer solo del ALS. La propagación de ALS a los guards no es confiable (igual que en `@CurrentUser`). Ejemplo del bug: `SuperadminOnlyGuard` rechazaba superadmins legítimos con `'SuperadminRequired'` por leer solo de `getStore()`.
 - **Audit log**: append-only. Toda mutación sobre Objetivos/KRs/Tareas/roles escribe a `audit.event`. Prohibido `UPDATE`/`DELETE` sobre esa tabla.
 
 ## Commits
