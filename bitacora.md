@@ -21,8 +21,8 @@ Formato:
 - Verificación: `pnpm --filter okr-domain test` → 8 archivos, 95 tests OK; `pnpm --filter okr-domain typecheck` → OK; build de okr-domain + `pnpm --filter api typecheck` → OK (el camino KR compila sin cambios en api).
 - Pendiente / desvíos: ninguno. Decisiones de implementación que no fijan reglas de negocio: con suma incorrecta se mantiene la forma de retorno anterior (`{ok:false, actual, expected}`) para no romper a los consumidores. En un grupo sin pesos, `projectSumAfterDelete` devuelve 10000 si quedan hermanos (0 si queda vacío). Un `weightBp = 0` cuenta como peso presente.
 - Preguntas abiertas:
-  - Tarea de duración cero (`startsAt = endsAt`) en el avance planificado: se tomó 0 antes del fin y 100 desde el fin. La SPEC no lo define porque la fórmula se indefine. ¿Ok?
-  - Antes del inicio el avance planificado es 0 y después del fin es 100 (la fórmula acotada a 0–100, igual que el progreso de indicadores en RN-P8). ¿Ok?
+  - Tarea de duración cero (`startsAt = endsAt`) en el avance planificado: se tomó 0 antes del fin y 100 desde el fin. La SPEC no lo define porque la fórmula se indefine. ✅ Pedro lo aprueba (2026-10-07).
+  - Antes del inicio el avance planificado es 0 y después del fin es 100 (la fórmula acotada a 0–100, igual que el progreso de indicadores en RN-P8). ✅ Pedro lo aprueba (2026-10-07).
 
 ## 2026-10-07 · Fix · backend-dev · fix/core-orgid-tenant-check
 - Hecho: guard común `OrgParamGuard` (`common/guards`) que compara `:orgId` del path con el tenant del request (lee `request.authContext`, ALS solo como fallback) y responde 403 `TenantMismatch`. Aplicado a `OrgUnitController`, `MemberController` (incluido `PATCH members/:userId/scope`), `OrganizationModuleController` (nuevo: tampoco tenía chequeo), `StrategicPlanController` y `MetricController`; se borraron los `assertOrgParam` locales de planning y metrics. No exceptúa superadmin (igual que antes en planning/metrics). Tests: 9 del guard y 9 de controllers con un harness HTTP (`common/testing/tenant-http-harness.ts`).
