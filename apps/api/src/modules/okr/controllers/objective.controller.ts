@@ -12,6 +12,7 @@ import {
   Post,
   Query,
   UseGuards,
+  ValidationPipe,
 } from '@nestjs/common';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
@@ -22,6 +23,9 @@ import { ObjectiveService } from '../services/objective.service.js';
 import { CreateObjectiveDto } from '../dto/create-objective.dto.js';
 import { UpdateObjectiveDto } from '../dto/update-objective.dto.js';
 import { RebalanceKrWeightsDto } from '../dto/rebalance-kr-weights.dto.js';
+
+/** Validación de DTOs en el borde (class-validator). */
+const bodyPipe = new ValidationPipe({ transform: true, whitelist: true });
 
 /**
  * Narrows organizationId from string | null to string.
@@ -70,7 +74,7 @@ export class ObjectiveController {
 
   @Post()
   @Permissions('okr:write')
-  create(@CurrentUser() user: AuthContext, @Body() dto: CreateObjectiveDto) {
+  create(@CurrentUser() user: AuthContext, @Body(bodyPipe) dto: CreateObjectiveDto) {
     return this.objectiveService.create(requireOrgId(user), dto, user);
   }
 
@@ -79,7 +83,7 @@ export class ObjectiveController {
   update(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() dto: UpdateObjectiveDto,
+    @Body(bodyPipe) dto: UpdateObjectiveDto,
   ) {
     return this.objectiveService.update(id, requireOrgId(user), dto, user);
   }

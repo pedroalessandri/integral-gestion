@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -28,6 +29,12 @@ import {
   formatDecimal4,
   parseDecimal4,
 } from '@gestion-publica/metrics-domain';
+import {
+  ACTIVE_AXIS_LOOKUP,
+  ORG_UNIT_LOOKUP,
+  type ActiveAxisLookup,
+  type OrgUnitLookup,
+} from '../../../common/contracts/index.js';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
@@ -43,6 +50,8 @@ type ObjectiveRow = {
   title: string;
   description: string | null;
   ownerUserId: string | null;
+  orgUnitId: string | null;
+  axisId: string | null;
   owner: { id: string; displayName: string; email: string } | null;
   progressCachedBp: number;
   deletedAt: Date | null;
@@ -102,7 +111,36 @@ export class ObjectiveService {
     private readonly periodService: PeriodService,
     private readonly auditEmitter: AuditEventEmitterService,
     private readonly memberService: MemberService,
+    @Inject(ORG_UNIT_LOOKUP) private readonly orgUnitLookup: OrgUnitLookup,
+    @Inject(ACTIVE_AXIS_LOOKUP) private readonly axisLookup: ActiveAxisLookup,
   ) {}
+
+  /**
+   * RN-P3: la unidad existe en la org y es `ministry` o `area` (la central no lleva objetivos).
+   * Se valida por puerto (regla 15 de CLAUDE.md); una unidad de otra org es indistinguible de una inexistente.
+   */
+  private async assertOrgUnitAssignable(orgId: string, orgUnitId: string): Promise<void> {
+    const unit = await this.orgUnitLookup.findLiveOrgUnit(orgId, orgUnitId);
+    if (!unit) {
+      throw new UnprocessableEntityException(
+        `OrgUnitNotFound: OrgUnit "${orgUnitId}" does not exist in organization "${orgId}".`,
+      );
+    }
+    if (unit.kind !== 'ministry' && unit.kind !== 'area') {
+      throw new UnprocessableEntityException(
+        `OrgUnitKindInvalid: an objective belongs to a ministry or area unit, not "${unit.kind}".`,
+      );
+    }
+  }
+
+  /** RN-P2: el eje existe, no está borrado y es del plan activo de la misma org. */
+  private async assertAxisAssignable(orgId: string, axisId: string): Promise<void> {
+    if (!(await this.axisLookup.isAxisInActivePlan(orgId, axisId))) {
+      throw new UnprocessableEntityException(
+        `AxisNotInActivePlan: Axis "${axisId}" is not an axis of the active strategic plan of organization "${orgId}".`,
+      );
+    }
+  }
 
   async list(orgId: string, periodId?: string): Promise<ObjectiveSummaryDto[]> {
     const objectives = await this.prisma.scoped.objective.findMany({
@@ -164,6 +202,9 @@ export class ObjectiveService {
       }
     }
 
+    if (dto.orgUnitId !== undefined) await this.assertOrgUnitAssignable(orgId, dto.orgUnitId);
+    if (dto.axisId !== undefined) await this.assertAxisAssignable(orgId, dto.axisId);
+
     return tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         const objective = await tx.objective.create({
@@ -173,6 +214,8 @@ export class ObjectiveService {
             title: dto.title,
             description: dto.description ?? null,
             ownerUserId: resolvedOwnerUserId ?? null,
+            orgUnitId: dto.orgUnitId ?? null,
+            axisId: dto.axisId ?? null,
           },
           include: {
             period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
@@ -192,6 +235,8 @@ export class ObjectiveService {
               description: objective.description,
               periodId: objective.periodId,
               ownerUserId: objective.ownerUserId,
+              orgUnitId: objective.orgUnitId,
+              axisId: objective.axisId,
             },
           },
         });
@@ -230,7 +275,14 @@ export class ObjectiveService {
       }
     }
 
+    // RN-P3 / RN-P2: solo se revalida lo que cambia (un eje de un plan ya reemplazado no bloquea otras ediciones).
     const existingRow = existing as ObjectiveRow;
+    if (dto.orgUnitId !== undefined && dto.orgUnitId !== existingRow.orgUnitId) {
+      await this.assertOrgUnitAssignable(orgId, dto.orgUnitId);
+    }
+    if (dto.axisId !== undefined && dto.axisId !== null && dto.axisId !== existingRow.axisId) {
+      await this.assertAxisAssignable(orgId, dto.axisId);
+    }
 
     return tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
@@ -240,6 +292,8 @@ export class ObjectiveService {
             ...(dto.title !== undefined && { title: dto.title }),
             ...(dto.description !== undefined && { description: dto.description }),
             ...(dto.ownerUserId !== undefined && { ownerUserId: dto.ownerUserId }),
+            ...(dto.orgUnitId !== undefined && { orgUnitId: dto.orgUnitId }),
+            ...(dto.axisId !== undefined && { axisId: dto.axisId }),
           },
           include: {
             period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
@@ -283,6 +337,14 @@ export class ObjectiveService {
         // ── Generic updated event (title/description changes) ─────────────────
         const before: Record<string, unknown> = {};
         const after: Record<string, unknown> = {};
+        if (dto.orgUnitId !== undefined && dto.orgUnitId !== existingRow.orgUnitId) {
+          before['orgUnitId'] = existingRow.orgUnitId;
+          after['orgUnitId'] = dto.orgUnitId;
+        }
+        if (dto.axisId !== undefined && dto.axisId !== existingRow.axisId) {
+          before['axisId'] = existingRow.axisId;
+          after['axisId'] = dto.axisId;
+        }
         if (dto.title !== undefined) {
           before['title'] = existing.title;
           after['title'] = dto.title;
@@ -824,6 +886,8 @@ export class ObjectiveService {
       startsAt: o.startsAt ?? null,
       endsAt: o.endsAt ?? null,
       owner: this.toOwnerSummaryDto(o.owner),
+      orgUnitId: o.orgUnitId,
+      axisId: o.axisId,
     };
   }
 
@@ -850,6 +914,8 @@ export class ObjectiveService {
       startsAt: o.startsAt ?? null,
       endsAt: o.endsAt ?? null,
       owner: this.toOwnerSummaryDto(o.owner),
+      orgUnitId: o.orgUnitId,
+      axisId: o.axisId,
     };
   }
 }

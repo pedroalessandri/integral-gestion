@@ -53,6 +53,9 @@
       "@gestion-publica/shared-types/metrics": [
         "../../packages/shared-types/dist/metrics/index.d.ts"
       ],
+      "@gestion-publica/shared-types/planning": [
+        "../../packages/shared-types/dist/planning/index.d.ts"
+      ],
       "@gestion-publica/prisma-tenant-extension": [
         "../../packages/prisma-tenant-extension/dist/index.d.ts"
       ],

@@ -47,6 +47,10 @@ export interface ObjectiveSummaryDto {
   endsAt: string | null;
   /** Assigned owner of this Objective. Null when unassigned. */
   owner: OwnerSummaryDto | null;
+  /** Unidad (ministry | area, RN-P3). Null hasta la fase migrate (ADR-0009 D6). */
+  orgUnitId: string | null;
+  /** Eje (N2) del plan activo. Null si el objetivo no tiene eje (RN-P2). */
+  axisId: string | null;
 }
 
 /**

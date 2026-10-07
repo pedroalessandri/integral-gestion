@@ -181,6 +181,43 @@ type OrgUnitDeletedEvent = BaseEvent<
   { before: OrgUnitSnapshot; after: { deletedAt: string } }
 >;
 
+// Planning — strategic_plan y axis (ADR-0009)
+type StrategicPlanSnapshot = {
+  title: string;
+  vision: string;
+  mandateStartsAt: string;
+  mandateEndsAt: string;
+  status: 'active' | 'archived';
+};
+
+type StrategicPlanCreatedEvent = BaseEvent<
+  'strategic_plan.created',
+  'planning.strategic_plan',
+  { before: null; after: StrategicPlanSnapshot }
+>;
+
+type StrategicPlanUpdatedEvent = BaseEvent<
+  'strategic_plan.updated',
+  'planning.strategic_plan',
+  { before: Partial<StrategicPlanSnapshot>; after: Partial<StrategicPlanSnapshot> }
+>;
+
+type AxisSnapshot = { strategicPlanId: string; name: string; description: string | null; order: number };
+
+type AxisCreatedEvent = BaseEvent<'axis.created', 'planning.axis', { before: null; after: AxisSnapshot }>;
+
+type AxisUpdatedEvent = BaseEvent<
+  'axis.updated',
+  'planning.axis',
+  { before: Partial<AxisSnapshot>; after: Partial<AxisSnapshot> }
+>;
+
+type AxisDeletedEvent = BaseEvent<
+  'axis.deleted',
+  'planning.axis',
+  { before: AxisSnapshot; after: { deletedAt: string; unassignedObjectiveIds: string[] } }
+>;
+
 type OrganizationModuleEnabledEvent = BaseEvent<
   'organization_module.enabled',
   'core.organization_module',
@@ -200,15 +237,25 @@ type OrganizationModuleDisabledEvent = BaseEvent<
 type ObjectiveCreatedEvent = BaseEvent<
   'objective.created',
   'okr.objective',
-  { before: null; after: { title: string; description: string | null; periodId: string; ownerUserId: string | null } }
+  {
+    before: null;
+    after: {
+      title: string;
+      description: string | null;
+      periodId: string;
+      ownerUserId: string | null;
+      orgUnitId?: string | null;
+      axisId?: string | null;
+    };
+  }
 >;
 
 type ObjectiveUpdatedEvent = BaseEvent<
   'objective.updated',
   'okr.objective',
   {
-    before: Partial<{ title: string; description: string | null }>;
-    after: Partial<{ title: string; description: string | null }>;
+    before: Partial<{ title: string; description: string | null; orgUnitId: string | null; axisId: string | null }>;
+    after: Partial<{ title: string; description: string | null; orgUnitId: string | null; axisId: string | null }>;
   }
 >;
 
@@ -495,6 +542,12 @@ export type DomainEvent =
   | OrgUnitCreatedEvent
   | OrgUnitUpdatedEvent
   | OrgUnitDeletedEvent
+  // Planning — strategic_plan (2) y axis (3)
+  | StrategicPlanCreatedEvent
+  | StrategicPlanUpdatedEvent
+  | AxisCreatedEvent
+  | AxisUpdatedEvent
+  | AxisDeletedEvent
   // Core — organization_module (2)
   | OrganizationModuleEnabledEvent
   | OrganizationModuleDisabledEvent

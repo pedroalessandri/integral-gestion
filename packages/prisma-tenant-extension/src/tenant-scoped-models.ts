@@ -96,4 +96,11 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
    * Árbol de unidades de gobierno, una raíz central por organización.
    */
   'OrgUnit',
+
+  /**
+   * `planning.strategic_plan` y `planning.axis` — ADR-0009 D2 / SPEC §3.1.
+   * Plan de gobierno (1 activo por org) y sus ejes; ambos con organizationId requerido e inmutable.
+   */
+  'StrategicPlan',
+  'Axis',
 ]);

@@ -109,7 +109,7 @@ Si el agente se traba (más de 2 horas, o vueltas sin avance): Ctrl+C, revisar `
 - SPEC §5.1, §5.2.
 - Pasos:
   1. Configuración → Estructura: árbol, visión y misión, y alcance por miembro.
-  2. Página "Plan de gobierno": visión y ejes.
+  2. Página "Plan de gobierno": visión y ejes. Borrar eje: confirmación con warning destacado si tiene objetivos (`objectiveCount`); se desasignan.
   3. Selectores de unidad y eje en el dialog de Objetivo.
   4. Diccionario de etiquetas `lib/labels.ts`.
 - Verificación: `pnpm --filter web typecheck && pnpm --filter web lint`.

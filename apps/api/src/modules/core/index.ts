@@ -2,6 +2,7 @@
 // Other modules MUST only import from this file, never from internal paths.
 
 export { CoreModule } from './core.module.js';
+export { CoreContractsModule } from './core-contracts.module.js';
 export { OrganizationContextService, MissingTenantContextError } from './services/organization-context.service.js';
 export { PeriodService } from './services/period.service.js';
 export { MemberService } from './services/member.service.js';
