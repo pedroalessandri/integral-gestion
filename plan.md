@@ -9,8 +9,8 @@
 ## Cómo se ejecuta este plan
 
 - Cada corrida (`Cxx`) es **una sesión nueva de Claude Code con un solo subagente**. Produce 1–2 artefactos y termina en `WAITING FOR APPROVAL`.
-- Hay **una rama por fase** (`feature/plan-fN-<slug>`): las corridas de una misma fase commitean en esa rama. Al cerrar la fase, Pedro revisa `git diff main..HEAD --stat`, pushea, abre el PR y mergea. Después hace `git pull` de main antes de la fase siguiente.
-- Los agentes hacen `git add` y `git commit` (mensaje en `/tmp/<id>.txt` vía heredoc). **Nunca pushean.**
+- Hay **una rama por fase** (`feature/plan-fN-<slug>`): las corridas de una misma fase commitean en esa rama. Al cerrar la fase, el agente pushea la rama y abre el PR (ver punto siguiente); Pedro revisa `git diff main..HEAD --stat` y mergea. Después hace `git pull` de main antes de la fase siguiente.
+- Los agentes commitean. En la última corrida de cada fase (la marcada con 🔍), después del commit, el agente hace git push -u origin <rama> y gh pr create --base main --fill, y devuelve la URL del PR. Nunca mergea; el merge lo hace Pedro.
 - Fail-fast: si un paso falla 2 veces, el agente se detiene y reporta. No reintenta con otra estrategia.
 - Verificación de DB: `docker exec <pg> psql …`, no levantar la app y usar curl.
 - Smoke manual: lo hace Pedro después de cada corrida marcada con 🔍, nunca dentro de la corrida.
@@ -25,9 +25,10 @@ Rol: <subagente>. Corrida <Cxx> de plan.md.
 3. Ejecutar los pasos de <Cxx> en orden.
 4. Correr las verificaciones listadas en <Cxx>.
 5. Agregar una entrada en bitacora.md (formato del archivo).
-6. Commit con mensaje en /tmp/<cxx>.txt (heredoc). No push.
+6. Commit con mensaje en /tmp/<cxx>.txt (heredoc). Push solo si es la última corrida de la fase (paso 8).
 7. Output: solo el hash del commit y la salida de las verificaciones (tail -20).
-8. Escribir WAITING FOR APPROVAL y detenerte.
+8. Si es la última corrida de la fase: push + gh pr create según 'Cómo se ejecuta este plan'. Output: URL del PR.
+9. Escribir WAITING FOR APPROVAL y detenerte.
 ```
 
 Si el agente se traba (más de 2 horas, o vueltas sin avance): Ctrl+C, revisar `git status` y `git log -3`, y relanzar la corrida con un prompt más chico (solo los pasos faltantes).
