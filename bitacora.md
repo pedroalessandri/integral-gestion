@@ -15,6 +15,13 @@ Formato:
 
 ---
 
+## 2026-10-07 · C03 · architect · feature/plan-f1-adr
+- Hecho: guardrails de agentes alineados con ADR-0009. `CLAUDE.md`: regla 4 (jerarquía = `OrgUnit`), regla 5 (período configurable por org), regla 12 (se permiten `plan.md`, `bitacora.md` y `docs/features/*`), regla 15 nueva (validaciones entre módulos por puertos en `common/contracts`, eventos solo post-commit), notas de dominio con 5 niveles, dos lecturas y pesos todo-o-nada, y sección "Glosario UI ↔ código". `AGENTS.md`: reglas de dominio reescritas (modelo, pesos, dos lecturas, `linkMode`, período), patrón de comunicación entre módulos, tests y gotchas sin KR.
+- Commit: este commit (`docs: guardrails de agentes para planificación de gobierno`)
+- Verificación: `grep -n "OrgUnit\|common/contracts\|Glosario" CLAUDE.md AGENTS.md` → OK; `git diff --stat` → solo CLAUDE.md, AGENTS.md, bitacora.md
+- Pendiente / desvíos: plan.md pedía "regla 5 (período anual)"; se aplicó período configurable por org porque ADR-0009 D7 (posterior, decisión D-c de Pedro) lo reemplaza. También se actualizó la línea "Primer módulo funcional" de la Descripción de `CLAUDE.md`, que seguía describiendo la cascada OKR.
+- Preguntas abiertas: ninguna nueva. Fin de la Fase 1: PR abierto para revisión y merge de Pedro.
+
 ## 2026-10-07 · C02 · architect · feature/plan-f1-adr
 - Hecho: ADR-0009 (`docs/adr/0009-planificacion-gobierno-5-niveles.md`, Proposed): vertical declarado, reorientación en el mismo repo, modelo y nombres finales (schema `planning` nuevo; `okr` no se renombra), pesos todo-o-nada, dos lecturas, expand → migrate → contract y decisiones D-a…D-d de Pedro. ADR-0006 lleva "Amended by: 0009". SPEC alineada (períodos configurables, RN-P3, `linkMode`, `Project.progressMode`, RN-P14b).
 - Commit: este commit (`docs(okr): ADR-0009 planificación de gobierno en 5 niveles`)
