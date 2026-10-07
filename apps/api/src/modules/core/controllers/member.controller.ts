@@ -22,6 +22,7 @@ import { ListMembersQueryDto } from '../dto/list-members-query.dto.js';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
+import { OrgParamGuard } from '../../../common/guards/org-param.guard.js';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 
@@ -41,7 +42,7 @@ import type { AuthContext } from '@gestion-publica/shared-types/auth';
  *   DELETE /api/v1/orgs/:orgId/members/:userId       — remove member
  */
 @Controller('orgs/:orgId/members')
-@UseGuards(TenantGuard, PermissionsGuard)
+@UseGuards(TenantGuard, OrgParamGuard, PermissionsGuard)
 export class MemberController {
   constructor(private readonly memberService: MemberService) {}
 

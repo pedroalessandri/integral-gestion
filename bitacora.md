@@ -15,6 +15,13 @@ Formato:
 
 ---
 
+## 2026-10-07 · Fix · backend-dev · fix/core-orgid-tenant-check
+- Hecho: guard común `OrgParamGuard` (`common/guards`) que compara `:orgId` del path con el tenant del request (lee `request.authContext`, ALS solo como fallback) y responde 403 `TenantMismatch`. Aplicado a `OrgUnitController`, `MemberController` (incluido `PATCH members/:userId/scope`), `OrganizationModuleController` (nuevo: tampoco tenía chequeo), `StrategicPlanController` y `MetricController`; se borraron los `assertOrgParam` locales de planning y metrics. No exceptúa superadmin (igual que antes en planning/metrics). Tests: 9 del guard y 9 de controllers con un harness HTTP (`common/testing/tenant-http-harness.ts`).
+- Commit: este commit (`fix(core): validar :orgId del path contra el tenant del request`)
+- Verificación: `prisma:generate && pnpm typecheck` → 5/5 OK; `pnpm --filter api test` → 29 archivos, 252 tests OK; `pnpm --filter api lint` → 1 error y 3 warnings preexistentes, ninguno nuevo; e2e `core-member` y `core-module-enablement` → 6 fallas, idénticas en `main` (rotas en `POST /orgs`, a tech-debt).
+- Pendiente / desvíos: `PeriodController` y `OrganizationController` quedan sin cubrir: no tienen `TenantGuard` (TODO ADR-0004), así que el guard no aplica sin cambiar la política de acceso. Item `[B]` nuevo en TODO.md.
+- Preguntas abiertas: ¿`PeriodController` con `TenantGuard` + `core:period:manage` y en qué prioridad?
+
 ## 2026-10-07 · C06 · frontend-dev · feature/plan-f2-estructura
 - Hecho: Configuración → pestaña "Estructura" (`features/org-structure`): árbol de unidades con ABM, visión y misión, alcance por miembro (`PATCH members/:userId/scope`) y mensajes en español para los 409/422 tipados. Página "Plan de gobierno" (`/plan`, `features/strategic-plan`): estado vacío si 404, crear/editar plan (PUT), ABM de ejes con `objectiveCount` y warning ámbar al borrar un eje con objetivos. Selectores de unidad (solo ministry|area) y de eje ("Sin eje") en el dialog de crear/editar Objetivo. Diccionario `lib/labels.ts` con el glosario.
 - Commit: este commit (`feat(web): pantallas de estructura y plan de gobierno`)
@@ -25,12 +32,12 @@ Formato:
   - Carpetas `features/*` según CLAUDE.md (lo existente usa `components/<area>`). Reglas de UX (profundidad ≤ 4, hijos por kind) duplicadas en `tree.ts` solo para filtrar opciones; la fuente de verdad es la API.
   - Web sin script `typecheck` ni Vitest; `MemberItem` vs `MemberDto` en la página Miembros: los dos en tech-debt.
   - Sin smoke en navegador (lo hace Pedro).
-- Preguntas abiertas:
-  - Permisos en la UI: `/me` no expone permisos; hoy los botones de escritura se ven siempre y el 403 se muestra como mensaje. ¿Exponer permisos en `/me`?
-  - `GET members` pide `core:member:manage`: sin ese permiso, la sección de alcance muestra error. ¿Es lo esperado?
-  - ¿El selector de unidad pasa a ser obligatorio al crear objetivos antes de F10?
-  - Ubicación del plan: ruta `/plan` con ítem propio en la navegación. ¿Va ahí?
-  - Fechas del mandato: se envían como medianoche UTC; la SPEC no define zona horaria.
+- Preguntas abiertas (resueltas por Pedro el 2026-10-07, ítems en TODO.md):
+  - ✅ Permisos en la UI: sí, `/me` expone los permisos y la UI oculta o deshabilita la escritura según eso.
+  - ✅ `GET members` sin `core:member:manage`: es lo esperado, pero la sección de alcance tiene que mostrar el error explícito (qué permiso falta) para que un admin lo pueda corregir.
+  - ✅ La unidad del objetivo es obligatoria.
+  - ✅ El plan queda en `/plan`, con ítem propio en la navegación.
+  - ✅ Las fechas del mandato se envían como medianoche UTC.
 
 ## 2026-10-07 · C05 · backend-dev · feature/plan-f2-estructura
 - Hecho: schema `planning` con `strategic_plan` (CHECK de `status`, CHECK fin > inicio del mandato, unique parcial `uq_strategic_plan_active`) y `axis` (soft delete, `order`). `okr.objective` suma `org_unit_id` (nullable) y `axis_id` con FKs RESTRICT. Módulo Nest `planning` (`orgs/:orgId/strategic-plan`: GET/PUT del plan activo y ABM de ejes en `/axes`), auditoría de toda mutación (`strategic_plan.*`, `axis.*`, y `orgUnitId`/`axisId` en `objective.created/updated`). Create/update de Objective aceptan `orgUnitId` y `axisId`; la validación va por puertos nuevos en `common/contracts`: `ORG_UNIT_LOOKUP` (impl. `core`, RN-P3: misma org y kind ministry|area, si no 422 `OrgUnitNotFound`/`OrgUnitKindInvalid`), `ACTIVE_AXIS_LOOKUP` (impl. `planning`: eje vivo del plan activo de la misma org, si no 422 `AxisNotInActivePlan`) y `AXIS_OBJECTIVE_COUNTER` y `AXIS_OBJECTIVE_UNASSIGNER` (impl. `okr`). El stub de `ORG_UNIT_OBJECTIVE_COUNTER` se reemplazó por un count real (movido a "Resuelto" en tech-debt). Permisos: lectura `okr:read`; escritura `planning:plan:manage` (nuevo, solo org-admin). DTOs en `shared-types/planning` (subpath nuevo, agregado a `exports`, al script de build y al `paths` del api).

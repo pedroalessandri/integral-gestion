@@ -38,6 +38,23 @@
 - Posible solución: que el filtro propague el código de dominio en `error` y el resto de las propiedades del response en `details`. Con test.
 - Origen: C06 (2026-10-07).
 
+### [F] `/me` expone permisos y la UI oculta la escritura sin permiso
+- Por qué: hoy los botones de escritura de Estructura y Plan de gobierno se ven siempre y un 403 aparece recién al guardar. Pedro (2026-10-07): exponer los permisos en `/me` y usarlos en la UI (`core:org-unit:manage`, `planning:plan:manage`, etc.).
+- Origen: pregunta abierta de C06.
+
+### [F] Error explícito en la sección de alcance cuando falta `core:member:manage`
+- Por qué: `GET members` pide `core:member:manage`; sin ese permiso la sección de alcance de Estructura muestra un error genérico. Pedro (2026-10-07): es lo esperado, pero el mensaje tiene que decir qué permiso falta para que un admin lo corrija.
+- Origen: pregunta abierta de C06.
+
+### [F] Unidad obligatoria en el Objetivo
+- Por qué: Pedro (2026-10-07): la unidad del objetivo es obligatoria. Hoy el selector la deja vacía al crear y `CreateObjectiveDto.orgUnitId` es opcional. Requerirla en create (UI + DTO); la columna sigue nullable hasta la fase migrate por los objetivos existentes (plan.md), y el NOT NULL va con el contract.
+- Origen: pregunta abierta de C06.
+
+### [B] `PeriodController` sin `TenantGuard` ni permisos: cualquier usuario autenticado lista o crea períodos de cualquier org
+- Por qué: `GET`/`POST orgs/:orgId/periods` y `GET periods/:id` solo tienen un TODO(ADR-0004): sin `TenantGuard`, sin `PermissionsGuard` y sin tenant scoping. `OrgParamGuard` (fix de `:orgId`) no alcanza ahí porque sin `TenantGuard` no hay org en el contexto. Lo mismo vale para los guards de `OrganizationController` (`orgs/:id`, operaciones de superadmin).
+- Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.
+- Origen: fix de `:orgId` (2026-10-07).
+
 ## 🔵 Prioridad baja / cuando haya tiempo
 
 ### [R] Convergir CascadeResponse local en (app)/objectives/[id]/page.tsx con ObjectiveCascadeDto

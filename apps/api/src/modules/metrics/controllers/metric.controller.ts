@@ -17,6 +17,7 @@ import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
+import { OrgParamGuard } from '../../../common/guards/org-param.guard.js';
 import { ModuleEnabledGuard } from '../../../common/guards/module-enabled.guard.js';
 import { RequiresModule } from '../../../common/decorators/requires-module.decorator.js';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -36,14 +37,6 @@ function requireOrgId(user: AuthContext): string {
   return user.organizationId;
 }
 
-/** The :orgId path param must match the tenant of the request (x-organization-id). */
-function assertOrgParam(orgId: string, user: AuthContext): string {
-  if (orgId !== requireOrgId(user)) {
-    throw new ForbiddenException('TenantMismatch');
-  }
-  return orgId;
-}
-
 /**
  * MetricController — metric catalog ABM + series (Módulo 1).
  * Routes per docs/features/indicadores-gestion.md §2:
@@ -58,17 +51,18 @@ export class MetricController {
   constructor(private readonly metricService: MetricService) {}
 
   @Get('orgs/:orgId/metrics')
+  @UseGuards(OrgParamGuard)
   @Permissions('metrics:read')
   async list(
     @Param('orgId') orgId: string,
-    @CurrentUser() user: AuthContext,
     @Query(new ValidationPipe({ transform: true, whitelist: true })) query: ListMetricsQueryDto,
   ) {
-    const items = await this.metricService.list(assertOrgParam(orgId, user), query);
+    const items = await this.metricService.list(orgId, query);
     return { items };
   }
 
   @Post('orgs/:orgId/metrics')
+  @UseGuards(OrgParamGuard)
   @Permissions('metrics:write')
   @HttpCode(HttpStatus.CREATED)
   create(
@@ -76,7 +70,7 @@ export class MetricController {
     @CurrentUser() user: AuthContext,
     @Body(new ValidationPipe({ transform: true, whitelist: true })) dto: CreateMetricDto,
   ) {
-    return this.metricService.create(assertOrgParam(orgId, user), dto, user);
+    return this.metricService.create(orgId, dto, user);
   }
 
   @Get('metrics/:id')

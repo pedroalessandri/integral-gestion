@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ModuleEnablementService } from '../services/module-enablement.service.js';
+import { OrgParamGuard } from '../../../common/guards/org-param.guard.js';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
@@ -30,7 +31,7 @@ export class OrganizationModuleController {
    * Lists all modules (enabled and disabled) for an organization.
    */
   @Get()
-  @UseGuards(TenantGuard, PermissionsGuard)
+  @UseGuards(TenantGuard, OrgParamGuard, PermissionsGuard)
   @Permissions('core:module:manage')
   async list(@Param('orgId') orgId: string) {
     return this.moduleEnablementService.listForOrganization(orgId);
@@ -41,7 +42,7 @@ export class OrganizationModuleController {
    * Enables a module for an organization. Superadmin only.
    */
   @Post(':moduleKey/enable')
-  @UseGuards(TenantGuard, SuperadminOnlyGuard)
+  @UseGuards(TenantGuard, OrgParamGuard, SuperadminOnlyGuard)
   @HttpCode(HttpStatus.CREATED)
   async enable(
     @Param('orgId') orgId: string,
@@ -56,7 +57,7 @@ export class OrganizationModuleController {
    * Disables a module for an organization. Superadmin only.
    */
   @Post(':moduleKey/disable')
-  @UseGuards(TenantGuard, SuperadminOnlyGuard)
+  @UseGuards(TenantGuard, OrgParamGuard, SuperadminOnlyGuard)
   @HttpCode(HttpStatus.OK)
   async disable(
     @Param('orgId') orgId: string,

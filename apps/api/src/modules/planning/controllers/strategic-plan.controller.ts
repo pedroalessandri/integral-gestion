@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -16,6 +15,7 @@ import {
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
+import { OrgParamGuard } from '../../../common/guards/org-param.guard.js';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { StrategicPlanService } from '../services/strategic-plan.service.js';
@@ -24,14 +24,6 @@ import { UpsertStrategicPlanBodyDto } from '../dto/strategic-plan.dto.js';
 import { CreateAxisBodyDto, UpdateAxisBodyDto } from '../dto/axis.dto.js';
 
 const bodyPipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
-
-/** El :orgId del path debe coincidir con el tenant del request (x-organization-id). */
-function assertOrgParam(orgId: string, user: AuthContext): string {
-  if (!user.organizationId || orgId !== user.organizationId) {
-    throw new ForbiddenException('TenantMismatch');
-  }
-  return orgId;
-}
 
 /**
  * StrategicPlanController — plan de gobierno vigente (N1) y ejes (N2), ADR-0009.
@@ -49,7 +41,7 @@ function assertOrgParam(orgId: string, user: AuthContext): string {
  *   DELETE /api/v1/orgs/:orgId/strategic-plan/axes/:id  — soft delete (200; desasigna sus objetivos)
  */
 @Controller('orgs/:orgId/strategic-plan')
-@UseGuards(TenantGuard, PermissionsGuard)
+@UseGuards(TenantGuard, OrgParamGuard, PermissionsGuard)
 export class StrategicPlanController {
   constructor(
     private readonly planService: StrategicPlanService,
@@ -58,8 +50,8 @@ export class StrategicPlanController {
 
   @Get()
   @Permissions('okr:read')
-  getActive(@Param('orgId') orgId: string, @CurrentUser() user: AuthContext) {
-    return this.planService.getActive(assertOrgParam(orgId, user));
+  getActive(@Param('orgId') orgId: string) {
+    return this.planService.getActive(orgId);
   }
 
   @Put()
@@ -69,19 +61,19 @@ export class StrategicPlanController {
     @Body(bodyPipe) body: UpsertStrategicPlanBodyDto,
     @CurrentUser() user: AuthContext,
   ) {
-    return this.planService.upsertActive(assertOrgParam(orgId, user), body, user);
+    return this.planService.upsertActive(orgId, body, user);
   }
 
   @Get('axes')
   @Permissions('okr:read')
-  async listAxes(@Param('orgId') orgId: string, @CurrentUser() user: AuthContext) {
-    return { items: await this.axisService.list(assertOrgParam(orgId, user)) };
+  async listAxes(@Param('orgId') orgId: string) {
+    return { items: await this.axisService.list(orgId) };
   }
 
   @Get('axes/:id')
   @Permissions('okr:read')
-  getAxis(@Param('orgId') orgId: string, @Param('id') id: string, @CurrentUser() user: AuthContext) {
-    return this.axisService.getById(assertOrgParam(orgId, user), id);
+  getAxis(@Param('orgId') orgId: string, @Param('id') id: string) {
+    return this.axisService.getById(orgId, id);
   }
 
   @Post('axes')
@@ -92,7 +84,7 @@ export class StrategicPlanController {
     @Body(bodyPipe) body: CreateAxisBodyDto,
     @CurrentUser() user: AuthContext,
   ) {
-    return this.axisService.create(assertOrgParam(orgId, user), body, user);
+    return this.axisService.create(orgId, body, user);
   }
 
   @Patch('axes/:id')
@@ -103,13 +95,13 @@ export class StrategicPlanController {
     @Body(bodyPipe) body: UpdateAxisBodyDto,
     @CurrentUser() user: AuthContext,
   ) {
-    return this.axisService.update(assertOrgParam(orgId, user), id, body, user);
+    return this.axisService.update(orgId, id, body, user);
   }
 
   /** Soft delete. Los objetivos del eje quedan sin eje; la respuesta lista los afectados. */
   @Delete('axes/:id')
   @Permissions('planning:plan:manage')
   removeAxis(@Param('orgId') orgId: string, @Param('id') id: string, @CurrentUser() user: AuthContext) {
-    return this.axisService.softDelete(assertOrgParam(orgId, user), id, user);
+    return this.axisService.softDelete(orgId, id, user);
   }
 }
