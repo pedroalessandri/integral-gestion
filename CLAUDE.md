@@ -8,7 +8,7 @@ Respondé siempre en español rioplatense (voseo): reportes, preguntas, WAITING 
 
 Aplicación web modular para gestión de organizaciones.
 
-**Primer módulo funcional**: OKR (Objetivos → Key Results ponderados → Tareas ponderadas; el avance cascadea hacia arriba).
+**Primer módulo funcional**: planificación de gobierno en 5 niveles (ADR-0009): Visión → Ejes → Visión/misión por unidad → Objetivos estratégicos con indicadores → Proyectos y tareas. El nombre técnico del módulo sigue siendo `okr`.
 
 **Alcance transversal**: backoffice admin-only para gestión de usuarios, roles, permisos y habilitación de módulos por organización. Autenticación delegada a Auth0; RBAC y habilitación de módulos viven en la DB local.
 
@@ -136,25 +136,51 @@ docs: actualizar estructura en CLAUDE.md
 1. **No romper boundaries de módulo**. Un módulo importa otro **solo** por su superficie pública (interfaces/DTOs exportados desde `index.ts` del módulo). Nada de `import { X } from '../okr/internal/...'`.
 2. **No mockear Prisma en tests de cascada**. La lógica pura de cascada vive en `packages/okr-domain` y se testea sin DB; los tests de integración usan una DB real (testcontainers o DB de test).
 3. **No tocar `audit.event` con UPDATE/DELETE**. Es append-only por diseño. Si algo "hay que corregir", se emite un evento compensatorio.
-4. **No introducir jerarquía organizacional / alineación vertical de Objetivos** sin decisión explícita del dueño. Por ahora no hay cascada entre unidades.
-5. **No asumir que un Objetivo vive en varios períodos**. Un Objetivo pertenece a **exactamente un** período (Q). Duplicar para otro período es una acción explícita del usuario.
+4. **La jerarquía es `OrgUnit` según ADR-0009; no agregar otra**. No hay cascada de avance entre unidades: la agregación por unidad, eje y plan es el promedio simple de los objetivos, por lectura.
+5. **No asumir que un Objetivo vive en varios períodos**. Un Objetivo pertenece a **exactamente un** período. El período es configurable por org (anual, semestral, plurianual, etc.; label libre; ADR-0009 D7): no asumir trimestres ni formato `YYYY-Qn`. Duplicar para otro período es una acción explícita del usuario.
 6. **No meter lógica de negocio en controllers ni en componentes React**. Backend → services. Frontend → hooks/feature modules; los componentes son de presentación.
 7. **No usar `Float`/`number` para pesos o porcentajes**. Siempre `Decimal`.
 8. **No crear endpoints sin guard de auth + tenant scoping**. Default deny.
 9. **No commitear `.env`, credenciales, ni tokens**. `.env.example` sí.
 10. **No hacer `git push --force` a `main`** ni amend a commits publicados.
 11. **No instalar dependencias pesadas sin justificación** (Moment, Lodash completo, UI kits redundantes con shadcn/ui). Preferir utilidades nativas / date-fns / remeda.
-12. **No crear nuevos archivos .md de docs** a menos que el usuario lo pida. `CLAUDE.md` y `AGENTS.md` son la única doc viva de base.
+12. **No crear nuevos archivos .md de docs** a menos que el usuario lo pida. La doc viva de base es `CLAUDE.md` y `AGENTS.md`; además se permiten `plan.md`, `bitacora.md` y `docs/features/*`.
 13. **No saltar tests ni type-check** antes de marcar una tarea como terminada.
 14. Los agentes pueden pushear ramas de feature y abrir PRs con `gh pr create --base main --fill`. Nunca mergear, nunca pushear a main y nunca usar --force.
+15. **Validaciones entre módulos: vía puertos (`common/contracts`), nunca vía eventos. Eventos solo para efectos post-commit.** Los puertos son interfaces + token de inyección en `apps/api/src/common/contracts/`; los oyentes de eventos son idempotentes y escriben su propio audit (ADR-0009 D5).
 
-## Notas de dominio OKR (resumen — detalle completo en AGENTS.md)
+## Notas de dominio (resumen — detalle completo en AGENTS.md y ADR-0009)
 
-- **Ciclos**: trimestrales (Q). Un Objetivo pertenece a un período único.
-- **Jerarquía entre unidades**: fuera de alcance por ahora.
-- **Audit log**: activo desde el arranque.
-- **Cascada por tareas (modo `manual`)**: en un KR `manual` no hay entrada directa de "% del KR"; su % se deriva siempre de sus tareas. Los KR de métrica manuales se modelan creando tareas que representen los hitos de la métrica.
-- **Excepción — modo `automatic` (Módulo 2)**: un KR vinculado a un indicador (`progress_mode = 'automatic'`) toma su % **solo del indicador**; sus tareas se permiten pero son informativas (no alimentan el %). Ver RN-O4 en docs/features/indicadores-okr.md.
+- **5 niveles**: N1 Visión de gobierno (`StrategicPlan`, 1 activo por org) → N2 Ejes opcionales (`Axis`) → N3 Visión y misión por unidad (`OrgUnit`: `central` → `ministry` → `area`, profundidad ≤ 4) → N4 Objetivo estratégico (`Objective`, 1..n indicadores) → N5 Proyectos (`Project`) y tareas (`Task`, Gantt). N1–N3 no se miden.
+- **Período**: un Objetivo pertenece a exactamente un período, configurable por org.
+- **Dos lecturas de avance por objetivo, nunca fusionadas**: **resultado** (`resultProgressCachedBp`, desde sus indicadores) y **gestión** (`executionProgressCachedBp`, desde sus proyectos). Cada una con su desvío contra lo esperado. **Prohibido** combinarlas en un número único en API, DB o UI.
+- **Ponderación todo-o-nada por grupo de hermanos** (indicadores de un objetivo, proyectos de un objetivo, tareas de un proyecto): o todos tienen `weightBp` y suman 10000, o ninguno y se usa promedio simple. Un grupo mixto es inválido (422), no un estado tolerado.
+- **Vínculo gestión ↔ indicador** (`ObjectiveIndicator.linkMode`): `independent` (default), `execution_feeds_indicator` (proyectos con `ProjectContribution` suman al indicador al completarse; solo `kind = output`) o `indicator_feeds_execution` (un `Project` `from_indicator` toma su avance del indicador; sus tareas son informativas).
+- **Base y meta**: manda `ObjectiveIndicator`; `Metric` solo rige en la vista standalone.
+- **Transición**: expand → migrate → contract. `KeyResult` y `MetricKrLink` siguen vivos hasta el contract (F10); no construir funcionalidad nueva sobre ellos.
+
+## Glosario UI ↔ código
+
+La UI usa los términos de planificación de gobierno; el código mantiene nombres técnicos (no renombrar, ADR-0009 D1).
+
+| Término UI | Código (modelo Prisma / tabla) |
+|---|---|
+| Visión general de gobierno / Plan de gobierno | `StrategicPlan` / `planning.strategic_plan` |
+| Eje | `Axis` / `planning.axis` |
+| Unidad (central, ministerio/secretaría, área/dirección) | `OrgUnit` (`kind`: `central` \| `ministry` \| `area`) / `core.org_unit` |
+| Objetivo estratégico | `Objective` / `okr.objective` |
+| Indicador (del objetivo) | `ObjectiveIndicator` (vínculo con base, meta y curva) → `Metric` (serie) |
+| Carga de indicador | `MetricEntry` |
+| Curva esperada | `ObjectiveIndicator.expectedCurveMode` + `IndicatorTargetPoint` |
+| Indicador de contexto | `MetricObjectiveContext` |
+| Proyecto | `Project` / `okr.project` |
+| Tarea | `Task` / `okr.task` |
+| Aporte de proyecto a indicador | `ProjectContribution` |
+| Avance de resultado / Avance de gestión | `resultProgressCachedBp` / `executionProgressCachedBp` |
+| Período | `Period` / `core.period` |
+| Módulo de planificación | módulo Nest, schema y paquete `okr` / `okr-domain` |
+
+Las etiquetas de UI viven en un diccionario centralizado (ADR-0006 D2), no hardcodeadas en componentes.
 
 ## TODO.md handling
 

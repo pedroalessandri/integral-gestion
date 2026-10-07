@@ -20,8 +20,8 @@
 | N1 | Visión general de gobierno | Unidad central | — | Mandato | No se mide |
 | N2 | Eje (opcional) | Unidad central | Descripción del eje | Mandato | No se mide (agrega) |
 | N3 | Visión y misión | Ministerio / Área | — | Mandato | No se mide |
-| N4 | Objetivo estratégico | Ministerio / Área | 1+ indicadores con línea base, meta e indicador | Anual | Según frecuencia de cada indicador |
-| N5 | Proyecto → Tareas (Gantt) | Ministerio / Área | 1+ tareas | Anual | Tareas revisadas diaria/semanal/mensualmente |
+| N4 | Objetivo estratégico | Ministerio / Área | 1+ indicadores con línea base, meta e indicador | Período configurable por org | Según frecuencia de cada indicador |
+| N5 | Proyecto → Tareas (Gantt) | Ministerio / Área | 1+ tareas | Período configurable por org | Tareas revisadas diaria/semanal/mensualmente |
 
 Ejemplo canónico (seed demo "Municipalidad de San Carrillo"):
 
@@ -44,12 +44,12 @@ Organization (tenant = municipio)
  ├── OrgUnit (árbol) ─ central → ministerio/secretaría → área/dirección …   [N3: visión, misión]
  ├── StrategicPlan (1 vigente) ─ visión de gobierno, mandato inicio–fin      [N1]
  │    └── Axis (0..n, opcional) ─ nombre, descripción, orden                 [N2]
- ├── Period (anual) ─ "2027"
+ ├── Period (configurable por org) ─ label libre, ej. "2027"
  └── Objective ─ periodId, orgUnitId, axisId?                                [N4]
-      ├── ObjectiveIndicator (1..n) ─ metricId, línea base, meta, peso?, curva esperada
+      ├── ObjectiveIndicator (1..n) ─ metricId, línea base, meta, peso?, curva esperada, linkMode
       │      └── Metric (serie) ─ unidad, dirección, frecuencia, tipo, fuente
       │             └── MetricEntry (incrementos por bucket)
-      └── Project (0..n) ─ orgUnitId, owner, fechas, peso?                   [N5]
+      └── Project (0..n) ─ orgUnitId, owner, fechas, peso?, progressMode     [N5]
              ├── Task (1..n) ─ fechas (Gantt), avance, peso?
              └── ProjectContribution (0..n) ─ aporte a un ObjectiveIndicator (solo lineales)
 ```
@@ -63,9 +63,9 @@ Organization (tenant = municipio)
 | `StrategicPlan` | `planning` (nuevo) | **Nueva** | `organizationId`, `title`, `vision` (text), `mandateStartsAt`, `mandateEndsAt`, `status` (`active`\|`archived`). Máx. 1 `active` por org |
 | `Axis` | `planning` | **Nueva** | `strategicPlanId`, `organizationId`, `name`, `description` (text), `order`, `deletedAt` |
 | `Objective` | `okr` | **Columnas nuevas** | `orgUnitId` (obligatorio tras la migración), `axisId?`, `resultProgressCachedBp`, `executionProgressCachedBp`. `progressCachedBp` queda deprecado |
-| `Project` | `okr` | **Nueva** | `objectiveId`, `organizationId`, `orgUnitId`, `title`, `description?`, `ownerUserId?`, `weightBp?` (nullable), `startsAt`, `endsAt`, `progressCachedBp`, `deletedAt` |
+| `Project` | `okr` | **Nueva** | `objectiveId`, `organizationId`, `orgUnitId`, `title`, `description?`, `ownerUserId?`, `weightBp?` (nullable), `startsAt`, `endsAt`, `progressMode` (`from_tasks` default \| `from_indicator`), `sourceObjectiveIndicatorId?` (si `from_indicator`), `progressCachedBp`, `deletedAt` |
 | `Task` | `okr` | **Cambio** | Nueva `projectId`. `keyResultId` pasa a nullable y luego se elimina. `weightBp` pasa a nullable |
-| `ObjectiveIndicator` | `metrics` | **Nueva** (reemplaza `MetricKrLink`) | `objectiveId`, `metricId`, `organizationId`, `baselineValue`, `targetValue`, `direction`, `weightBp?`, `expectedCurveMode` (`linear`\|`manual`\|`from_projects`), `progressCachedBp` |
+| `ObjectiveIndicator` | `metrics` | **Nueva** (reemplaza `MetricKrLink`) | `objectiveId`, `metricId`, `organizationId`, `baselineValue`, `targetValue`, `direction`, `weightBp?`, `expectedCurveMode` (`linear`\|`manual`\|`from_projects`), `linkMode` (`independent` default \| `execution_feeds_indicator` \| `indicator_feeds_execution`), `progressCachedBp` |
 | `IndicatorTargetPoint` | `metrics` | **Nueva** | `objectiveIndicatorId`, `bucketDate`, `expectedValue` (acumulado esperado). Solo si `expectedCurveMode = manual` |
 | `ProjectContribution` | `metrics` | **Nueva** | `projectId`, `objectiveIndicatorId`, `contributionValue` (Decimal), `appliedEntryId?` |
 | `Metric` | `metrics` | **Cambio** | `frequency` suma `quarterly`\|`semiannual`\|`annual`. Columnas nuevas: `kind` (`output`\|`outcome`), `source?` (fuente del dato), `description?` (fórmula/definición) |
@@ -79,7 +79,7 @@ Convenciones vigentes que se mantienen: Decimal para valores, basis points para 
 ### Estructura
 - **RN-P1**: Toda org con la metodología activa tiene exactamente una `OrgUnit` raíz de tipo `central`. Se crea automáticamente al habilitar el módulo.
 - **RN-P2**: Un `StrategicPlan` activo por org. Los ejes pertenecen a un plan. Un objetivo puede tener 0 o 1 eje.
-- **RN-P3**: Todo `Objective` pertenece a exactamente un `Period` (anual) y una `OrgUnit` de tipo `ministry` o `area`. Se mantiene la regla de período único. Los objetivos plurianuales quedan fuera de alcance.
+- **RN-P3**: Todo `Objective` pertenece a exactamente un `Period` y una `OrgUnit` de tipo `ministry` o `area`. Se mantiene la regla de período único. El `Period` es configurable por org (ADR-0009 D7): no impone duración (anual, semestral, cuatrimestral, plurianual) y su label es libre. Sus fechas se pueden editar; si el rango nuevo deja afuera proyectos, tareas o cargas, se rechaza con 422 y la lista de entidades afectadas, y si se acepta se recalculan los buckets. Los períodos existentes no se migran.
 - **RN-P4**: Un `Project` pertenece a un objetivo. Hereda la unidad del objetivo por defecto, pero puede ser una sub-unidad de esa unidad. Sus fechas deben caer dentro del período del objetivo.
 - **RN-P5**: Las tareas cuelgan de un proyecto. Las fechas de la tarea deben caer dentro de las del proyecto.
 
@@ -102,6 +102,11 @@ Convenciones vigentes que se mantienen: Decimal para valores, basis points para 
 - **RN-P12**: Un indicador `kind = output` (producto: km, cantidad de obras) puede recibir **aportes de proyectos** (`ProjectContribution`). Un indicador `kind = outcome` (resultado: alfabetización, calidad educativa) **no admite aportes** y se carga solo manualmente.
 - **RN-P13**: Cuando un proyecto llega al 100%, el sistema crea un `MetricEntry` con `incrementValue = contributionValue`. El entry se fecha en el bucket de la fecha de cierre, con el comentario "Aporte automático — Proyecto X" y queda auditado. Si el proyecto baja del 100%, se crea un entry compensatorio negativo; nunca se borra. Esto encaja con RN-C5 (incrementos) y RN-C6 (correcciones).
 - **RN-P14**: La carga manual sobre un indicador con aportes sigue permitida (convivencia). La UI distingue visualmente las cargas automáticas de las manuales.
+- **RN-P14b** (ADR-0009 D5): `ObjectiveIndicator.linkMode` define el vínculo con la gestión:
+  - `independent` (default): sin vínculo (indicadores `outcome`).
+  - `execution_feeds_indicator`: los proyectos con `ProjectContribution` suman al indicador (RN-P12/13). Solo `kind = output`.
+  - `indicator_feeds_execution`: un `Project` con `progressMode = 'from_indicator'` toma su avance del progreso de ese indicador en lugar de sus tareas, que quedan informativas (como RN-O4).
+  - Un mismo par proyecto ↔ indicador no puede usar los dos sentidos a la vez. Se valida en el service.
 
 ### Frecuencia (respuesta a "¿en qué impacta la frecuencia?")
 - **RN-P15**: La frecuencia del `Metric` define:
