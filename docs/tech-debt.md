@@ -63,6 +63,12 @@
 - **Posible solución**: `ValidationPipe({ transform: true, whitelist: true })` en esos controllers (o `APP_PIPE` global) y revisar que el front no mande campos extra. KR y Task se eliminan o se reescriben en F10, así que puede resolverse ahí.
 - **Prioridad**: baja.
 
+### e2e de core rotas en `POST /orgs` (preexistente)
+- **Qué**: `core-member.e2e-spec.ts` y `core-module-enablement.e2e-spec.ts` fallan las 6 en el setup: `POST /api/v1/orgs` no devuelve `organization.id` (`Cannot read properties of undefined (reading 'id')`). Pasa igual en `main` (e0072c3), así que no lo introdujo el fix de `:orgId`. Las e2e corren contra la DB de `DATABASE_URL` de dev.
+- **Por qué importa**: los caminos de core con header ≠ path no tienen cobertura e2e real; solo los unit con el harness HTTP.
+- **Posible solución**: ver qué devuelve hoy `POST /orgs` (shape o guard) y alinear los e2e; correrlos en CI contra una DB descartable.
+- **Prioridad**: media.
+
 ## Resuelto
 
 ### Puerto ORG_UNIT_OBJECTIVE_COUNTER con implementación stub (C04 -> C05)

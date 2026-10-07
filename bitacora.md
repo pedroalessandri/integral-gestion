@@ -15,6 +15,13 @@ Formato:
 
 ---
 
+## 2026-10-07 · Fix · backend-dev · fix/core-orgid-tenant-check
+- Hecho: guard común `OrgParamGuard` (`common/guards`) que compara `:orgId` del path con el tenant del request (lee `request.authContext`, ALS solo como fallback) y responde 403 `TenantMismatch`. Aplicado a `OrgUnitController`, `MemberController` (incluido `PATCH members/:userId/scope`), `OrganizationModuleController` (nuevo: tampoco tenía chequeo), `StrategicPlanController` y `MetricController`; se borraron los `assertOrgParam` locales de planning y metrics. No exceptúa superadmin (igual que antes en planning/metrics). Tests: 9 del guard y 9 de controllers con un harness HTTP (`common/testing/tenant-http-harness.ts`).
+- Commit: este commit (`fix(core): validar :orgId del path contra el tenant del request`)
+- Verificación: `prisma:generate && pnpm typecheck` → 5/5 OK; `pnpm --filter api test` → 29 archivos, 252 tests OK; `pnpm --filter api lint` → 1 error y 3 warnings preexistentes, ninguno nuevo; e2e `core-member` y `core-module-enablement` → 6 fallas, idénticas en `main` (rotas en `POST /orgs`, a tech-debt).
+- Pendiente / desvíos: `PeriodController` y `OrganizationController` quedan sin cubrir: no tienen `TenantGuard` (TODO ADR-0004), así que el guard no aplica sin cambiar la política de acceso. Item `[B]` nuevo en TODO.md.
+- Preguntas abiertas: ¿`PeriodController` con `TenantGuard` + `core:period:manage` y en qué prioridad?
+
 ## 2026-10-07 · C06 · frontend-dev · feature/plan-f2-estructura
 - Hecho: Configuración → pestaña "Estructura" (`features/org-structure`): árbol de unidades con ABM, visión y misión, alcance por miembro (`PATCH members/:userId/scope`) y mensajes en español para los 409/422 tipados. Página "Plan de gobierno" (`/plan`, `features/strategic-plan`): estado vacío si 404, crear/editar plan (PUT), ABM de ejes con `objectiveCount` y warning ámbar al borrar un eje con objetivos. Selectores de unidad (solo ministry|area) y de eje ("Sin eje") en el dialog de crear/editar Objetivo. Diccionario `lib/labels.ts` con el glosario.
 - Commit: este commit (`feat(web): pantallas de estructura y plan de gobierno`)

@@ -50,6 +50,11 @@
 - Por qué: Pedro (2026-10-07): la unidad del objetivo es obligatoria. Hoy el selector la deja vacía al crear y `CreateObjectiveDto.orgUnitId` es opcional. Requerirla en create (UI + DTO); la columna sigue nullable hasta la fase migrate por los objetivos existentes (plan.md), y el NOT NULL va con el contract.
 - Origen: pregunta abierta de C06.
 
+### [B] `PeriodController` sin `TenantGuard` ni permisos: cualquier usuario autenticado lista o crea períodos de cualquier org
+- Por qué: `GET`/`POST orgs/:orgId/periods` y `GET periods/:id` solo tienen un TODO(ADR-0004): sin `TenantGuard`, sin `PermissionsGuard` y sin tenant scoping. `OrgParamGuard` (fix de `:orgId`) no alcanza ahí porque sin `TenantGuard` no hay org en el contexto. Lo mismo vale para los guards de `OrganizationController` (`orgs/:id`, operaciones de superadmin).
+- Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.
+- Origen: fix de `:orgId` (2026-10-07).
+
 ## 🔵 Prioridad baja / cuando haya tiempo
 
 ### [R] Convergir CascadeResponse local en (app)/objectives/[id]/page.tsx con ObjectiveCascadeDto
