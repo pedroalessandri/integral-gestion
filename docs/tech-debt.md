@@ -31,6 +31,7 @@
 
 ### Proyectos nuevos en un grupo ponderado se crean con peso 0 (C09)
 - Por qué: la API valida el grupo resultante al crear (suma 10000, o todos sin peso). La UI crea el proyecto o tarea nuevo con `weightBp: 0` cuando el grupo está ponderado y el usuario ajusta después con "Editar pesos". Si Pedro prefiere otro flujo (p. ej. endpoint que cree y reparta en un paso), hay que cambiarlo en `features/projects/project-form.ts`.
+- ✅ Pedro confirma el flujo tal cual (2026-10-07): no hay cambio previsto. Queda como registro; se puede borrar con su OK.
 
 ### Sin tests de `features/projects` por falta de Vitest en `apps/web` (C09)
 - Por qué: `weights.ts` (reparto equitativo, parseo de porcentajes en bp), `project-form.ts` (armado de DTOs) y `status.ts` son funciones puras listas para testear, pero web no tiene runner. Se suma al ítem de C06 sobre `apps/web` sin `typecheck` ni Vitest.
