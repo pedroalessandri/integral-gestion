@@ -14,6 +14,14 @@ export interface MemberDto {
    * in (auth0Sub starts with "pending:").
    */
   isPending: boolean;
+  /** Alcance de escritura (RN-P19/P20). null = toda la org (unidad central). */
+  orgUnitId: string | null;
+}
+
+/** Request body for PATCH /api/v1/orgs/:orgId/members/:userId/scope. */
+export interface SetMemberScopeDto {
+  /** null = alcance toda la org (unidad central). */
+  orgUnitId: string | null;
 }
 
 /** Request body for POST /api/v1/orgs/:orgId/members — invite by email. */

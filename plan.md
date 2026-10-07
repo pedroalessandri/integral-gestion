@@ -109,7 +109,7 @@ Si el agente se traba (más de 2 horas, o vueltas sin avance): Ctrl+C, revisar `
 - SPEC §5.1, §5.2.
 - Pasos:
   1. Configuración → Estructura: árbol, visión y misión, y alcance por miembro.
-  2. Página "Plan de gobierno": visión y ejes.
+  2. Página "Plan de gobierno": visión y ejes. Borrar eje: confirmación con warning destacado si tiene objetivos (`objectiveCount`); se desasignan.
   3. Selectores de unidad y eje en el dialog de Objetivo.
   4. Diccionario de etiquetas `lib/labels.ts`.
 - Verificación: `pnpm --filter web typecheck && pnpm --filter web lint`.
@@ -234,6 +234,7 @@ Si el agente se traba (más de 2 horas, o vueltas sin avance): Ctrl+C, revisar `
   2. Aplicar en toda mutación de `Objective`, `ObjectiveIndicator`, `Project`, `Task`, `MetricEntry`, `OrgUnit` y `Axis`.
   3. Leer de `request.authContext`.
   4. Tests de integración por rol × alcance.
+  5. Elegir unidad al invitar (`inviteByEmail` con `orgUnitId`) y decidir el alcance por defecto de un miembro nuevo (hoy `null` = toda la org). Viene de C04; ver TODO.md.
 
 ### C20 — Revisión de seguridad (security-reviewer)
 - Revisar el diff de la Fase 8 y de las Fases 2–7 contra tenant scoping y alcance.

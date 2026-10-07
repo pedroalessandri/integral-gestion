@@ -17,6 +17,18 @@
 - **Posible solución**: extraer el acumulado a una función pura en `packages/metrics-domain` (p. ej. `accumulate(baseline, increments)`) y que ambos services la usen; o mover el embed del `metricLink` a un paso de composición fuera de okr. Ver docs/features/indicadores-okr.md D-O1.
 - **Prioridad**: baja. Ambos caminos están cubiertos por tests; el riesgo es drift si se edita la fórmula.
 
+### `apps/web` sin script `typecheck` ni Vitest (C06)
+- **Qué**: `apps/web/package.json` solo tiene `dev`, `build`, `start` y `lint`. `pnpm typecheck` (turbo) no corre sobre web y `pnpm --filter web typecheck` falla ("None of the selected packages has a typecheck script"). Tampoco hay runner de tests, así que los helpers puros de C06 (`features/*/tree.ts`, `plan-form.ts`, `objective-assignment.ts`, `lib/api-errors.ts`) no tienen tests.
+- **Por qué importa**: los errores de tipos del front solo salen con `next build` o `tsc --noEmit` a mano; la lógica de formularios no tiene red.
+- **Posible solución**: agregar `"typecheck": "tsc --noEmit"` a web, configurar Vitest + Testing Library y cubrir esos helpers y los hooks.
+- **Prioridad**: media.
+
+### `listMembersAction` y `MemberItem` de la página Miembros no coinciden con `MemberDto` (C06)
+- **Qué**: `components/members/actions.ts` tipa `MemberItem` con `roleKey`/`roleName` planos, pero la API devuelve `MemberDto` con `role: { key, name }`. C06 usa `MemberDto` directo en su propia action (`listScopeMembersAction`) y no tocó el código viejo.
+- **Por qué importa**: si el shape real es el anidado, la página Miembros muestra el rol vacío; si no, la deuda es solo de tipos duplicados.
+- **Posible solución**: verificar en dev y reemplazar `MemberItem` por `MemberDto` de `shared-types/core`.
+- **Prioridad**: baja.
+
 ## Naming
 
 ### Rename completo `gestion-publica` → `gestion-integral`
@@ -45,3 +57,14 @@
 - **Posible solución**: borrar el mock sin usar (o prefijarlo con `_`) y quitar el `eslint-disable` sobrante. Corrida trivial.
 - **Prioridad**: baja. No afecta typecheck, tests ni build (todos verdes).
 
+### Controllers de Key Result y Task sin ValidationPipe (C05)
+- **Qué**: `KeyResultController` y `TaskController` reciben `@Body()` con DTOs de `class-validator` pero sin `ValidationPipe` (ni global en `main.ts`), así que los decoradores no se ejecutan. C05 lo agregó solo en create/update de `ObjectiveController` porque tocó esos DTOs.
+- **Por qué importa**: la regla "validación en el controller" no se cumple en esos endpoints; llegan valores sin validar al service.
+- **Posible solución**: `ValidationPipe({ transform: true, whitelist: true })` en esos controllers (o `APP_PIPE` global) y revisar que el front no mande campos extra. KR y Task se eliminan o se reescriben en F10, así que puede resolverse ahí.
+- **Prioridad**: baja.
+
+## Resuelto
+
+### Puerto ORG_UNIT_OBJECTIVE_COUNTER con implementación stub (C04 -> C05)
+- **Qué**: `PendingObjectiveOrgUnitCounter` devolvía siempre 0 porque `okr.objective.org_unit_id` llegaba recién con C05.
+- **Resolución (C05, 2026-10-07)**: `PrismaObjectiveOrgUnitCounter` (`apps/api/src/modules/okr/okr-contracts.module.ts`) cuenta los objetivos vivos con `org_unit_id`, filtrando por `organizationId`, con test. El borrado de una `OrgUnit` con objetivos asignados ya da 409 `OrgUnitHasObjectives`.

@@ -47,6 +47,8 @@ describe('shared-types public API', () => {
         startsAt: null,
         endsAt: null,
         owner: null,
+        orgUnitId: null,
+        axisId: null,
       },
       keyResults: [],
       planIncomplete: true,

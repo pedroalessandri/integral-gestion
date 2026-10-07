@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // Prisma schema — gestion-publica
 //
-// Multi-schema setup: core, auth, okr, audit
+// Multi-schema setup: core, auth, okr, audit, ai, metrics, planning
 // Numeric weights and percentages use Decimal (never Float).
 // All business tables carry organizationId for multi-tenant scoping.
 // ─────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["core", "auth", "okr", "audit", "ai", "metrics"]
+  schemas  = ["core", "auth", "okr", "audit", "ai", "metrics", "planning"]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -52,6 +52,9 @@ model Organization {
   metricEntries           MetricEntry[]
   metricKrLinks           MetricKrLink[]
   metricObjectiveContexts MetricObjectiveContext[]
+  orgUnits                OrgUnit[]
+  strategicPlans          StrategicPlan[]
+  axes                    Axis[]
 
   @@index([status], map: "idx_organization_status")
   @@map("organization")
@@ -108,21 +111,55 @@ model User {
   @@schema("core")
 }
 
+/// Árbol de unidades de gobierno (ADR-0009, N3). central -> ministry -> area, profundidad <= 4.
+/// CHECK de kind, de coherencia kind/parent y unique parcial de la raíz central: SQL manual en la migración.
+model OrgUnit {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  parentId       String?   @map("parent_id")
+  /// 'central' | 'ministry' | 'area' — CHECK constraint in migration
+  kind           String    @db.VarChar(10)
+  name           String    @db.VarChar(200)
+  vision         String?   @db.Text
+  mission        String?   @db.Text
+  order          Int       @default(0)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  parent       OrgUnit?               @relation("OrgUnitTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children     OrgUnit[]              @relation("OrgUnitTree")
+  memberships  UserOrganizationRole[]
+  objectives   Objective[]
+
+  // Partial unique uq_org_unit_central_root ON (organization_id) WHERE kind = 'central' AND deleted_at IS NULL
+  // cannot be expressed in Prisma — added manually in migration SQL (RN-P1).
+  @@index([organizationId, parentId], map: "idx_org_unit_org_parent")
+  @@index([deletedAt], map: "idx_org_unit_deleted_at")
+  @@map("org_unit")
+  @@schema("core")
+}
+
 model UserOrganizationRole {
   userId           String   @map("user_id")
   organizationId   String   @map("organization_id")
   roleId           String   @map("role_id")
   assignedAt       DateTime @default(now()) @map("assigned_at")
   assignedByUserId String   @map("assigned_by_user_id")
+  /// Alcance de escritura (RN-P19/P20). null = toda la org (unidad central).
+  orgUnitId        String?  @map("org_unit_id")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   role         Role         @relation(fields: [roleId], references: [id])
+  orgUnit      OrgUnit?     @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
 
   @@id([userId, organizationId])
   @@index([organizationId], map: "idx_uor_org")
   @@index([roleId], map: "idx_uor_role")
+  @@index([orgUnitId], map: "idx_uor_org_unit")
   @@map("user_organization_role")
   @@schema("core")
 }
@@ -235,6 +272,10 @@ model Objective {
   title            String    @db.VarChar(200)
   description      String?   @db.Text
   ownerUserId      String?   @map("owner_user_id")
+  /// Unidad (ministry | area, RN-P3). Nullable hasta la fase migrate (ADR-0009 D6); el service valida kind y org.
+  orgUnitId        String?   @map("org_unit_id")
+  /// Eje (N2) del plan activo; opcional (RN-P2).
+  axisId           String?   @map("axis_id")
   progressCachedBp Int       @default(0) @map("progress_cached_bp")
   deletedAt        DateTime? @map("deleted_at")
   createdAt        DateTime  @default(now()) @map("created_at")
@@ -243,11 +284,15 @@ model Objective {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   period       Period       @relation(fields: [periodId], references: [id], onDelete: Restrict)
   owner        User?        @relation("ObjectiveOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  orgUnit      OrgUnit?     @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
+  axis         Axis?        @relation(fields: [axisId], references: [id], onDelete: Restrict)
   keyResults   KeyResult[]
 
   @@index([organizationId, periodId], map: "idx_objective_org_period")
   @@index([periodId], map: "idx_objective_period")
   @@index([ownerUserId], map: "idx_objective_owner")
+  @@index([orgUnitId], map: "idx_objective_org_unit")
+  @@index([axisId], map: "idx_objective_axis")
   @@map("objective")
   @@schema("okr")
 }
@@ -496,4 +541,53 @@ model UsageCounter {
   @@index([organizationId, yearMonth], map: "idx_usage_counter_org_month")
   @@map("usage_counter")
   @@schema("ai")
+}
+
+// ─────────────────────────────────────────────────────────────
+// planning schema — Plan de gobierno (N1) y ejes (N2). ADR-0009 D2.
+// ─────────────────────────────────────────────────────────────
+
+/// Visión de gobierno (N1). Un solo plan 'active' por org (RN-P2).
+/// CHECK de status, CHECK mandate_ends_at > mandate_starts_at y unique parcial
+/// uq_strategic_plan_active (organization_id) WHERE status = 'active': SQL manual en la migración.
+model StrategicPlan {
+  id               String   @id @default(cuid())
+  organizationId   String   @map("organization_id")
+  title            String   @db.VarChar(200)
+  vision           String   @db.Text
+  mandateStartsAt  DateTime @map("mandate_starts_at")
+  mandateEndsAt    DateTime @map("mandate_ends_at")
+  /// 'active' | 'archived' — CHECK constraint in migration
+  status           String   @default("active") @db.VarChar(10)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  axes         Axis[]
+
+  @@index([organizationId], map: "idx_strategic_plan_org")
+  @@map("strategic_plan")
+  @@schema("planning")
+}
+
+/// Eje (N2): transversal a las unidades, opcional. Soft delete.
+model Axis {
+  id               String    @id @default(cuid())
+  strategicPlanId  String    @map("strategic_plan_id")
+  organizationId   String    @map("organization_id")
+  name             String    @db.VarChar(200)
+  description      String?   @db.Text
+  order            Int       @default(0)
+  deletedAt        DateTime? @map("deleted_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  strategicPlan StrategicPlan @relation(fields: [strategicPlanId], references: [id], onDelete: Restrict)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  objectives    Objective[]
+
+  @@index([organizationId, strategicPlanId], map: "idx_axis_org_plan")
+  @@index([deletedAt], map: "idx_axis_deleted_at")
+  @@map("axis")
+  @@schema("planning")
 }

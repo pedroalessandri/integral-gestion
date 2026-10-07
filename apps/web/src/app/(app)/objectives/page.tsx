@@ -21,6 +21,8 @@ interface ObjectiveItem {
   progressCachedBp: number;
   createdAt: string;
   owner: OwnerSummaryDto | null;
+  orgUnitId?: string | null;
+  axisId?: string | null;
   period: {
     id: string;
     code: string;
@@ -297,6 +299,8 @@ export default async function ObjectivesPage({
                                 title: obj.title,
                                 description: obj.description,
                                 ownerUserId: obj.owner?.id ?? null,
+                                orgUnitId: obj.orgUnitId ?? null,
+                                axisId: obj.axisId ?? null,
                               }}
                               aiEnabled={aiStatus.enabled}
                             />

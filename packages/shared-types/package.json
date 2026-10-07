@@ -39,13 +39,18 @@
       "types": "./dist/metrics/index.d.ts",
       "require": "./dist/metrics/index.js",
       "import": "./dist/metrics/index.mjs"
+    },
+    "./planning": {
+      "types": "./dist/planning/index.d.ts",
+      "require": "./dist/planning/index.js",
+      "import": "./dist/planning/index.mjs"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/okr/index.ts src/core/index.ts src/auth/index.ts src/audit/index.ts src/common/index.ts src/metrics/index.ts --format cjs,esm --dts --out-dir dist --no-splitting",
+    "build": "tsup src/index.ts src/okr/index.ts src/core/index.ts src/auth/index.ts src/audit/index.ts src/common/index.ts src/metrics/index.ts src/planning/index.ts --format cjs,esm --dts --out-dir dist --no-splitting",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -30,6 +30,8 @@ interface Props {
     title: string;
     description?: string | null;
     ownerUserId?: string | null;
+    orgUnitId?: string | null;
+    axisId?: string | null;
   };
   aiEnabled?: boolean;
 }

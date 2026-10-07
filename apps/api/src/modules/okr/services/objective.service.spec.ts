@@ -105,6 +105,8 @@ function makeObjective(overrides: {
   ownerUserId?: string | null;
   owner?: { id: string; displayName: string; email: string } | null;
   period?: typeof basePeriod;
+  orgUnitId?: string | null;
+  axisId?: string | null;
 }) {
   return {
     id: overrides.id,
@@ -113,6 +115,8 @@ function makeObjective(overrides: {
     title: overrides.title ?? `Objective ${overrides.id}`,
     description: null,
     ownerUserId: overrides.ownerUserId ?? null,
+    orgUnitId: overrides.orgUnitId ?? null,
+    axisId: overrides.axisId ?? null,
     owner: overrides.owner ?? null,
     progressCachedBp: overrides.progressCachedBp,
     deletedAt: null,
@@ -164,6 +168,23 @@ const mockMemberService = {
   isMemberOf: mockIsMemberOf,
 };
 
+const mockFindLiveOrgUnit = vi.fn();
+const mockOrgUnitLookup = { findLiveOrgUnit: mockFindLiveOrgUnit };
+
+const mockIsAxisInActivePlan = vi.fn();
+const mockAxisLookup = { isAxisInActivePlan: mockIsAxisInActivePlan };
+
+function buildService(): ObjectiveService {
+  return new ObjectiveService(
+    mockPrismaService as never,
+    mockPeriodService as never,
+    mockAuditEmitter as never,
+    mockMemberService as never,
+    mockOrgUnitLookup,
+    mockAxisLookup,
+  );
+}
+
 // ─── Suite ───────────────────────────────────────────────────────────────────
 
 describe('ObjectiveService.listGantt', () => {
@@ -171,8 +192,7 @@ describe('ObjectiveService.listGantt', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new ObjectiveService(mockPrismaService as any, mockPeriodService as any, mockAuditEmitter as any, mockMemberService as any);
+    service = buildService();
   });
 
   afterEach(() => {
@@ -405,8 +425,7 @@ describe('ObjectiveService — owner feature', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new ObjectiveService(mockPrismaService as any, mockPeriodService as any, mockAuditEmitter as any, mockMemberService as any);
+    service = buildService();
   });
 
   afterEach(() => {
@@ -685,5 +704,190 @@ describe('ObjectiveService — owner feature', () => {
     await expect(
       service.create(ORG_ID, { title: 'Test', ownerUserId: 'superadmin-id' }, superadminCtx),
     ).rejects.toThrow(/OwnerNotMember:/);
+  });
+});
+
+// ─── Unidad y eje (C05, RN-P2 / RN-P3) ────────────────────────────────────────
+
+describe('ObjectiveService — unidad y eje', () => {
+  let service: ObjectiveService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service = buildService();
+    mockGetCurrentOpenPeriod.mockResolvedValue(openPeriod);
+    mockIsMemberOf.mockResolvedValue(true);
+    mockFindLiveOrgUnit.mockResolvedValue({ id: 'unit-1', kind: 'ministry' });
+    mockIsAxisInActivePlan.mockResolvedValue(true);
+    mockObjectiveCreate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) =>
+      makeObjective({
+        id: 'obj-new',
+        progressCachedBp: 0,
+        keyResults: [],
+        ownerUserId: USER_ID,
+        orgUnitId: data['orgUnitId'] as string | null,
+        axisId: data['axisId'] as string | null,
+        period: basePeriod,
+      }),
+    );
+  });
+
+  it('create: persiste unidad y eje validados y los audita', async () => {
+    const result = await service.create(ORG_ID, { title: 'T', orgUnitId: 'unit-1', axisId: 'axis-1' }, authCtx);
+
+    expect(mockFindLiveOrgUnit).toHaveBeenCalledWith(ORG_ID, 'unit-1');
+    expect(mockIsAxisInActivePlan).toHaveBeenCalledWith(ORG_ID, 'axis-1');
+    expect(mockObjectiveCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ orgUnitId: 'unit-1', axisId: 'axis-1' }) }),
+    );
+    expect(result.orgUnitId).toBe('unit-1');
+    expect(result.axisId).toBe('axis-1');
+    expect(mockAuditEmitter.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'objective.created',
+        diff: expect.objectContaining({
+          after: expect.objectContaining({ orgUnitId: 'unit-1', axisId: 'axis-1' }),
+        }),
+      }),
+    );
+  });
+
+  it('create: sin unidad ni eje no consulta los puertos (unidad nullable hasta la fase migrate)', async () => {
+    const result = await service.create(ORG_ID, { title: 'T' }, authCtx);
+
+    expect(mockFindLiveOrgUnit).not.toHaveBeenCalled();
+    expect(mockIsAxisInActivePlan).not.toHaveBeenCalled();
+    expect(result.orgUnitId).toBeNull();
+    expect(result.axisId).toBeNull();
+  });
+
+  it('create: unidad inexistente o de otra org (el puerto devuelve null) -> 422 OrgUnitNotFound', async () => {
+    mockFindLiveOrgUnit.mockResolvedValue(null);
+
+    await expect(service.create(ORG_ID, { title: 'T', orgUnitId: 'otra-org' }, authCtx)).rejects.toThrow(
+      /OrgUnitNotFound:/,
+    );
+    expect(mockObjectiveCreate).not.toHaveBeenCalled();
+  });
+
+  it('create: unidad central -> 422 OrgUnitKindInvalid (RN-P3)', async () => {
+    mockFindLiveOrgUnit.mockResolvedValue({ id: 'root', kind: 'central' });
+
+    const promise = service.create(ORG_ID, { title: 'T', orgUnitId: 'root' }, authCtx);
+    await expect(promise).rejects.toThrow(UnprocessableEntityException);
+    await expect(promise).rejects.toThrow(/OrgUnitKindInvalid:/);
+    expect(mockObjectiveCreate).not.toHaveBeenCalled();
+  });
+
+  it.each(['ministry', 'area'] as const)('create: acepta unidad de kind %s', async (kind) => {
+    mockFindLiveOrgUnit.mockResolvedValue({ id: 'unit-1', kind });
+
+    await expect(service.create(ORG_ID, { title: 'T', orgUnitId: 'unit-1' }, authCtx)).resolves.toBeDefined();
+  });
+
+  it('create: eje fuera del plan activo -> 422 AxisNotInActivePlan', async () => {
+    mockIsAxisInActivePlan.mockResolvedValue(false);
+
+    await expect(service.create(ORG_ID, { title: 'T', axisId: 'axis-viejo' }, authCtx)).rejects.toThrow(
+      /AxisNotInActivePlan:/,
+    );
+    expect(mockObjectiveCreate).not.toHaveBeenCalled();
+  });
+
+  it('update: cambia unidad y eje, valida y audita before/after', async () => {
+    const existing = makeObjective({
+      id: 'obj-1',
+      progressCachedBp: 0,
+      keyResults: [],
+      orgUnitId: 'unit-0',
+      axisId: null,
+      period: basePeriod,
+    });
+    mockObjectiveFindFirst.mockResolvedValue(existing);
+    mockObjectiveUpdate.mockResolvedValue({ ...existing, orgUnitId: 'unit-1', axisId: 'axis-1' });
+
+    await service.update('obj-1', ORG_ID, { orgUnitId: 'unit-1', axisId: 'axis-1' }, authCtx);
+
+    expect(mockFindLiveOrgUnit).toHaveBeenCalledWith(ORG_ID, 'unit-1');
+    expect(mockIsAxisInActivePlan).toHaveBeenCalledWith(ORG_ID, 'axis-1');
+    expect(mockObjectiveUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { orgUnitId: 'unit-1', axisId: 'axis-1' } }),
+    );
+    expect(mockAuditEmitter.emit).toHaveBeenCalledWith({
+      action: 'objective.updated',
+      entityType: 'okr.objective',
+      entityId: 'obj-1',
+      diff: {
+        before: { orgUnitId: 'unit-0', axisId: null },
+        after: { orgUnitId: 'unit-1', axisId: 'axis-1' },
+      },
+    });
+  });
+
+  it('update: axisId null quita el eje sin consultar el puerto', async () => {
+    const existing = makeObjective({
+      id: 'obj-1',
+      progressCachedBp: 0,
+      keyResults: [],
+      axisId: 'axis-1',
+      period: basePeriod,
+    });
+    mockObjectiveFindFirst.mockResolvedValue(existing);
+    mockObjectiveUpdate.mockResolvedValue({ ...existing, axisId: null });
+
+    await service.update('obj-1', ORG_ID, { axisId: null }, authCtx);
+
+    expect(mockIsAxisInActivePlan).not.toHaveBeenCalled();
+    expect(mockObjectiveUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { axisId: null } }));
+    expect(mockAuditEmitter.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'objective.updated',
+        diff: { before: { axisId: 'axis-1' }, after: { axisId: null } },
+      }),
+    );
+  });
+
+  it('update: reenviar el mismo eje no revalida ni audita (un eje de un plan reemplazado no bloquea otras ediciones)', async () => {
+    const existing = makeObjective({
+      id: 'obj-1',
+      progressCachedBp: 0,
+      keyResults: [],
+      orgUnitId: 'unit-1',
+      axisId: 'axis-1',
+      period: basePeriod,
+    });
+    mockObjectiveFindFirst.mockResolvedValue(existing);
+    mockObjectiveUpdate.mockResolvedValue(existing);
+    mockIsAxisInActivePlan.mockResolvedValue(false);
+
+    await service.update('obj-1', ORG_ID, { orgUnitId: 'unit-1', axisId: 'axis-1' }, authCtx);
+
+    expect(mockIsAxisInActivePlan).not.toHaveBeenCalled();
+    expect(mockFindLiveOrgUnit).not.toHaveBeenCalled();
+    expect(mockAuditEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('update: unidad central -> 422 y no escribe', async () => {
+    mockObjectiveFindFirst.mockResolvedValue(
+      makeObjective({ id: 'obj-1', progressCachedBp: 0, keyResults: [], period: basePeriod }),
+    );
+    mockFindLiveOrgUnit.mockResolvedValue({ id: 'root', kind: 'central' });
+
+    await expect(service.update('obj-1', ORG_ID, { orgUnitId: 'root' }, authCtx)).rejects.toThrow(
+      /OrgUnitKindInvalid:/,
+    );
+    expect(mockObjectiveUpdate).not.toHaveBeenCalled();
+  });
+
+  it('update: eje fuera del plan activo -> 422 y no escribe', async () => {
+    mockObjectiveFindFirst.mockResolvedValue(
+      makeObjective({ id: 'obj-1', progressCachedBp: 0, keyResults: [], period: basePeriod }),
+    );
+    mockIsAxisInActivePlan.mockResolvedValue(false);
+
+    await expect(service.update('obj-1', ORG_ID, { axisId: 'axis-x' }, authCtx)).rejects.toThrow(
+      /AxisNotInActivePlan:/,
+    );
+    expect(mockObjectiveUpdate).not.toHaveBeenCalled();
   });
 });

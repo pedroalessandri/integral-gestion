@@ -6,7 +6,10 @@
 
 ## 🔥 Prioridad alta — próxima sesión
 
-_(sin ítems de prioridad alta pendientes)_
+### [B] Los controllers de C04 no validan que el `:orgId` del path coincida con el tenant del request
+- Por qué: `OrgUnitController` y `MemberController` (`orgs/:orgId/...`) pasan el `orgId` del path directo al service. `TenantGuard` solo verifica membresía y permisos contra el header `X-Organization-Id`, así que un org-admin de la org A podría operar sobre la org B mandando header A y path B. `MetricController` ya lo resuelve con `assertOrgParam`; el controller de planning de C05 también.
+- Posible solución: aplicar el mismo chequeo (`TenantMismatch` 403) en esos controllers, o moverlo a un guard/decorator reutilizable. Con test.
+- Origen: C05 (2026-10-07). Pedro lo subió a prioridad alta el 2026-10-07 (aislamiento multi-tenant); resolver antes del merge de la Fase 2.
 
 ## 🟡 Prioridad media — próximas semanas
 
@@ -20,6 +23,20 @@ _(sin ítems de prioridad alta pendientes)_
 - Estado: el kebab de **key results** (`kr-card-actions.tsx`) ya quedó arreglado en la corrida del Módulo 2 (DropdownMenu controlado). Falta solo el de **tareas** (`task-row-actions.tsx`).
 - Posible solución: controlar el state del DropdownMenu desde el padre y forzar `setMenuOpen(false)` en el `onSelect` antes de abrir el Dialog. Patrón típico de shadcn cuando un MenuItem dispara un Dialog.
 - Estimado: corrida chica (~15-20 min).
+
+### [F] Elegir unidad al invitar + decidir alcance por defecto (hoy null = toda la org) — resolver en F8/C19
+- Por qué: `inviteByEmail` no acepta `orgUnitId`; el alcance se setea después con `PATCH orgs/:orgId/members/:userId/scope`. Hoy un miembro invitado queda con alcance `null` (toda la org, RN-P19) hasta que alguien lo cambie.
+- Origen: pregunta abierta de C04 (2026-10-07), Pedro: "alcanza por ahora".
+- Resolver en: plan.md F8/C19.
+
+### [F] Archivar o cambiar el plan activo (hoy no hay endpoint)
+- Por qué: C05 solo hace upsert del plan activo. Decisión de Pedro (2026-10-07) para cuando se agregue: 409 mientras haya ejes con objetivos; hay que definir qué pasa con `axis_id` de los objetivos al cambiar de plan.
+- Origen: pregunta abierta de C05.
+
+### [B] El filtro global de errores descarta `members` del 409 `OrgUnitHasMembers` y el código viaja como prefijo del mensaje
+- Por qué: `HttpExceptionFilter` devuelve solo `{ statusCode, message, error }` con `error` = nombre de la clase (`ConflictException`), así que `shared-types` (`ErrorResponseDto.details`) y la bitácora de C04 prometen un detalle que no llega. El front parsea el código del prefijo del `message` ("Codigo: detalle") y deduce los miembros bloqueantes de la lista de miembros cargada.
+- Posible solución: que el filtro propague el código de dominio en `error` y el resto de las propiedades del response en `details`. Con test.
+- Origen: C06 (2026-10-07).
 
 ## 🔵 Prioridad baja / cuando haya tiempo
 
@@ -37,6 +54,10 @@ _(sin ítems de prioridad alta pendientes)_
 ### [F] Permitir borrar/desasignar owner desde el detalle del objetivo sin pasar por edit completo
 - Por qué: hoy para cambiar owner abrís el dialog de "Editar objetivo" entero. Sería más rápido un click directo.
 - Estimado: corrida chica (~15 min).
+
+### [B] Excluir usuarios de sistema (auth0_sub LIKE 'system:%') de los listados globales de usuarios del superadmin
+- Por qué: la migración de C04 inserta en `core.user` el usuario de sistema `system:migration` (actor de los eventos de backfill, ADR-0009 D6). Si no se filtra, aparece en los listados globales del superadmin.
+- Origen: C04 (2026-10-07), aprobado por Pedro.
 
 ## ✅ Recientemente completados (últimos 30 días)
 

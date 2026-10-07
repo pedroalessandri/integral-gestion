@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateObjectiveDto {
   @IsString()
@@ -12,4 +12,16 @@ export class CreateObjectiveDto {
   @IsOptional()
   @IsString()
   ownerUserId?: string;
+
+  /** Unidad ministry|area de la misma org (RN-P3). Opcional hasta la fase migrate. */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  orgUnitId?: string;
+
+  /** Eje del plan activo (RN-P2). */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  axisId?: string;
 }
