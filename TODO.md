@@ -45,6 +45,16 @@
 - Por qué: Pedro (2026-10-07): la unidad del objetivo es obligatoria. Hoy el selector la deja vacía al crear y `CreateObjectiveDto.orgUnitId` es opcional. Requerirla en create (UI + DTO); la columna sigue nullable hasta la fase migrate por los objetivos existentes (plan.md), y el NOT NULL va con el contract.
 - Origen: pregunta abierta de C06.
 
+### [F] Validar proyectos y tareas al editar las fechas de un período (ADR-0009 D7, RN-P3)
+- Por qué: D7 pide que editar un período con un rango que deja afuera proyectos, tareas o cargas responda 422 con la lista (puertos `PERIOD_RANGE_CHECKER_OKR` / `_METRICS`). C08 crea los proyectos y tareas que hay que chequear, pero el puerto y el chequeo en `PeriodService` no están en ninguna corrida del plan.
+- Posible solución: puerto en `common/contracts` que implementa `okr` (proyectos y tareas fuera del rango nuevo) e inyecta `core`; el de `metrics` va con F4.
+- Origen: C08 (2026-10-07).
+
+### [F] Limitar el cambio de fechas de un proyecto que deja tareas afuera (RN-P5)
+- Por qué: Pedro (2026-10-07): "debería ser un limitante pero no hace limitar ahora". Hoy `PATCH okr/projects/:id` acepta un rango nuevo aunque deje tareas fuera del proyecto (crear o mover una tarea fuera del proyecto sí da 422).
+- Posible solución: 422 `ProjectDatesExcludeTasks` con la lista de tareas afectadas, como pide D7 para los períodos.
+- Origen: pregunta abierta de C08.
+
 ### [B] `PeriodController` sin `TenantGuard` ni permisos: cualquier usuario autenticado lista o crea períodos de cualquier org
 - Por qué: `GET`/`POST orgs/:orgId/periods` y `GET periods/:id` solo tienen un TODO(ADR-0004): sin `TenantGuard`, sin `PermissionsGuard` y sin tenant scoping. `OrgParamGuard` (fix de `:orgId`) no alcanza ahí porque sin `TenantGuard` no hay org en el contexto. Lo mismo vale para los guards de `OrganizationController` (`orgs/:id`, operaciones de superadmin).
 - Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.

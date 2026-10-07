@@ -23,8 +23,12 @@ export interface ObjectiveSummaryDto {
   title: string;
   /** Period code in format "YYYY-Qn". */
   periodCode: string;
-  /** Cached cascade progress in basis points. Integer 0..10000. */
+  /** Cached cascade progress in basis points. Integer 0..10000. Deprecado: camino KR legacy. */
   progressCachedBp: number;
+  /** Avance de resultado (desde indicadores, RN-P8). Integer 0..10000. Nunca se combina con el de gestión. */
+  resultProgressCachedBp: number;
+  /** Avance de gestión (desde proyectos, RN-P8). Integer 0..10000. Nunca se combina con el de resultado. */
+  executionProgressCachedBp: number;
   /** Derived at read time — never persisted. */
   status: ProgressStatus;
   /** RN-31: true if the Objective has at least one active KR. */

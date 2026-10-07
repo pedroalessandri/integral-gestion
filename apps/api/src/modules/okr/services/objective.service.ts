@@ -54,6 +54,8 @@ type ObjectiveRow = {
   axisId: string | null;
   owner: { id: string; displayName: string; email: string } | null;
   progressCachedBp: number;
+  resultProgressCachedBp: number;
+  executionProgressCachedBp: number;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -873,6 +875,8 @@ export class ObjectiveService {
       title: o.title,
       periodCode: o.period.code,
       progressCachedBp: o.progressCachedBp,
+      resultProgressCachedBp: o.resultProgressCachedBp,
+      executionProgressCachedBp: o.executionProgressCachedBp,
       status: computeProgressStatus(o.progressCachedBp),
       hasActiveKeyResults: o._count.keyResults > 0,
       createdAt: o.createdAt.toISOString(),
@@ -897,6 +901,8 @@ export class ObjectiveService {
       title: o.title,
       periodCode: o.period.code,
       progressCachedBp: o.progressCachedBp,
+      resultProgressCachedBp: o.resultProgressCachedBp,
+      executionProgressCachedBp: o.executionProgressCachedBp,
       status: computeProgressStatus(o.progressCachedBp),
       hasActiveKeyResults: o._count.keyResults > 0,
       createdAt: o.createdAt.toISOString(),

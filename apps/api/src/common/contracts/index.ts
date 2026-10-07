@@ -13,3 +13,5 @@ export type {
   ObjectiveAxisCounter,
   ObjectiveAxisUnassigner,
 } from './objective-links.port.js';
+export { ORG_UNIT_HIERARCHY } from './org-unit-hierarchy.port.js';
+export type { OrgUnitHierarchy } from './org-unit-hierarchy.port.js';

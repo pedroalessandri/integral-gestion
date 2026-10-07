@@ -45,6 +45,7 @@ model Organization {
   objectives              Objective[]
   keyResults              KeyResult[]
   tasks                   Task[]
+  projects                Project[]
   aiSettings              OrganizationAiSettings?
   aiPromptLogs            PromptLog[]
   aiUsageCounters         UsageCounter[]
@@ -104,6 +105,7 @@ model User {
   ownedObjectives Objective[]            @relation("ObjectiveOwner")
   ownedKeyResults KeyResult[]            @relation("KrOwner")
   ownedTasks      Task[]                 @relation("TaskOwner")
+  ownedProjects   Project[]              @relation("ProjectOwner")
   aiPromptLogs    PromptLog[]
 
   @@index([isSuperadmin], map: "idx_user_superadmin")
@@ -132,6 +134,7 @@ model OrgUnit {
   children     OrgUnit[]              @relation("OrgUnitTree")
   memberships  UserOrganizationRole[]
   objectives   Objective[]
+  projects     Project[]
 
   // Partial unique uq_org_unit_central_root ON (organization_id) WHERE kind = 'central' AND deleted_at IS NULL
   // cannot be expressed in Prisma — added manually in migration SQL (RN-P1).
@@ -266,20 +269,25 @@ model AuditEvent {
 // ─────────────────────────────────────────────────────────────
 
 model Objective {
-  id               String    @id @default(cuid())
-  organizationId   String    @map("organization_id")
-  periodId         String    @map("period_id")
-  title            String    @db.VarChar(200)
-  description      String?   @db.Text
-  ownerUserId      String?   @map("owner_user_id")
+  id                        String    @id @default(cuid())
+  organizationId            String    @map("organization_id")
+  periodId                  String    @map("period_id")
+  title                     String    @db.VarChar(200)
+  description               String?   @db.Text
+  ownerUserId               String?   @map("owner_user_id")
   /// Unidad (ministry | area, RN-P3). Nullable hasta la fase migrate (ADR-0009 D6); el service valida kind y org.
-  orgUnitId        String?   @map("org_unit_id")
+  orgUnitId                 String?   @map("org_unit_id")
   /// Eje (N2) del plan activo; opcional (RN-P2).
-  axisId           String?   @map("axis_id")
-  progressCachedBp Int       @default(0) @map("progress_cached_bp")
-  deletedAt        DateTime? @map("deleted_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  axisId                    String?   @map("axis_id")
+  /// Deprecado (camino KR legacy; se elimina en el contract, ADR-0009 D6).
+  progressCachedBp          Int       @default(0) @map("progress_cached_bp")
+  /// Avance de resultado (desde indicadores, RN-P8). Nunca se combina con el de gestión.
+  resultProgressCachedBp    Int       @default(0) @map("result_progress_cached_bp")
+  /// Avance de gestión (desde proyectos, RN-P8). Nunca se combina con el de resultado.
+  executionProgressCachedBp Int       @default(0) @map("execution_progress_cached_bp")
+  deletedAt                 DateTime? @map("deleted_at")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   period       Period       @relation(fields: [periodId], references: [id], onDelete: Restrict)
@@ -287,6 +295,7 @@ model Objective {
   orgUnit      OrgUnit?     @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
   axis         Axis?        @relation(fields: [axisId], references: [id], onDelete: Restrict)
   keyResults   KeyResult[]
+  projects     Project[]
 
   @@index([organizationId, periodId], map: "idx_objective_org_period")
   @@index([periodId], map: "idx_objective_period")
@@ -325,14 +334,59 @@ model KeyResult {
   @@schema("okr")
 }
 
+model Project {
+  id                         String    @id @default(cuid())
+  objectiveId                String    @map("objective_id")
+  organizationId             String    @map("organization_id")
+  /// Unidad del proyecto: la del objetivo o una descendiente (RN-P4). Lo valida el service por puerto.
+  orgUnitId                  String    @map("org_unit_id")
+  title                      String    @db.VarChar(200)
+  description                String?   @db.Text
+  ownerUserId                String?   @map("owner_user_id")
+  /// Opcional, todo-o-nada entre proyectos hermanos (RN-P6). Basis points 0..10000.
+  weightBp                   Int?      @map("weight_bp")
+  startsAt                   DateTime  @map("starts_at") @db.Timestamptz(6)
+  endsAt                     DateTime  @map("ends_at") @db.Timestamptz(6)
+  /// 'from_tasks' | 'from_indicator' — CHECK constraint in migration. Hoy solo 'from_tasks' es operable (F4/F7 habilita el otro).
+  progressMode               String    @default("from_tasks") @map("progress_mode") @db.VarChar(15)
+  /// FK a metrics.objective_indicator se agrega por SQL crudo en F4 (la tabla todavía no existe).
+  sourceObjectiveIndicatorId String?   @map("source_objective_indicator_id")
+  progressCachedBp           Int       @default(0) @map("progress_cached_bp")
+  /// Idempotencia de la migración KR -> Project (ADR-0009 D6). Unique parcial en la migración SQL.
+  legacyKeyResultId          String?   @map("legacy_key_result_id")
+  deletedAt                  DateTime? @map("deleted_at")
+  createdAt                  DateTime  @default(now()) @map("created_at")
+  updatedAt                  DateTime  @updatedAt @map("updated_at")
+
+  objective    Objective    @relation(fields: [objectiveId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  orgUnit      OrgUnit      @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
+  owner        User?        @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  tasks        Task[]
+
+  // Partial unique uq_project_legacy_key_result ON (legacy_key_result_id) WHERE legacy_key_result_id IS NOT NULL
+  // cannot be expressed in Prisma — added manually in migration SQL (ADR-0009 D6).
+  @@index([organizationId, objectiveId], map: "idx_project_org_objective")
+  @@index([objectiveId], map: "idx_project_objective")
+  @@index([orgUnitId], map: "idx_project_org_unit")
+  @@index([ownerUserId], map: "idx_project_owner")
+  @@index([deletedAt], map: "idx_project_deleted_at")
+  @@map("project")
+  @@schema("okr")
+}
+
 model Task {
   id             String    @id @default(cuid())
-  keyResultId    String    @map("key_result_id")
+  /// Camino KR legacy. Exactamente uno entre keyResultId y projectId (CHECK chk_task_parent_xor).
+  keyResultId    String?   @map("key_result_id")
+  /// Proyecto (N5). Exactamente uno entre keyResultId y projectId.
+  projectId      String?   @map("project_id")
   organizationId String    @map("organization_id")
   title          String    @db.VarChar(200)
   description    String?   @db.Text
   ownerUserId    String?   @map("owner_user_id")
-  weightBp       Int       @map("weight_bp")
+  /// Opcional (RN-P6, todo-o-nada entre hermanos). Obligatorio en el camino KR (CHECK chk_task_kr_weight).
+  weightBp       Int?      @map("weight_bp")
   progressBp     Int       @default(0) @map("progress_bp")
   /// Scheduled start date for this task. Must be >= parent Period.startsAt.
   startsAt       DateTime  @map("starts_at") @db.Timestamptz(6)
@@ -342,11 +396,13 @@ model Task {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  keyResult    KeyResult    @relation(fields: [keyResultId], references: [id], onDelete: Restrict)
+  keyResult    KeyResult?   @relation(fields: [keyResultId], references: [id], onDelete: Restrict)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Restrict)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   owner        User?        @relation("TaskOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
 
   @@index([keyResultId], map: "idx_task_kr")
+  @@index([projectId], map: "idx_task_project")
   @@index([ownerUserId], map: "idx_task_owner_user")
   @@map("task")
   @@schema("okr")
@@ -551,16 +607,16 @@ model UsageCounter {
 /// CHECK de status, CHECK mandate_ends_at > mandate_starts_at y unique parcial
 /// uq_strategic_plan_active (organization_id) WHERE status = 'active': SQL manual en la migración.
 model StrategicPlan {
-  id               String   @id @default(cuid())
-  organizationId   String   @map("organization_id")
-  title            String   @db.VarChar(200)
-  vision           String   @db.Text
-  mandateStartsAt  DateTime @map("mandate_starts_at")
-  mandateEndsAt    DateTime @map("mandate_ends_at")
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  title           String   @db.VarChar(200)
+  vision          String   @db.Text
+  mandateStartsAt DateTime @map("mandate_starts_at")
+  mandateEndsAt   DateTime @map("mandate_ends_at")
   /// 'active' | 'archived' — CHECK constraint in migration
-  status           String   @default("active") @db.VarChar(10)
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  status          String   @default("active") @db.VarChar(10)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   axes         Axis[]
@@ -572,15 +628,15 @@ model StrategicPlan {
 
 /// Eje (N2): transversal a las unidades, opcional. Soft delete.
 model Axis {
-  id               String    @id @default(cuid())
-  strategicPlanId  String    @map("strategic_plan_id")
-  organizationId   String    @map("organization_id")
-  name             String    @db.VarChar(200)
-  description      String?   @db.Text
-  order            Int       @default(0)
-  deletedAt        DateTime? @map("deleted_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(cuid())
+  strategicPlanId String    @map("strategic_plan_id")
+  organizationId  String    @map("organization_id")
+  name            String    @db.VarChar(200)
+  description     String?   @db.Text
+  order           Int       @default(0)
+  deletedAt       DateTime? @map("deleted_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   strategicPlan StrategicPlan @relation(fields: [strategicPlanId], references: [id], onDelete: Restrict)
   organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)

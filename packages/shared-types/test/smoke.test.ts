@@ -36,6 +36,8 @@ describe('shared-types public API', () => {
         title: 'T',
         periodCode: '2026-Q2',
         progressCachedBp: 5000,
+        resultProgressCachedBp: 0,
+        executionProgressCachedBp: 0,
         status: 'in_progress',
         hasActiveKeyResults: true,
         createdAt: '2026-04-20T00:00:00Z',
