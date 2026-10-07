@@ -15,6 +15,15 @@ Formato:
 
 ---
 
+## 2026-10-07 · C07 · backend-dev · feature/plan-f3-proyectos
+- Hecho: `okr-domain` con pesos opcionales (RN-P6/P7): `weightMode` (`weighted` | `unweighted` | `mixed`), `validateWeightSumInvariant` acepta grupos sin pesos y devuelve `reason: 'mixed'` para los mixtos, y `projectSumAfterDelete` contempla grupos sin pesos. Helper único `aggregateProgressBp` (vacío → 0; ponderado → `Math.trunc(Σw·p/10000)`; simple → `Math.trunc(Σp/n)`; mixto → `MixedWeightGroupError`), del que delegan `computeKrProgress`, `computeObjectiveProgress` y las nuevas `computeProjectProgress` y `computeExecutionProgress` (RN-P8). Nuevo `planned.ts` con `plannedTaskProgressBp` y `plannedProgress(tasks, at)` (RN-P9). Tests de propiedades y unitarios nuevos; los tests existentes quedaron sin cambios.
+- Commit: este commit (`feat(okr-domain): pesos opcionales, avance de gestión y avance planificado`)
+- Verificación: `pnpm --filter okr-domain test` → 8 archivos, 95 tests OK; `pnpm --filter okr-domain typecheck` → OK; build de okr-domain + `pnpm --filter api typecheck` → OK (el camino KR compila sin cambios en api).
+- Pendiente / desvíos: ninguno. Decisiones de implementación que no fijan reglas de negocio: con suma incorrecta se mantiene la forma de retorno anterior (`{ok:false, actual, expected}`) para no romper a los consumidores. En un grupo sin pesos, `projectSumAfterDelete` devuelve 10000 si quedan hermanos (0 si queda vacío). Un `weightBp = 0` cuenta como peso presente.
+- Preguntas abiertas:
+  - Tarea de duración cero (`startsAt = endsAt`) en el avance planificado: se tomó 0 antes del fin y 100 desde el fin. La SPEC no lo define porque la fórmula se indefine. ¿Ok?
+  - Antes del inicio el avance planificado es 0 y después del fin es 100 (la fórmula acotada a 0–100, igual que el progreso de indicadores en RN-P8). ¿Ok?
+
 ## 2026-10-07 · Fix · backend-dev · fix/core-orgid-tenant-check
 - Hecho: guard común `OrgParamGuard` (`common/guards`) que compara `:orgId` del path con el tenant del request (lee `request.authContext`, ALS solo como fallback) y responde 403 `TenantMismatch`. Aplicado a `OrgUnitController`, `MemberController` (incluido `PATCH members/:userId/scope`), `OrganizationModuleController` (nuevo: tampoco tenía chequeo), `StrategicPlanController` y `MetricController`; se borraron los `assertOrgParam` locales de planning y metrics. No exceptúa superadmin (igual que antes en planning/metrics). Tests: 9 del guard y 9 de controllers con un harness HTTP (`common/testing/tenant-http-harness.ts`).
 - Commit: este commit (`fix(core): validar :orgId del path contra el tenant del request`)
