@@ -6,11 +6,6 @@
 
 ## 🔥 Prioridad alta — próxima sesión
 
-### [B] Los controllers de C04 no validan que el `:orgId` del path coincida con el tenant del request
-- Por qué: `OrgUnitController` y `MemberController` (`orgs/:orgId/...`) pasan el `orgId` del path directo al service. `TenantGuard` solo verifica membresía y permisos contra el header `X-Organization-Id`, así que un org-admin de la org A podría operar sobre la org B mandando header A y path B. `MetricController` ya lo resuelve con `assertOrgParam`; el controller de planning de C05 también.
-- Posible solución: aplicar el mismo chequeo (`TenantMismatch` 403) en esos controllers, o moverlo a un guard/decorator reutilizable. Con test.
-- Origen: C05 (2026-10-07). Pedro lo subió a prioridad alta el 2026-10-07 (aislamiento multi-tenant); resolver antes del merge de la Fase 2.
-
 ## 🟡 Prioridad media — próximas semanas
 
 ### [B] Loading state del dropdown de responsable
@@ -78,6 +73,7 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [B] Validar `:orgId` del path contra el tenant del request (`OrgParamGuard` en org-units, members, modules, strategic-plan y metrics) — mergeado el 7 octubre 2026
 - [F] Módulo 2 "Indicadores en OKRs" completo (backend + frontend): `progress_mode` en KR, vínculo métrica↔KR con progreso automático (interpolación baseline→target), hook de recálculo, contexto a nivel objetivo, y la Pantalla 3 (badge automático, barra sin slider, sin-datos, editar/desvincular). Seed de demo + smoke checklist en docs/features/indicadores-smoke-checklist.md — mergeado el 10 julio 2026
 - [F] Módulo 1 "Indicadores de gestión" completo (backend + frontend): schema `metrics`, feature-gating por org (ModuleEnabledGuard), package `metrics-domain`, ABM + carga periódica con curva esperado-vs-real, nav gated y tab "Módulos" en Configuración — mergeado el 9 julio 2026
 - [F] Vista Ejecutiva: banda de meses sobre el eje del Gantt (reemplaza el ajuste pedido de formato "d MMM") — mergeado el 11 mayo 2026

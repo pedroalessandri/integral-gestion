@@ -20,7 +20,7 @@ Formato:
 - Commit: este commit (`fix(core): validar :orgId del path contra el tenant del request`)
 - Verificación: `prisma:generate && pnpm typecheck` → 5/5 OK; `pnpm --filter api test` → 29 archivos, 252 tests OK; `pnpm --filter api lint` → 1 error y 3 warnings preexistentes, ninguno nuevo; e2e `core-member` y `core-module-enablement` → 6 fallas, idénticas en `main` (rotas en `POST /orgs`, a tech-debt).
 - Pendiente / desvíos: `PeriodController` y `OrganizationController` quedan sin cubrir: no tienen `TenantGuard` (TODO ADR-0004), así que el guard no aplica sin cambiar la política de acceso. Item `[B]` nuevo en TODO.md.
-- Preguntas abiertas: ¿`PeriodController` con `TenantGuard` + `core:period:manage` y en qué prioridad?
+- Preguntas abiertas: ✅ `PeriodController`: Pedro lo deja en TODO.md con prioridad media (2026-10-07). Mergeado (PR #10).
 
 ## 2026-10-07 · C06 · frontend-dev · feature/plan-f2-estructura
 - Hecho: Configuración → pestaña "Estructura" (`features/org-structure`): árbol de unidades con ABM, visión y misión, alcance por miembro (`PATCH members/:userId/scope`) y mensajes en español para los 409/422 tipados. Página "Plan de gobierno" (`/plan`, `features/strategic-plan`): estado vacío si 404, crear/editar plan (PUT), ABM de ejes con `objectiveCount` y warning ámbar al borrar un eje con objetivos. Selectores de unidad (solo ministry|area) y de eje ("Sin eje") en el dialog de crear/editar Objetivo. Diccionario `lib/labels.ts` con el glosario.
@@ -31,7 +31,7 @@ Formato:
   - El filtro global de errores del api descarta `members` del 409 `OrgUnitHasMembers` y el código de dominio llega como prefijo del `message`. El front parsea el prefijo (`lib/api-errors.ts`) y deduce los miembros bloqueantes de la lista cargada. Bug en TODO.md.
   - Carpetas `features/*` según CLAUDE.md (lo existente usa `components/<area>`). Reglas de UX (profundidad ≤ 4, hijos por kind) duplicadas en `tree.ts` solo para filtrar opciones; la fuente de verdad es la API.
   - Web sin script `typecheck` ni Vitest; `MemberItem` vs `MemberDto` en la página Miembros: los dos en tech-debt.
-  - Sin smoke en navegador (lo hace Pedro).
+  - Smoke de Pedro en el deploy (2026-10-07): OK, estructura de San Carrillo creada y todo lo pedido verificado. Fase 2 mergeada (PR #9).
 - Preguntas abiertas (resueltas por Pedro el 2026-10-07, ítems en TODO.md):
   - ✅ Permisos en la UI: sí, `/me` expone los permisos y la UI oculta o deshabilita la escritura según eso.
   - ✅ `GET members` sin `core:member:manage`: es lo esperado, pero la sección de alcance tiene que mostrar el error explícito (qué permiso falta) para que un admin lo pueda corregir.
