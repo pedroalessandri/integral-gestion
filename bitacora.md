@@ -15,6 +15,23 @@ Formato:
 
 ---
 
+## 2026-10-07 · C06 · frontend-dev · feature/plan-f2-estructura
+- Hecho: Configuración → pestaña "Estructura" (`features/org-structure`): árbol de unidades con ABM, visión y misión, alcance por miembro (`PATCH members/:userId/scope`) y mensajes en español para los 409/422 tipados. Página "Plan de gobierno" (`/plan`, `features/strategic-plan`): estado vacío si 404, crear/editar plan (PUT), ABM de ejes con `objectiveCount` y warning ámbar al borrar un eje con objetivos. Selectores de unidad (solo ministry|area) y de eje ("Sin eje") en el dialog de crear/editar Objetivo. Diccionario `lib/labels.ts` con el glosario.
+- Commit: este commit (`feat(web): pantallas de estructura y plan de gobierno`)
+- Verificación: `pnpm --filter web typecheck` no existe (sin script en web) → se corrió `tsc --noEmit` en `apps/web` → sin errores; `pnpm --filter web lint` → 0 errores, 2 warnings preexistentes.
+- Pendiente / desvíos:
+  - Los ejes muestran solo `objectiveCount`: el backend todavía no expone las dos lecturas agregadas ni las unidades por eje (SPEC §5.2).
+  - El filtro global de errores del api descarta `members` del 409 `OrgUnitHasMembers` y el código de dominio llega como prefijo del `message`. El front parsea el prefijo (`lib/api-errors.ts`) y deduce los miembros bloqueantes de la lista cargada. Bug en TODO.md.
+  - Carpetas `features/*` según CLAUDE.md (lo existente usa `components/<area>`). Reglas de UX (profundidad ≤ 4, hijos por kind) duplicadas en `tree.ts` solo para filtrar opciones; la fuente de verdad es la API.
+  - Web sin script `typecheck` ni Vitest; `MemberItem` vs `MemberDto` en la página Miembros: los dos en tech-debt.
+  - Sin smoke en navegador (lo hace Pedro).
+- Preguntas abiertas:
+  - Permisos en la UI: `/me` no expone permisos; hoy los botones de escritura se ven siempre y el 403 se muestra como mensaje. ¿Exponer permisos en `/me`?
+  - `GET members` pide `core:member:manage`: sin ese permiso, la sección de alcance muestra error. ¿Es lo esperado?
+  - ¿El selector de unidad pasa a ser obligatorio al crear objetivos antes de F10?
+  - Ubicación del plan: ruta `/plan` con ítem propio en la navegación. ¿Va ahí?
+  - Fechas del mandato: se envían como medianoche UTC; la SPEC no define zona horaria.
+
 ## 2026-10-07 · C05 · backend-dev · feature/plan-f2-estructura
 - Hecho: schema `planning` con `strategic_plan` (CHECK de `status`, CHECK fin > inicio del mandato, unique parcial `uq_strategic_plan_active`) y `axis` (soft delete, `order`). `okr.objective` suma `org_unit_id` (nullable) y `axis_id` con FKs RESTRICT. Módulo Nest `planning` (`orgs/:orgId/strategic-plan`: GET/PUT del plan activo y ABM de ejes en `/axes`), auditoría de toda mutación (`strategic_plan.*`, `axis.*`, y `orgUnitId`/`axisId` en `objective.created/updated`). Create/update de Objective aceptan `orgUnitId` y `axisId`; la validación va por puertos nuevos en `common/contracts`: `ORG_UNIT_LOOKUP` (impl. `core`, RN-P3: misma org y kind ministry|area, si no 422 `OrgUnitNotFound`/`OrgUnitKindInvalid`), `ACTIVE_AXIS_LOOKUP` (impl. `planning`: eje vivo del plan activo de la misma org, si no 422 `AxisNotInActivePlan`) y `AXIS_OBJECTIVE_COUNTER` y `AXIS_OBJECTIVE_UNASSIGNER` (impl. `okr`). El stub de `ORG_UNIT_OBJECTIVE_COUNTER` se reemplazó por un count real (movido a "Resuelto" en tech-debt). Permisos: lectura `okr:read`; escritura `planning:plan:manage` (nuevo, solo org-admin). DTOs en `shared-types/planning` (subpath nuevo, agregado a `exports`, al script de build y al `paths` del api).
 - Commit: este commit (`feat(okr): plan de gobierno, ejes y vínculos del objetivo`)

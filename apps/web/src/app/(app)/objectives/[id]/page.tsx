@@ -36,6 +36,8 @@ interface CascadeResponse {
     owner: OwnerSummaryDto | null;
     /** The local core.user.id of the owner, if any. */
     ownerUserId?: string | null;
+    orgUnitId?: string | null;
+    axisId?: string | null;
     /** Derived from KR dates — null when no tasks exist. */
     startsAt?: string | null;
     /** Derived from KR dates — null when no tasks exist. */
@@ -204,6 +206,8 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
                 title: objective.title,
                 description: objective.description,
                 ownerUserId: objective.ownerUserId ?? null,
+                orgUnitId: objective.orgUnitId ?? null,
+                axisId: objective.axisId ?? null,
                 owner: objective.owner,
               }}
               isReadOnly={isReadOnly}

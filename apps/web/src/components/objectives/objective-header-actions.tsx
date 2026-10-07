@@ -12,6 +12,8 @@ interface Props {
     title: string;
     description?: string | null;
     ownerUserId?: string | null;
+    orgUnitId?: string | null;
+    axisId?: string | null;
     owner: OwnerSummaryDto | null;
   };
   isReadOnly: boolean;

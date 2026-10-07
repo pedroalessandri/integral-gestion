@@ -1,25 +1,31 @@
 'use client';
 
+import { LABELS } from '@/lib/labels';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Props {
   general: React.ReactNode;
+  estructura: React.ReactNode;
   copilot: React.ReactNode;
   /** Módulos tab content — only rendered for superadmins (null otherwise). */
   modulos: React.ReactNode | null;
 }
 
-export function SettingsTabs({ general, copilot, modulos }: Props) {
+export function SettingsTabs({ general, estructura, copilot, modulos }: Props) {
   return (
     <Tabs defaultValue="general" className="w-full">
       <TabsList>
         <TabsTrigger value="general">General</TabsTrigger>
+        <TabsTrigger value="estructura">{LABELS.unit.structure}</TabsTrigger>
         <TabsTrigger value="copilot">Copilot AI</TabsTrigger>
         {modulos !== null && <TabsTrigger value="modulos">Módulos</TabsTrigger>}
       </TabsList>
 
       <TabsContent value="general" className="pt-4">
         {general}
+      </TabsContent>
+      <TabsContent value="estructura" className="pt-4">
+        {estructura}
       </TabsContent>
       <TabsContent value="copilot" className="pt-4">
         {copilot}

@@ -5,14 +5,17 @@ import { OrgContextForm } from '@/components/orgs/org-context-form';
 import { AiUsageCard } from '@/components/orgs/ai-usage-card';
 import { SettingsTabs } from '@/components/settings/settings-tabs';
 import { ModulesPanel } from '@/components/settings/modules-panel';
+import { OrgStructurePanel, listOrgUnitTreeAction, listScopeMembersAction } from '@/features/org-structure';
 
 export default async function OrgSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: orgId } = await params;
 
-  const [orgResult, usageResult, meRes] = await Promise.all([
+  const [orgResult, usageResult, meRes, treeResult, membersResult] = await Promise.all([
     getOrganizationAction(orgId),
     getAiUsageAction(orgId),
     apiFetch('/api/v1/me'),
+    listOrgUnitTreeAction(orgId),
+    listScopeMembersAction(orgId),
   ]);
 
   if (orgResult.error || !orgResult.organization) notFound();
@@ -30,12 +33,21 @@ export default async function OrgSettingsPage({ params }: { params: Promise<{ id
           Configuración de {orgResult.organization.name}
         </h1>
         <p className="text-sm text-neutral-500 mt-1">
-          Contexto de la organización, uso del copilot AI y, para superadmins, habilitación de módulos.
+          Contexto de la organización, estructura de unidades, uso del copilot AI y, para superadmins, habilitación de módulos.
         </p>
       </div>
 
       <SettingsTabs
         general={<OrgContextForm organization={orgResult.organization} />}
+        estructura={
+          <OrgStructurePanel
+            orgId={orgId}
+            tree={treeResult.ok ? treeResult.data : []}
+            members={membersResult.ok ? membersResult.data : []}
+            loadError={treeResult.ok ? null : treeResult.error}
+            membersError={membersResult.ok ? null : membersResult.error}
+          />
+        }
         copilot={
           usageResult.usage ? (
             <AiUsageCard usage={usageResult.usage} />

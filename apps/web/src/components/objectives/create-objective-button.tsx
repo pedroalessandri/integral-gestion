@@ -19,12 +19,18 @@ import { createObjectiveAction, updateObjectiveAction } from './actions';
 import { AiSuggestPanel } from '@/components/ai/ai-suggest-panel';
 import { SmartFeedbackPanel } from '@/components/ai/smart-feedback-panel';
 import { OwnerSelect } from './owner-select';
+import { UnitSelect } from '@/features/org-structure';
+import { AxisSelect } from '@/features/strategic-plan';
+import { assignmentForCreate, assignmentForUpdate } from '@/features/planning/objective-assignment';
+import { LABELS } from '@/lib/labels';
 
 interface ObjectiveInitialValues {
   id: string;
   title: string;
   description?: string | null;
   ownerUserId?: string | null;
+  orgUnitId?: string | null;
+  axisId?: string | null;
 }
 
 /** Create mode — shows a trigger button */
@@ -66,6 +72,9 @@ export function CreateObjectiveButton(props: Props) {
 
   const defaultOwnerId = !isEdit ? ((props as CreateProps).defaultOwnerUserId ?? null) : null;
 
+  const [orgUnitId, setOrgUnitId] = useState<string | null>(props.initialValues?.orgUnitId ?? null);
+  const [axisId, setAxisId] = useState<string | null>(props.initialValues?.axisId ?? null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState(props.initialValues?.title ?? '');
@@ -80,6 +89,8 @@ export function CreateObjectiveButton(props: Props) {
       setTitle(props.initialValues.title);
       setDescription(props.initialValues.description ?? '');
       setOwnerUserId(props.initialValues.ownerUserId ?? null);
+      setOrgUnitId(props.initialValues.orgUnitId ?? null);
+      setAxisId(props.initialValues.axisId ?? null);
     }
     if (!next) {
       setError(null);
@@ -104,6 +115,13 @@ export function CreateObjectiveButton(props: Props) {
         title,
         description: description || null,
         ownerUserId,
+        ...assignmentForUpdate(
+          {
+            orgUnitId: props.initialValues.orgUnitId ?? null,
+            axisId: props.initialValues.axisId ?? null,
+          },
+          { orgUnitId, axisId },
+        ),
       });
     } else {
       result = await createObjectiveAction({
@@ -111,6 +129,7 @@ export function CreateObjectiveButton(props: Props) {
         title,
         description: description || undefined,
         ownerUserId,
+        ...assignmentForCreate({ orgUnitId, axisId }),
       });
     }
 
@@ -126,6 +145,8 @@ export function CreateObjectiveButton(props: Props) {
       setTitle('');
       setDescription('');
       setOwnerUserId(defaultOwnerId);
+      setOrgUnitId(null);
+      setAxisId(null);
     }
     router.refresh();
   }
@@ -171,6 +192,22 @@ export function CreateObjectiveButton(props: Props) {
         <div className="space-y-2">
           <Label htmlFor="obj-owner">Responsable</Label>
           <OwnerSelect orgId={props.orgId} value={ownerUserId} onChange={setOwnerUserId} />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="obj-unit">{LABELS.unit.singular}</Label>
+            <UnitSelect
+              id="obj-unit"
+              orgId={props.orgId}
+              value={orgUnitId}
+              onChange={setOrgUnitId}
+              allowEmpty={!(isEdit && props.initialValues?.orgUnitId)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="obj-axis">{LABELS.axis.singular}</Label>
+            <AxisSelect id="obj-axis" orgId={props.orgId} value={axisId} onChange={setAxisId} />
+          </div>
         </div>
         {error && (
           <div className="bg-red-50 border border-red-200 rounded p-3">

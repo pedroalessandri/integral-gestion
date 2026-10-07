@@ -11,6 +11,8 @@ interface Props {
     title: string;
     description?: string | null;
     ownerUserId?: string | null;
+    orgUnitId?: string | null;
+    axisId?: string | null;
   };
   aiEnabled?: boolean;
   /** When provided, the button is hidden and the caller controls open state externally. */
@@ -46,6 +48,8 @@ export function EditObjectiveButton({
           title: objective.title,
           description: objective.description,
           ownerUserId: objective.ownerUserId,
+          orgUnitId: objective.orgUnitId,
+          axisId: objective.axisId,
         }}
         open={open}
         onOpenChange={setOpen}

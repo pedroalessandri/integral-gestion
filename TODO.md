@@ -33,6 +33,11 @@
 - Por qué: C05 solo hace upsert del plan activo. Decisión de Pedro (2026-10-07) para cuando se agregue: 409 mientras haya ejes con objetivos; hay que definir qué pasa con `axis_id` de los objetivos al cambiar de plan.
 - Origen: pregunta abierta de C05.
 
+### [B] El filtro global de errores descarta `members` del 409 `OrgUnitHasMembers` y el código viaja como prefijo del mensaje
+- Por qué: `HttpExceptionFilter` devuelve solo `{ statusCode, message, error }` con `error` = nombre de la clase (`ConflictException`), así que `shared-types` (`ErrorResponseDto.details`) y la bitácora de C04 prometen un detalle que no llega. El front parsea el código del prefijo del `message` ("Codigo: detalle") y deduce los miembros bloqueantes de la lista de miembros cargada.
+- Posible solución: que el filtro propague el código de dominio en `error` y el resto de las propiedades del response en `details`. Con test.
+- Origen: C06 (2026-10-07).
+
 ## 🔵 Prioridad baja / cuando haya tiempo
 
 ### [R] Convergir CascadeResponse local en (app)/objectives/[id]/page.tsx con ObjectiveCascadeDto

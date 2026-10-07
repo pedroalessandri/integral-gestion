@@ -1,6 +1,8 @@
 'use server';
 
 import { apiFetch } from '@/lib/api-client';
+import { readApiError } from '@/lib/api-errors';
+import { describeApiError } from '@/features/planning/error-messages';
 import type {
   MetricKrLinkDto,
   MetricContextDto,
@@ -49,6 +51,9 @@ export async function createObjectiveAction(input: {
   title: string;
   description?: string;
   ownerUserId?: string | null;
+  /** Unidad ministry | area (RN-P3). */
+  orgUnitId?: string;
+  axisId?: string;
 }): Promise<{ error?: string; objective?: unknown }> {
   try {
     const { orgId, ...body } = input;
@@ -58,8 +63,7 @@ export async function createObjectiveAction(input: {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
+      return { error: describeApiError(await readApiError(res)) };
     }
     return { objective: await res.json() };
   } catch (err) {
@@ -151,6 +155,9 @@ export async function updateObjectiveAction(input: {
   title?: string;
   description?: string | null;
   ownerUserId?: string | null;
+  orgUnitId?: string;
+  /** null quita el eje; omitido lo deja igual. */
+  axisId?: string | null;
 }): Promise<{ error?: string; objective?: unknown }> {
   try {
     const { orgId, objectiveId, ...body } = input;
@@ -160,8 +167,7 @@ export async function updateObjectiveAction(input: {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
+      return { error: describeApiError(await readApiError(res)) };
     }
     return { objective: await res.json() };
   } catch (err) {

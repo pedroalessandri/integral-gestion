@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { setActiveOrgAction } from '@/lib/set-active-org-action';
+import { LABELS } from '@/lib/labels';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ChevronDown, X } from 'lucide-react';
@@ -75,6 +76,7 @@ export function AppShell({ user, me, initialOrgId, aiUsage, children }: AppShell
   const navItems: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/orgs', label: 'Organizaciones', superadminOnly: true },
+    { href: '/plan', label: LABELS.plan.singular, requiresOrg: true },
     { href: '/objectives', label: 'Objetivos', requiresOrg: true },
     { href: '/objectives/executive', label: 'Vista Ejecutiva', requiresOrg: true },
     { href: '/metrics', label: 'Indicadores de gestión', requiresOrg: true, requiresModule: 'indicadores-gestion' },
