@@ -27,15 +27,26 @@
       "Write",
       "Read",
       "Glob",
-      "Grep"
+      "Grep",
+      "Bash(git push -u origin feature/*)",
+      "Bash(git push -u origin chore/*)",
+      "Bash(git push -u origin docs/*)",
+      "Bash(git push -u origin fix/*)",
+      "Bash(gh pr create *)",
+      "Bash(git checkout *)",
+      "Bash(git pull*)"
     ],
     "deny": [
-      "Bash(git push*)",
       "Bash(git reset --hard*)",
       "Bash(rm -rf *)",
       "Bash(sudo *)",
       "Bash(npm publish*)",
-      "Bash(pnpm publish*)"
+      "Bash(pnpm publish*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push origin main*)",
+      "Bash(git push -u origin main*)",
+      "Bash(gh pr merge*)"
     ]
   }
 }

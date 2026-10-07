@@ -1,5 +1,9 @@
 # gestion-publica
 
+## Idioma
+
+Respondé siempre en español rioplatense (voseo): reportes, preguntas, WAITING FOR APPROVAL, bitácora y mensajes de commit. Esto aplica también a todos los subagentes.
+
 ## Descripción
 
 Aplicación web modular para gestión de organizaciones.
@@ -142,6 +146,7 @@ docs: actualizar estructura en CLAUDE.md
 11. **No instalar dependencias pesadas sin justificación** (Moment, Lodash completo, UI kits redundantes con shadcn/ui). Preferir utilidades nativas / date-fns / remeda.
 12. **No crear nuevos archivos .md de docs** a menos que el usuario lo pida. `CLAUDE.md` y `AGENTS.md` son la única doc viva de base.
 13. **No saltar tests ni type-check** antes de marcar una tarea como terminada.
+14. Los agentes pueden pushear ramas de feature y abrir PRs con `gh pr create --base main --fill`. Nunca mergear, nunca pushear a main y nunca usar --force.
 
 ## Notas de dominio OKR (resumen — detalle completo en AGENTS.md)
 
