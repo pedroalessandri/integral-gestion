@@ -77,7 +77,7 @@ Convenciones vigentes que se mantienen: Decimal para valores, basis points para 
 ## 4. Reglas de negocio (RN-P)
 
 ### Estructura
-- **RN-P1**: Toda org con la metodología activa tiene exactamente una `OrgUnit` raíz de tipo `central`. Se crea automáticamente al habilitar el módulo.
+- **RN-P1**: Toda org tiene exactamente una `OrgUnit` raíz de tipo `central`, sin importar qué módulos tenga habilitados. Se crea automáticamente (de forma idempotente) al crear la organización, y la migración la crea para las organizaciones existentes (backfill).
 - **RN-P2**: Un `StrategicPlan` activo por org. Los ejes pertenecen a un plan. Un objetivo puede tener 0 o 1 eje.
 - **RN-P3**: Todo `Objective` pertenece a exactamente un `Period` y una `OrgUnit` de tipo `ministry` o `area`. Se mantiene la regla de período único. El `Period` es configurable por org (ADR-0009 D7): no impone duración (anual, semestral, cuatrimestral, plurianual) y su label es libre. Sus fechas se pueden editar; si el rango nuevo deja afuera proyectos, tareas o cargas, se rechaza con 422 y la lista de entidades afectadas, y si se acepta se recalculan los buckets. Los períodos existentes no se migran.
 - **RN-P4**: Un `Project` pertenece a un objetivo. Hereda la unidad del objetivo por defecto, pero puede ser una sub-unidad de esa unidad. Sus fechas deben caer dentro del período del objetivo.

@@ -45,3 +45,9 @@
 - **Posible solución**: borrar el mock sin usar (o prefijarlo con `_`) y quitar el `eslint-disable` sobrante. Corrida trivial.
 - **Prioridad**: baja. No afecta typecheck, tests ni build (todos verdes).
 
+
+### Puerto ORG_UNIT_OBJECTIVE_COUNTER con implementación stub (C04 -> C05)
+- **Qué**: `PendingObjectiveOrgUnitCounter` (`apps/api/src/modules/okr/okr-contracts.module.ts`) devuelve siempre 0 porque `okr.objective.org_unit_id` llega recién con C05. Hasta entonces el borrado de una `OrgUnit` no verifica objetivos asignados.
+- **Por qué importa**: al mergear C05 sin reemplazar el stub, se podrían borrar unidades con objetivos.
+- **Posible solución**: en C05 reemplazar por un `count` real sobre `PrismaService` (objetivos vivos con `orgUnitId`), con test.
+- **Prioridad**: alta dentro de la F2 (cerrar en C05).

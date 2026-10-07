@@ -151,6 +151,36 @@ type UserOrganizationRoleRemovedEvent = BaseEvent<
   { before: { roleId: string }; after: null }
 >;
 
+type UserOrganizationRoleScopeChangedEvent = BaseEvent<
+  'user_organization_role.scope_changed',
+  'core.user_organization_role',
+  { before: { orgUnitId: string | null }; after: { orgUnitId: string | null } }
+>;
+
+type OrgUnitSnapshot = {
+  kind: 'central' | 'ministry' | 'area';
+  name: string;
+  parentId: string | null;
+  vision?: string | null;
+  mission?: string | null;
+  order: number;
+  source?: string;
+};
+
+type OrgUnitCreatedEvent = BaseEvent<'org_unit.created', 'core.org_unit', { before: null; after: OrgUnitSnapshot }>;
+
+type OrgUnitUpdatedEvent = BaseEvent<
+  'org_unit.updated',
+  'core.org_unit',
+  { before: OrgUnitSnapshot; after: OrgUnitSnapshot }
+>;
+
+type OrgUnitDeletedEvent = BaseEvent<
+  'org_unit.deleted',
+  'core.org_unit',
+  { before: OrgUnitSnapshot; after: { deletedAt: string } }
+>;
+
 type OrganizationModuleEnabledEvent = BaseEvent<
   'organization_module.enabled',
   'core.organization_module',
@@ -460,6 +490,11 @@ export type DomainEvent =
   | UserOrganizationRoleAssignedEvent
   | UserOrganizationRoleChangedEvent
   | UserOrganizationRoleRemovedEvent
+  | UserOrganizationRoleScopeChangedEvent
+  // Core — org_unit (3)
+  | OrgUnitCreatedEvent
+  | OrgUnitUpdatedEvent
+  | OrgUnitDeletedEvent
   // Core — organization_module (2)
   | OrganizationModuleEnabledEvent
   | OrganizationModuleDisabledEvent

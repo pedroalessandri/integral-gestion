@@ -11,6 +11,7 @@ import type {
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/audit-event-emitter.service.js';
+import { OrgUnitService } from './org-unit.service.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 export interface FirstPeriodInput {
   code: string;
@@ -59,6 +60,7 @@ export class OrganizationService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
+    private readonly orgUnitService: OrgUnitService,
   ) {}
 
   /**
@@ -132,6 +134,9 @@ export class OrganizationService {
               },
             },
           });
+
+          // RN-P1: toda organización tiene su raíz central desde el alta (idempotente).
+          await this.orgUnitService.ensureCentralRoot(tx, org.id);
 
           return { org, period };
         }),

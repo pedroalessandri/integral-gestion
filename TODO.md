@@ -21,6 +21,11 @@ _(sin ítems de prioridad alta pendientes)_
 - Posible solución: controlar el state del DropdownMenu desde el padre y forzar `setMenuOpen(false)` en el `onSelect` antes de abrir el Dialog. Patrón típico de shadcn cuando un MenuItem dispara un Dialog.
 - Estimado: corrida chica (~15-20 min).
 
+### [F] Elegir unidad al invitar + decidir alcance por defecto (hoy null = toda la org) — resolver en F8/C19
+- Por qué: `inviteByEmail` no acepta `orgUnitId`; el alcance se setea después con `PATCH orgs/:orgId/members/:userId/scope`. Hoy un miembro invitado queda con alcance `null` (toda la org, RN-P19) hasta que alguien lo cambie.
+- Origen: pregunta abierta de C04 (2026-10-07), Pedro: "alcanza por ahora".
+- Resolver en: plan.md F8/C19.
+
 ## 🔵 Prioridad baja / cuando haya tiempo
 
 ### [R] Convergir CascadeResponse local en (app)/objectives/[id]/page.tsx con ObjectiveCascadeDto
@@ -37,6 +42,10 @@ _(sin ítems de prioridad alta pendientes)_
 ### [F] Permitir borrar/desasignar owner desde el detalle del objetivo sin pasar por edit completo
 - Por qué: hoy para cambiar owner abrís el dialog de "Editar objetivo" entero. Sería más rápido un click directo.
 - Estimado: corrida chica (~15 min).
+
+### [B] Excluir usuarios de sistema (auth0_sub LIKE 'system:%') de los listados globales de usuarios del superadmin
+- Por qué: la migración de C04 inserta en `core.user` el usuario de sistema `system:migration` (actor de los eventos de backfill, ADR-0009 D6). Si no se filtra, aparece en los listados globales del superadmin.
+- Origen: C04 (2026-10-07), aprobado por Pedro.
 
 ## ✅ Recientemente completados (últimos 30 días)
 

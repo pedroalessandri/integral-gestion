@@ -90,4 +90,10 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
    * Visual-only association of a Metric to an Objective, scoped per org.
    */
   'MetricObjectiveContext',
+
+  /**
+   * `core.org_unit` — per ADR-0009 / SPEC planificación de gobierno §3.1.
+   * Árbol de unidades de gobierno, una raíz central por organización.
+   */
+  'OrgUnit',
 ]);

@@ -17,6 +17,7 @@ import { AssignMemberDto } from '../dto/assign-member.dto.js';
 import { UpdateMemberDto } from '../dto/update-member.dto.js';
 import { InviteMemberDto } from '../dto/invite-member.dto.js';
 import { ChangeMemberRoleDto } from '../dto/change-member-role.dto.js';
+import { SetMemberScopeBodyDto } from '../dto/set-member-scope.dto.js';
 import { ListMembersQueryDto } from '../dto/list-members-query.dto.js';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
@@ -34,6 +35,7 @@ import type { AuthContext } from '@gestion-publica/shared-types/auth';
  *   GET    /api/v1/orgs/:orgId/members              — list members
  *   POST   /api/v1/orgs/:orgId/members/invite        — invite by email (upsert user)
  *   PATCH  /api/v1/orgs/:orgId/members/:userId/role  — change role of existing member
+ *   PATCH  /api/v1/orgs/:orgId/members/:userId/scope — set unit scope (null = whole org)
  *   POST   /api/v1/orgs/:orgId/members               — legacy assign (user must exist)
  *   PATCH  /api/v1/orgs/:orgId/members/:userId       — legacy update by roleId
  *   DELETE /api/v1/orgs/:orgId/members/:userId       — remove member
@@ -96,6 +98,22 @@ export class MemberController {
     @CurrentUser() user: AuthContext,
   ) {
     return this.memberService.changeRole(user, orgId, userId, body.roleKey);
+  }
+
+  /**
+   * PATCH /api/v1/orgs/:orgId/members/:userId/scope
+   * Sets the member's write scope: an OrgUnit id or null (whole org / central, RN-P19).
+   */
+  @Patch(':userId/scope')
+  @Permissions('core:org-unit:manage')
+  async setScope(
+    @Param('orgId') orgId: string,
+    @Param('userId') userId: string,
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    body: SetMemberScopeBodyDto,
+    @CurrentUser() user: AuthContext,
+  ) {
+    return this.memberService.setScope(user, orgId, userId, body.orgUnitId);
   }
 
   /**

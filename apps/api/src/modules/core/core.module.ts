@@ -8,12 +8,14 @@ import { ModuleEnablementService } from './services/module-enablement.service.js
 import { MeService } from './services/me.service.js';
 import { UserSyncService } from './services/user-sync.service.js';
 import { MemberService } from './services/member.service.js';
+import { OrgUnitService } from './services/org-unit.service.js';
 import { OrganizationContextService } from './services/organization-context.service.js';
 import { OrganizationController } from './controllers/organization.controller.js';
 import { PeriodController } from './controllers/period.controller.js';
 import { MemberController } from './controllers/member.controller.js';
 import { OrganizationModuleController } from './controllers/organization-module.controller.js';
 import { MeController } from './controllers/me.controller.js';
+import { OrgUnitController } from './controllers/org-unit.controller.js';
 import { ModuleController } from './controllers/module.controller.js';
 
 /**
@@ -27,6 +29,7 @@ import { ModuleController } from './controllers/module.controller.js';
  *  - MeService (cross-org user profile)
  *  - UserSyncService (JWT upsert + D5 bootstrap superadmin)
  *  - MemberService (UserOrganizationRole CRUD)
+ *  - OrgUnitService (árbol de unidades de gobierno, ADR-0009)
  *  - OrganizationContextService (ALS-based tenant context reader)
  *
  * Exports the services consumed by other modules (e.g., OKR via PeriodService).
@@ -43,6 +46,7 @@ import { ModuleController } from './controllers/module.controller.js';
     MeService,
     UserSyncService,
     MemberService,
+    OrgUnitService,
     OrganizationContextService,
   ],
   controllers: [
@@ -52,11 +56,13 @@ import { ModuleController } from './controllers/module.controller.js';
     OrganizationModuleController,
     MeController,
     ModuleController,
+    OrgUnitController,
   ],
   exports: [
     OrganizationContextService,
     PeriodService,
     MemberService,
+    OrgUnitService,
     ModuleEnablementService,
     UserSyncService,
   ],

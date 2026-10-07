@@ -336,6 +336,65 @@ export class MemberService {
   }
 
   /**
+   * Sets the write scope of a member (RN-P19/P20): an OrgUnit id, or null for the whole org
+   * (central unit). The unit must be live and belong to the same organization.
+   *
+   * Throws:
+   *  - 404 NotMember — user is not a member of this org.
+   *  - 404 — unit not found in this org (or soft-deleted).
+   */
+  async setScope(
+    authContext: AuthContext,
+    organizationId: string,
+    userId: string,
+    orgUnitId: string | null,
+  ): Promise<MemberDto & { changed: boolean }> {
+    const existing = await this.prismaService.raw.userOrganizationRole.findUnique({
+      where: { userId_organizationId: { userId, organizationId } },
+      include: { user: true, role: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`NotMember: User "${userId}" is not a member of this organization.`);
+    }
+
+    if (orgUnitId !== null) {
+      const unit = await this.prismaService.raw.orgUnit.findFirst({
+        where: { id: orgUnitId, organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!unit) {
+        throw new NotFoundException(`OrgUnit "${orgUnitId}" not found in this organization.`);
+      }
+    }
+
+    if (existing.orgUnitId === orgUnitId) {
+      return { ...this.toMemberDto(existing, existing.user, existing.role), changed: false };
+    }
+
+    return tenantContextStorage.run(authContext, () =>
+      this.prismaService.runInTransaction(async (tx) => {
+        const updated = await tx.userOrganizationRole.update({
+          where: { userId_organizationId: { userId, organizationId } },
+          data: { orgUnitId },
+          include: { user: true, role: true },
+        });
+
+        await this.auditEmitter.emit({
+          action: 'user_organization_role.scope_changed',
+          entityType: 'core.user_organization_role',
+          entityId: `${userId}:${organizationId}`,
+          diff: {
+            before: { orgUnitId: existing.orgUnitId },
+            after: { orgUnitId },
+          },
+        });
+
+        return { ...this.toMemberDto(updated, updated.user, updated.role), changed: true };
+      }),
+    );
+  }
+
+  /**
    * Returns true iff the given user has a UserOrganizationRole row for this organization.
    * Superadmins are NOT implicitly members — caller must check explicitly.
    */
@@ -402,7 +461,7 @@ export class MemberService {
   }
 
   private toMemberDto(
-    membership: { assignedAt: Date },
+    membership: { assignedAt: Date; orgUnitId?: string | null },
     user: { id: string; email: string; displayName: string; auth0Sub: string },
     role: { id: string; key: string; name: string },
   ): MemberDto {
@@ -417,6 +476,7 @@ export class MemberService {
       },
       assignedAt: membership.assignedAt.toISOString(),
       isPending: user.auth0Sub.startsWith('pending:'),
+      orgUnitId: membership.orgUnitId ?? null,
     };
   }
 }

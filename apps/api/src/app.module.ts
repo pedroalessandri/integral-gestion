@@ -11,7 +11,7 @@ import { AuthGuard } from './modules/auth/guards/auth.guard.js';
 import { AuditModule } from './modules/audit/index.js';
 import { AuthModule } from './modules/auth/index.js';
 import { CoreModule } from './modules/core/index.js';
-import { OkrModule } from './modules/okr/index.js';
+import { OkrModule, OkrContractsModule } from './modules/okr/index.js';
 import { HealthModule } from './modules/health/index.js';
 import { AiModule } from './modules/ai/index.js';
 import { MetricsModule } from './modules/metrics/index.js';
@@ -55,6 +55,7 @@ import { MetricsModule } from './modules/metrics/index.js';
     AuthModule,
     CoreModule,
     OkrModule,
+    OkrContractsModule,
     HealthModule,
     AiModule,
     MetricsModule,
