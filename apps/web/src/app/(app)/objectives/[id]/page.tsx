@@ -16,7 +16,15 @@ import { KrAutomaticProgress } from '@/components/objectives/kr-automatic-progre
 import { ObjectiveContextMetrics } from '@/components/objectives/objective-context-metrics';
 import { ProgressRing } from '@/components/progress-ring';
 import { EmptyState } from '@/components/empty-state';
-import type { TaskStatus, ProgressStatus, OwnerSummaryDto } from '@gestion-publica/shared-types/okr';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  ExecutionProgressBar,
+  ObjectiveProjectsPanel,
+  listProjectsAction,
+  listProjectTasksAction,
+} from '@/features/projects';
+import { LABELS } from '@/lib/labels';
+import type { TaskStatus, TaskSummaryDto, ProgressStatus, OwnerSummaryDto } from '@gestion-publica/shared-types/okr';
 import type {
   MetricKrLinkDto,
   MetricContextDto,
@@ -30,6 +38,8 @@ interface CascadeResponse {
     title: string;
     description?: string | null;
     progressCachedBp: number;
+    /** Avance de gestión (desde proyectos). Nunca se combina con el de resultado. */
+    executionProgressCachedBp?: number;
     status: ProgressStatus;
     createdAt: string;
     /** Assigned owner — null when unassigned. */
@@ -153,6 +163,25 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
     }
   }
 
+  // Proyectos (N5) y sus tareas: alimentan la pestaña Proyectos, el Gantt y la barra de gestión.
+  const projectsResult = await listProjectsAction(orgId, id);
+  const projects = projectsResult.ok ? projectsResult.data : [];
+  const tasksByProject: Record<string, TaskSummaryDto[]> = {};
+  let projectsLoadError = projectsResult.ok ? null : projectsResult.error;
+  if (projectsResult.ok) {
+    const taskResults = await Promise.all(projects.map((p) => listProjectTasksAction(orgId, p.id)));
+    taskResults.forEach((r, i) => {
+      const project = projects[i];
+      if (!project) return;
+      if (r.ok) tasksByProject[project.id] = r.data;
+      else projectsLoadError = r.error;
+    });
+  }
+  if (!projectsLoadError && (!periodStartsAt || !periodEndsAt)) {
+    projectsLoadError = 'No pudimos obtener las fechas del período del objetivo. Recargá la página.';
+  }
+  const defaultTab = keyResults.length === 0 && projects.length > 0 ? 'projects' : 'key-results';
+
   const unitByMetricId = new Map<string, MetricUnit>(periodMetrics.map((m) => [m.id, m.unit]));
 
   return (
@@ -197,6 +226,11 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
               </p>
             )}
             <ObjectiveDateRange startsAt={objective.startsAt} endsAt={objective.endsAt} />
+            <ExecutionProgressBar
+              className="max-w-sm pt-2"
+              valueBp={objective.executionProgressCachedBp ?? 0}
+              projectCount={projects.length}
+            />
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <ObjectiveHeaderActions
@@ -213,86 +247,117 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
               isReadOnly={isReadOnly}
               aiEnabled={aiStatus.enabled}
             />
-            <ProgressRing valueBp={objective.progressCachedBp} size={72} />
+            <div className="flex flex-col items-center gap-0.5">
+              <ProgressRing valueBp={objective.progressCachedBp} size={72} />
+              <span className="text-[10px] text-neutral-500">{LABELS.keyResultsShort}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Key Results card */}
-      <div
-        className="rounded-xl p-6 space-y-4"
-        style={{
-          backgroundColor: 'white',
-          border: '1px solid var(--color-neutral-200)',
-          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.05)',
-        }}
-      >
-        <div className="flex items-center justify-between">
-          <h2
-            className="text-base font-semibold"
-            style={{ color: 'var(--color-neutral-900)' }}
-          >
-            Resultados Clave
-          </h2>
-          {!isReadOnly && (
-            <KrSectionMenu
-              orgId={orgId}
-              objectiveId={objective.id}
-              objectiveTitle={objective.title}
-              keyResults={keyResults.map((kr) => ({
-                id: kr.id,
-                title: kr.title,
-                weightBp: kr.weightBp,
-              }))}
-              aiEnabled={aiStatus.enabled}
-              indicadoresOkrEnabled={indicadoresOkrEnabled}
-              periodId={periodId}
-            />
-          )}
-        </div>
+      <Tabs defaultValue={defaultTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="key-results">Resultados Clave</TabsTrigger>
+          <TabsTrigger value="projects">
+            {LABELS.project.plural}
+            {projects.length > 0 && ` (${projects.length})`}
+          </TabsTrigger>
+        </TabsList>
 
-        {keyResults.length === 0 ? (
-          <EmptyState
-            icon={ListChecks}
-            title="Este objetivo todavía no tiene Resultados Clave"
-            description="Los Resultados Clave definen cómo vas a medir el logro del objetivo."
-            action={
-              !isReadOnly ? (
-                <CreateKrButton
-                  orgId={orgId}
-                  objectiveId={objective.id}
-                  objectiveContext={objective.title}
-                  aiEnabled={aiStatus.enabled}
-                  indicadoresOkrEnabled={indicadoresOkrEnabled}
-                  periodId={periodId}
-                />
-              ) : undefined
-            }
-          />
-        ) : (
-          <div className="space-y-4">
-            {keyResults.map((kr) => (
-              <KrCard
-                key={kr.id}
-                kr={kr}
+        <TabsContent value="key-results" className="mt-0">
+      {/* Key Results card */}
+        <div
+          className="rounded-xl p-6 space-y-4"
+          style={{
+            backgroundColor: 'white',
+            border: '1px solid var(--color-neutral-200)',
+            boxShadow: '0 1px 3px 0 rgba(0,0,0,0.05)',
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <h2
+              className="text-base font-semibold"
+              style={{ color: 'var(--color-neutral-900)' }}
+            >
+              Resultados Clave
+            </h2>
+            {!isReadOnly && (
+              <KrSectionMenu
                 orgId={orgId}
                 objectiveId={objective.id}
-                isReadOnly={isReadOnly}
+                objectiveTitle={objective.title}
+                keyResults={keyResults.map((kr) => ({
+                  id: kr.id,
+                  title: kr.title,
+                  weightBp: kr.weightBp,
+                }))}
                 aiEnabled={aiStatus.enabled}
-                periodStartsAt={periodStartsAt}
-                periodEndsAt={periodEndsAt}
                 indicadoresOkrEnabled={indicadoresOkrEnabled}
                 periodId={periodId}
-                unit={kr.metricLink ? unitByMetricId.get(kr.metricLink.metricId) : undefined}
               />
-            ))}
-            <WeightSumBanner keyResults={keyResults} />
-            {(imbalancedKrCount ?? 0) > 0 && (
-              <TasksImbalanceBanner count={imbalancedKrCount ?? 0} />
             )}
           </div>
-        )}
-      </div>
+  
+          {keyResults.length === 0 ? (
+            <EmptyState
+              icon={ListChecks}
+              title="Este objetivo todavía no tiene Resultados Clave"
+              description="Los Resultados Clave definen cómo vas a medir el logro del objetivo."
+              action={
+                !isReadOnly ? (
+                  <CreateKrButton
+                    orgId={orgId}
+                    objectiveId={objective.id}
+                    objectiveContext={objective.title}
+                    aiEnabled={aiStatus.enabled}
+                    indicadoresOkrEnabled={indicadoresOkrEnabled}
+                    periodId={periodId}
+                  />
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="space-y-4">
+              {keyResults.map((kr) => (
+                <KrCard
+                  key={kr.id}
+                  kr={kr}
+                  orgId={orgId}
+                  objectiveId={objective.id}
+                  isReadOnly={isReadOnly}
+                  aiEnabled={aiStatus.enabled}
+                  periodStartsAt={periodStartsAt}
+                  periodEndsAt={periodEndsAt}
+                  indicadoresOkrEnabled={indicadoresOkrEnabled}
+                  periodId={periodId}
+                  unit={kr.metricLink ? unitByMetricId.get(kr.metricLink.metricId) : undefined}
+                />
+              ))}
+              <WeightSumBanner keyResults={keyResults} />
+              {(imbalancedKrCount ?? 0) > 0 && (
+                <TasksImbalanceBanner count={imbalancedKrCount ?? 0} />
+              )}
+            </div>
+          )}
+        </div>
+        </TabsContent>
+
+        <TabsContent value="projects" className="mt-0">
+          <ObjectiveProjectsPanel
+            orgId={orgId}
+            objective={{
+              id: objective.id,
+              orgUnitId: objective.orgUnitId ?? null,
+              periodStartsAt: periodStartsAt ?? '',
+              periodEndsAt: periodEndsAt ?? '',
+            }}
+            projects={projects}
+            tasksByProject={tasksByProject}
+            readOnly={isReadOnly}
+            loadError={projectsLoadError}
+          />
+        </TabsContent>
+      </Tabs>
 
       {indicadoresOkrEnabled && (
         <ObjectiveContextMetrics

@@ -8,6 +8,11 @@
 
 ## 🟡 Prioridad media — próximas semanas
 
+### [F] Edición completa de tareas de proyecto: falta `GET okr/tasks/:id` o ampliar `TaskSummaryDto`
+- Por qué: la lista `GET okr/projects/:id/tasks` devuelve `TaskSummaryDto` (sin `description` ni `ownerUserId`) y no existe `GET tasks/:id`. La ficha de proyecto (C09) solo permite editar título y fechas de una tarea; descripción y responsable se fijan al crearla.
+- Posible solución: sumar `description` y `ownerUserId` al resumen de tareas de proyecto, o exponer `GET okr/tasks/:id`.
+- Origen: C09 (2026-10-07).
+
 ### [B] Loading state del dropdown de responsable
 - Por qué: en el dialog de crear/editar Objective, KR y Task, el campo "Responsable" aparece vacío durante ~1 segundo mientras se hace el fetch del listado de members, y después aparece el nombre. Visualmente queda como si el campo no estuviera asignado.
 - Posible solución: mostrar un skeleton o disabled+spinner hasta que el fetch resuelva. El estado `loading` ya está en OwnerSelect, solo falta usarlo visualmente.
