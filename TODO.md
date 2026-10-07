@@ -6,7 +6,10 @@
 
 ## 🔥 Prioridad alta — próxima sesión
 
-_(sin ítems de prioridad alta pendientes)_
+### [B] Los controllers de C04 no validan que el `:orgId` del path coincida con el tenant del request
+- Por qué: `OrgUnitController` y `MemberController` (`orgs/:orgId/...`) pasan el `orgId` del path directo al service. `TenantGuard` solo verifica membresía y permisos contra el header `X-Organization-Id`, así que un org-admin de la org A podría operar sobre la org B mandando header A y path B. `MetricController` ya lo resuelve con `assertOrgParam`; el controller de planning de C05 también.
+- Posible solución: aplicar el mismo chequeo (`TenantMismatch` 403) en esos controllers, o moverlo a un guard/decorator reutilizable. Con test.
+- Origen: C05 (2026-10-07). Pedro lo subió a prioridad alta el 2026-10-07 (aislamiento multi-tenant); resolver antes del merge de la Fase 2.
 
 ## 🟡 Prioridad media — próximas semanas
 
@@ -25,11 +28,6 @@ _(sin ítems de prioridad alta pendientes)_
 - Por qué: `inviteByEmail` no acepta `orgUnitId`; el alcance se setea después con `PATCH orgs/:orgId/members/:userId/scope`. Hoy un miembro invitado queda con alcance `null` (toda la org, RN-P19) hasta que alguien lo cambie.
 - Origen: pregunta abierta de C04 (2026-10-07), Pedro: "alcanza por ahora".
 - Resolver en: plan.md F8/C19.
-
-### [B] Los controllers de C04 no validan que el `:orgId` del path coincida con el tenant del request
-- Por qué: `OrgUnitController` y `MemberController` (`orgs/:orgId/...`) pasan el `orgId` del path directo al service. `TenantGuard` solo verifica membresía y permisos contra el header `X-Organization-Id`, así que un org-admin de la org A podría operar sobre la org B mandando header A y path B. `MetricController` ya lo resuelve con `assertOrgParam`; el controller de planning de C05 también.
-- Posible solución: aplicar el mismo chequeo (`TenantMismatch` 403) en esos controllers, o moverlo a un guard/decorator reutilizable. Con test.
-- Origen: C05 (2026-10-07). Sugiero subirlo a prioridad alta (es un tema de aislamiento multi-tenant); lo dejo en media por la regla de no cambiar prioridades sin tu OK.
 
 ### [F] Archivar o cambiar el plan activo (hoy no hay endpoint)
 - Por qué: C05 solo hace upsert del plan activo. Decisión de Pedro (2026-10-07) para cuando se agregue: 409 mientras haya ejes con objetivos; hay que definir qué pasa con `axis_id` de los objetivos al cambiar de plan.
