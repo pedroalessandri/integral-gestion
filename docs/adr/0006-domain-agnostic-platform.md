@@ -2,6 +2,7 @@
 
 **Status**: Aceptada
 **Supersedes**: none. **Superseded by**: none.
+Amended by: 0009
 **Date**: 2026-04-27
 **Author**: architect subagent
 **Spec**: N/A — derivada de decisión explícita del product owner (Pedro) de desacoplar la plataforma del sector público como vertical exclusivo.
