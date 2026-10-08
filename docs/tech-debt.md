@@ -46,6 +46,12 @@
 
 ## Infra
 
+### Sin CI que corra `next build` antes del merge
+- **Qué**: no hay workflows en `.github/workflows/`. Las corridas verifican con `tsc --noEmit` y lint, que no detectan errores propios del build de Next (p. ej. exports no `async` en archivos `'use server'`).
+- **Por qué importa**: el merge del PR #12 rompió el deploy de producción en Vercel (`Server Actions must be async functions` en `features/projects/project-actions.ts`) y producción quedó en el deploy anterior sin que se notara.
+- **Posible solución**: workflow de GitHub Actions en PRs con `pnpm install`, `pnpm typecheck`, `pnpm lint` y `pnpm --filter web build`; mientras tanto, sumar `pnpm --filter web build` a las verificaciones de las corridas de frontend.
+- **Prioridad**: alta.
+
 ### Custom domain del backend (apigestion.pialab.dev)
 - **Qué**: el frontend se sirve en `gestion.pialab.dev` (custom domain), pero el backend sigue en `gestion-publicaapi-production.up.railway.app`.
 - **Por qué importa**: documentado en ADR-0007 D3 como "decided, pending implementation". Mejora portabilidad y branding.
