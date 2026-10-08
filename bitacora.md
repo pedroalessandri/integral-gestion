@@ -31,6 +31,8 @@ Formato:
 - Preguntas abiertas (respondidas por Pedro el 2026-10-08):
   - ✅ Al pasar el tipo de Producto a Resultado, el vínculo `execution_feeds_indicator` vuelve a `independent` y la curva `from_projects` vuelve a `linear` (también si se quita el vínculo). Aplicado en un commit aparte (`reconcileLinkAndCurve` en `indicator-form.ts`, 3 tests; web 80 tests).
   - ✅ OK a `sourceProjectTitle` en `MetricEntryDto` como ítem de TODO.md.
+- Seed demo (pedido de Pedro, commit aparte): el indicador "Kilómetros de ciclovía habilitados" usa `execution_feeds_indicator` + curva `from_projects`, con aportes pendientes de "Ciclovía de la Av. Costanera" (8 km) y "Bicisendas escolares" (4 km); la suma (12) no llega a la meta (20), así se ve el aviso. Probado en DB descartable `gp_seed` (migrada, seed corrido dos veces, ya borrada).
+- Smoke de Pedro: **postergado** (2026-10-08). Pasos: en "Ciclovía de la Av. Costanera" subir "Obra civil y señalización" al 100 % → aporte Aplicado y carga "Automática" +8 en el indicador; bajarla → "Compensación" −8. Requiere volver a correr el seed en la DB que se use.
 
 ## 2026-10-08 · C17 · backend-dev · feature/plan-f7-aportes
 - Hecho:

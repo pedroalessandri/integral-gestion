@@ -16,6 +16,7 @@
 - Por qué: el seed de C13 solo usa lo que existe hoy. La SPEC §6 punto 4 pide un indicador `output` con aportes de proyectos y curva `from_projects`. La curva manual ya está (C15: el `outcome` semestral "Viajes diarios en bicicleta" usa `IndicatorTargetPoint`); falta `ProjectContribution` y `from_projects` (C17), y un proyecto `from_indicator`.
 - Posible solución: extender `apps/api/src/database/seed-demo.ts` en la corrida C17.
 - Origen: C13 (2026-10-08). Actualizado en C15 (2026-10-08): la curva manual quedó hecha.
+- Actualización (C18, 2026-10-08): hecho en `feature/plan-f7-aportes` el indicador "Kilómetros de ciclovía habilitados" con `execution_feeds_indicator` + curva `from_projects` y aportes pendientes de "Ciclovía de la Av. Costanera" (8) y "Bicisendas escolares" (4), que no alcanzan la meta (20). Falta el proyecto `from_indicator` (depende de habilitarlo en `ProjectService`).
 
 ### [F] Habilitar la curva `from_projects` (RN-P17) cuando existan los aportes
 - Por qué: C15 rechaza `expectedCurveMode = 'from_projects'` con 422 `ExpectedCurveModeNotAvailable`, porque la curva escalonada necesita `ProjectContribution` (C17) y sin pasos queda plana en la base. `IndicatorStatusService` ya tiene la rama (`steps: []`).
