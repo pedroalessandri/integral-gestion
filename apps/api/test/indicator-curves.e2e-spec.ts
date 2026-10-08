@@ -47,9 +47,9 @@ async function bootstrapOrg(suffix: string) {
     });
   const orgId = orgRes.body.organization.id as string;
   const periodId = orgRes.body.period.id as string;
-  const periodRes = await request(httpServer).get(`/api/v1/periods/${periodId}`).set(SUPER);
+  const periodRes = await request(httpServer).get(`/api/v1/periods/${periodId}`).set(orgHeaders(orgId));
   if (periodRes.body.status === 'future') {
-    await request(httpServer).post(`/api/v1/periods/${periodId}/open`).set(SUPER);
+    await request(httpServer).post(`/api/v1/periods/${periodId}/open`).set(orgHeaders(orgId));
   }
   const enabled = await request(httpServer).post(`/api/v1/orgs/${orgId}/modules/indicadores-gestion/enable`).set(orgHeaders(orgId));
   expect([200, 201], JSON.stringify(enabled.body)).toContain(enabled.status);

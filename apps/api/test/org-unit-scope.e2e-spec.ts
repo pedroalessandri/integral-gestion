@@ -55,8 +55,8 @@ async function bootstrapOrg(suffix: string) {
   expect(orgRes.status, JSON.stringify(orgRes.body)).toBe(201);
   const orgId = orgRes.body.organization.id as string;
   const periodId = orgRes.body.period.id as string;
-  const periodRes = await request(httpServer).get(`/api/v1/periods/${periodId}`).set(SUPER);
-  if (periodRes.body.status === 'future') await request(httpServer).post(`/api/v1/periods/${periodId}/open`).set(SUPER);
+  const periodRes = await request(httpServer).get(`/api/v1/periods/${periodId}`).set(orgHeaders(orgId));
+  if (periodRes.body.status === 'future') await request(httpServer).post(`/api/v1/periods/${periodId}/open`).set(orgHeaders(orgId));
   const enabled = await request(httpServer).post(`/api/v1/orgs/${orgId}/modules/indicadores-gestion/enable`).set(orgHeaders(orgId));
   expect([200, 201], JSON.stringify(enabled.body)).toContain(enabled.status);
   const member = await request(httpServer)
@@ -119,7 +119,7 @@ const metricBody = { name: 'Km', unit: 'number', frequency: 'monthly', kind: 'ou
 describe.skipIf(!process.env['DATABASE_URL'])('C19 — alcance por unidad', () => {
   it('matriz rol x alcance: escritura solo en la unidad propia y descendientes; lectura de toda la org', async () => {
     const { orgId, periodId, centralId } = await bootstrapOrg('matrix');
-    const firstBucket = (await request(httpServer).get(`/api/v1/periods/${periodId}`).set(SUPER)).body.startsAt as string;
+    const firstBucket = (await request(httpServer).get(`/api/v1/periods/${periodId}`).set(orgHeaders(orgId))).body.startsAt as string;
 
     // Árbol: central -> M (ministry) -> A (area) -> A1 (area); M -> B (area).
     const m = await createUnit(orgId, centralId, 'ministry', 'Ministerio M');

@@ -159,6 +159,10 @@ export class ObjectiveIndicatorService {
           `IndicatorPeriodMismatch: la métrica "${existingMetric.name}" y el objetivo deben pertenecer al mismo período (ADR-0009).`,
         );
       }
+      // C20b #2: vincular aporta el objetivo al conjunto de quienes miden la métrica y cambia quién puede cargarla.
+      // Además de la unidad del objetivo, el actor debe poder escribir la métrica hoy (central si no tiene
+      // objetivos vivos; todas las unidades que la miden si los tiene).
+      await this.metricService.assertCanWriteMetric(existingMetric.id, orgId, authContext);
       await this.assertPairAvailable(objectiveId, existingMetric.id, orgId);
     }
 

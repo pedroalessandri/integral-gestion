@@ -43,6 +43,12 @@ const mockPrismaService = {
   runInTransaction: vi.fn().mockImplementation((fn: (tx: any) => Promise<any>) => fn(mockTx)),
 };
 
+const mockScope = {
+  assertCentralScope: vi.fn().mockResolvedValue(undefined),
+  assertCanWriteInUnit: vi.fn(),
+  assertCanWriteInAllUnits: vi.fn(),
+};
+
 const mockAuditEmitter = { emit: vi.fn().mockResolvedValue(undefined) };
 
 const basePeriod = {
@@ -65,7 +71,7 @@ const mockAuthContext: AuthContext = {
   email: 'test@example.com',
   displayName: 'Test User',
   isSuperadmin: true,
-  organizationId: null,
+  organizationId: 'org-1',
   permissions: [],
   requestId: 'req-test',
 };
@@ -87,10 +93,11 @@ describe('PeriodService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockScope.assertCentralScope.mockResolvedValue(undefined);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockPrismaService.runInTransaction.mockImplementation((fn: (tx: any) => Promise<any>) => fn(mockTx));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new PeriodService(mockPrismaService as any, mockAuditEmitter as any);
+    service = new PeriodService(mockPrismaService as any, mockAuditEmitter as any, mockScope as any);
   });
 
   describe('getCurrentOpenPeriod', () => {
@@ -140,12 +147,12 @@ describe('PeriodService', () => {
 
   describe('openPeriod', () => {
     it('throws NotFoundException if period not found', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue(null);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(null);
       await expect(service.openPeriod('missing-id', mockAuthContext)).rejects.toThrow(NotFoundException);
     });
 
     it('throws NotFoundException for soft-deleted period', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue({
+      mockPrismaRaw.period.findFirst.mockResolvedValue({
         ...basePeriod,
         status: 'future',
         deletedAt: new Date(),
@@ -154,12 +161,12 @@ describe('PeriodService', () => {
     });
 
     it('throws UnprocessableEntityException if period is not future', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue({ ...basePeriod, status: 'open' });
+      mockPrismaRaw.period.findFirst.mockResolvedValue({ ...basePeriod, status: 'open' });
       await expect(service.openPeriod('period-1', mockAuthContext)).rejects.toThrow(UnprocessableEntityException);
     });
 
     it('throws ConflictException on P2002 (another open period exists)', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue({ ...basePeriod, status: 'future' });
+      mockPrismaRaw.period.findFirst.mockResolvedValue({ ...basePeriod, status: 'future' });
       const p2002 = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
       mockTx.period.update.mockRejectedValue(p2002);
       await expect(service.openPeriod('period-1', mockAuthContext)).rejects.toThrow(ConflictException);
@@ -167,7 +174,7 @@ describe('PeriodService', () => {
 
     it('successfully opens a future period', async () => {
       const futurePeriod = { ...basePeriod, status: 'future' };
-      mockPrismaRaw.period.findUnique.mockResolvedValue(futurePeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(futurePeriod);
       mockTx.period.update.mockResolvedValue({ ...futurePeriod, status: 'open' });
 
       const result = await service.openPeriod('period-1', mockAuthContext);
@@ -286,7 +293,7 @@ describe('PeriodService', () => {
         status: 'open',
         endsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
       };
-      mockPrismaRaw.period.findUnique.mockResolvedValue(futurePeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(futurePeriod);
 
       const updatedPeriod = { ...futurePeriod, status: 'closed', closedAt: new Date() };
       mockTx.period.update.mockResolvedValue(updatedPeriod);
@@ -307,7 +314,7 @@ describe('PeriodService', () => {
         status: 'open',
         endsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
       };
-      mockPrismaRaw.period.findUnique.mockResolvedValue(futurePeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(futurePeriod);
       const updatedPeriod = { ...futurePeriod, status: 'closed', closedAt: new Date() };
       mockTx.period.update.mockResolvedValue(updatedPeriod);
 
@@ -342,7 +349,7 @@ describe('PeriodService', () => {
         status: 'open',
         endsAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
       };
-      mockPrismaRaw.period.findUnique.mockResolvedValue(pastPeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(pastPeriod);
       const updatedPeriod = { ...pastPeriod, status: 'closed', closedAt: new Date() };
       mockTx.period.update.mockResolvedValue(updatedPeriod);
 
@@ -359,7 +366,7 @@ describe('PeriodService', () => {
         status: 'open',
         endsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       };
-      mockPrismaRaw.period.findUnique.mockResolvedValue(futurePeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(futurePeriod);
       const updatedPeriod = { ...futurePeriod, status: 'closed', closedAt: new Date() };
       mockTx.period.update.mockResolvedValue(updatedPeriod);
 
@@ -379,7 +386,7 @@ describe('PeriodService', () => {
         status: 'open',
         endsAt: new Date(Date.now() - 1000),
       };
-      mockPrismaRaw.period.findUnique.mockResolvedValue(pastPeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(pastPeriod);
       mockTx.period.update.mockResolvedValue({ ...pastPeriod, status: 'closed' });
 
       await service.closePeriod('period-1', mockAuthContext, 'manual');
@@ -398,14 +405,14 @@ describe('PeriodService', () => {
     });
 
     it('throws NotFoundException for non-existent period', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue(null);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(null);
       await expect(
         service.softDeletePeriod('period-1', mockAuthContext),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('throws NotFoundException for already soft-deleted period', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue({
+      mockPrismaRaw.period.findFirst.mockResolvedValue({
         ...basePeriod,
         deletedAt: new Date(),
       });
@@ -415,7 +422,7 @@ describe('PeriodService', () => {
     });
 
     it('cascades deletedAt to objectives, key results, and tasks', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue(basePeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(basePeriod);
       mockTx.period.update.mockResolvedValue({ ...basePeriod, deletedAt: new Date() });
 
       // 2 objectives
@@ -447,7 +454,7 @@ describe('PeriodService', () => {
     });
 
     it('emits period.deleted audit event with correct cascade counts', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue(basePeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(basePeriod);
       mockTx.period.update.mockResolvedValue({ ...basePeriod, deletedAt: new Date() });
 
       mockTx.objective.findMany.mockResolvedValue([{ id: 'obj-1' }, { id: 'obj-2' }]);
@@ -476,7 +483,7 @@ describe('PeriodService', () => {
     });
 
     it('handles period with no objectives (zero cascade counts)', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue(basePeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(basePeriod);
       mockTx.period.update.mockResolvedValue({ ...basePeriod, deletedAt: new Date() });
       mockTx.objective.findMany.mockResolvedValue([]);
       mockTx.objective.updateMany.mockResolvedValue({ count: 0 });
@@ -500,7 +507,7 @@ describe('PeriodService', () => {
     });
 
     it('succeeds for user with core:period:manage permission (non-superadmin)', async () => {
-      mockPrismaRaw.period.findUnique.mockResolvedValue(basePeriod);
+      mockPrismaRaw.period.findFirst.mockResolvedValue(basePeriod);
       mockTx.period.update.mockResolvedValue({ ...basePeriod, deletedAt: new Date() });
       mockTx.objective.findMany.mockResolvedValue([]);
       mockTx.objective.updateMany.mockResolvedValue({ count: 0 });
@@ -508,6 +515,62 @@ describe('PeriodService', () => {
       await expect(
         service.softDeletePeriod('period-1', mockAdminContext),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('aislamiento por org y alcance (C20b)', () => {
+    const openPeriodRow = { ...basePeriod, status: 'open', endsAt: new Date(Date.now() + 86_400_000) };
+
+    it('getById resuelve con { id, organizationId del tenant } y 404 si es de otra org', async () => {
+      mockPrismaRaw.period.findFirst.mockResolvedValue(null);
+      await expect(service.getById('period-x', mockAuthContext)).rejects.toThrow(NotFoundException);
+      expect(mockPrismaRaw.period.findFirst).toHaveBeenCalledWith({
+        where: { id: 'period-x', organizationId: 'org-1', deletedAt: null },
+      });
+    });
+
+    it.each(['openPeriod', 'closePeriod', 'softDeletePeriod', 'getById'] as const)(
+      '%s falla cerrado (403) sin organización en el contexto y no consulta la DB',
+      async (method) => {
+        const ctx = { ...mockAuthContext, organizationId: null };
+        await expect(service[method]('period-1', ctx)).rejects.toThrow(ForbiddenException);
+        expect(mockPrismaRaw.period.findFirst).not.toHaveBeenCalled();
+      },
+    );
+
+    it('cerrar manualmente exige alcance central: 403 sin tocar el período', async () => {
+      mockPrismaRaw.period.findFirst.mockResolvedValue(openPeriodRow);
+      mockScope.assertCentralScope.mockRejectedValue(new ForbiddenException('OrgUnitScopeForbidden'));
+      await expect(service.closePeriod('period-1', mockAdminContext, 'manual')).rejects.toThrow(ForbiddenException);
+      expect(mockTx.period.update).not.toHaveBeenCalled();
+    });
+
+    it('el cierre automático filtra por org pero no evalúa alcance', async () => {
+      mockPrismaRaw.period.findFirst.mockResolvedValue(openPeriodRow);
+      mockTx.period.update.mockResolvedValue({ ...openPeriodRow, status: 'closed' });
+      await service.closePeriod('period-1', mockAuthContext, 'automatic');
+      expect(mockScope.assertCentralScope).not.toHaveBeenCalled();
+      expect(mockPrismaRaw.period.findFirst).toHaveBeenCalledWith({
+        where: { id: 'period-1', organizationId: 'org-1', deletedAt: null },
+      });
+    });
+
+    it('abrir y borrar exigen alcance central', async () => {
+      mockPrismaRaw.period.findFirst.mockResolvedValue({ ...basePeriod, status: 'future' });
+      mockScope.assertCentralScope.mockRejectedValue(new ForbiddenException('OrgUnitScopeForbidden'));
+      await expect(service.openPeriod('period-1', mockAdminContext)).rejects.toThrow(ForbiddenException);
+      await expect(service.softDeletePeriod('period-1', mockAdminContext)).rejects.toThrow(ForbiddenException);
+      expect(mockTx.period.update).not.toHaveBeenCalled();
+    });
+
+    it('crear un período en una org distinta a la del tenant es 403', async () => {
+      await expect(
+        service.createForOrganization(
+          'org-2',
+          { code: 'X', startsAt: new Date('2027-01-01'), endsAt: new Date('2027-06-01') },
+          mockAuthContext,
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 });

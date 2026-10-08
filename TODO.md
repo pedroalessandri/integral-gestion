@@ -107,10 +107,12 @@
 - Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.
 - Origen: fix de `:orgId` (2026-10-07).
 - Actualización (C20, 2026-10-08): **crítico**. También están abiertos `POST periods/:id/open|close` (se puede cerrar el período de otra org y trabar todas sus escrituras) y todo el ABM de `orgs` (crear, editar, desactivar). `closePeriod` busca por id con `prisma.raw` sin org. Va en C20b.
+- Actualización (C20b): hecho en feature/plan-f8-alcance; mover a Completados al mergear.
 
 ### [B] Vincular una métrica existente a un objetivo propio la captura o traba a otras unidades (C20 #2, alta)
 - Por qué: `ObjectiveIndicatorService.create` con `metricId` no exige poder escribir la métrica. Un usuario de la unidad B vincula una métrica sin objetivos (solo central) y pasa a poder cargarla y editarla; o vincula una métrica de la unidad A y desde ahí ni A ni B pueden cargarla (la regla exige todas las unidades).
 - Posible solución: exigir `assertCanWriteMetric` (o alcance central) para vincular una métrica existente. Va en C20b.
+- Actualización (C20b): hecho en feature/plan-f8-alcance; mover a Completados al mergear.
 - Origen: C20 (2026-10-08).
 
 ### [B] Controllers de indicadores y aportes sin `ModuleEnabledGuard`; métrica inline sin `metrics:write` (C20 #3, media)

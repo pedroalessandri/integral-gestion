@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { OrganizationService } from './organization.service.js';
 
@@ -72,5 +73,32 @@ describe('OrganizationService.create — raíz central (RN-P1)', () => {
     );
     expect(mockOrgUnits.ensureCentralRoot).toHaveBeenCalledWith(mockTx, 'org-1');
     expect(mockPrisma.runInTransaction).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('OrganizationService.update — tenant y alcance (C20b)', () => {
+  const scope = { assertCentralScope: vi.fn() };
+  const prisma = { raw: { organization: { findUnique: vi.fn() } }, runInTransaction: vi.fn() };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const service = new OrganizationService(prisma as any, mockAudit as any, mockOrgUnits as any, scope as any);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    scope.assertCentralScope.mockResolvedValue(undefined);
+  });
+
+  it('403 si el id no es la org del tenant, sin consultar la DB', async () => {
+    await expect(service.update('org-2', { name: 'x' }, { ...ctx, organizationId: 'org-1' })).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(prisma.raw.organization.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('403 si el actor no tiene alcance central', async () => {
+    scope.assertCentralScope.mockRejectedValue(new ForbiddenException('OrgUnitScopeForbidden'));
+    await expect(service.update('org-1', { name: 'x' }, { ...ctx, organizationId: 'org-1' })).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(prisma.runInTransaction).not.toHaveBeenCalled();
   });
 });

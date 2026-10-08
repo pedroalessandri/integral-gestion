@@ -32,7 +32,7 @@ export function ActivatePeriodButton({ orgId, periodId, periodCode }: ActivatePe
   function handleConfirm() {
     setError(null);
     startTransition(async () => {
-      const res = await activatePeriodAction({ periodId });
+      const res = await activatePeriodAction({ orgId, periodId });
       if (res.error) {
         setError(res.error);
         return;

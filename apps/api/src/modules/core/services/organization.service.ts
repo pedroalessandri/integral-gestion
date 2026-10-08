@@ -1,7 +1,9 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import type {
   OrganizationDetailDto,
@@ -13,6 +15,7 @@ import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/audit-event-emitter.service.js';
 import { OrgUnitService } from './org-unit.service.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
+import { ORG_UNIT_SCOPE, type OrgUnitScope } from '../../../common/contracts/index.js';
 export interface FirstPeriodInput {
   code: string;
   startsAt: string;
@@ -61,6 +64,7 @@ export class OrganizationService {
     private readonly prismaService: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
     private readonly orgUnitService: OrgUnitService,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   /**
@@ -162,6 +166,10 @@ export class OrganizationService {
     patch: UpdateOrganizationInput,
     authContext: AuthContext,
   ): Promise<OrganizationDetailDto> {
+    // C20b: solo se edita la org del tenant, y los datos de toda la org exigen alcance central.
+    if (authContext.organizationId !== id) throw new ForbiddenException('TenantMismatch');
+    await this.orgUnitScope.assertCentralScope(authContext);
+
     const org = await this.prismaService.raw.organization.findUnique({ where: { id } });
     if (!org) throw new NotFoundException(`Organization ${id} not found`);
 

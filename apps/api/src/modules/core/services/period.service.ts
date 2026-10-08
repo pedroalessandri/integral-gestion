@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -11,6 +12,7 @@ import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/audit-event-emitter.service.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
+import { ORG_UNIT_SCOPE, type OrgUnitScope } from '../../../common/contracts/index.js';
 
 export interface CreatePeriodInput {
   code: string;
@@ -38,7 +40,24 @@ export class PeriodService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
+
+  /**
+   * Resuelve un período vivo DE LA ORG DEL TENANT (C20b). Un id de otra org responde 404 (no filtra existencia).
+   * Falla cerrado si el contexto no trae organización: nunca se consulta por id solo.
+   */
+  private async findOwnedPeriod(periodId: string, authContext: AuthContext) {
+    const organizationId = authContext.organizationId;
+    if (!organizationId) throw new ForbiddenException('Organization context required');
+    const period = await this.prismaService.raw.period.findFirst({
+      where: { id: periodId, organizationId, deletedAt: null },
+    });
+    if (!period || period.deletedAt !== null) {
+      throw new NotFoundException(`Period ${periodId} not found`);
+    }
+    return period;
+  }
 
   /**
    * Lists periods for an organization with optional filters.
@@ -86,17 +105,10 @@ export class PeriodService {
   }
 
   /**
-   * Returns a period by ID. Throws NotFoundException if not found or soft-deleted.
+   * Returns a period by ID within the tenant org. Throws NotFoundException if not found, soft-deleted or from another org.
    */
-  async getById(periodId: string): Promise<PeriodDetailDto> {
-    const period = await this.prismaService.raw.period.findUnique({
-      where: { id: periodId },
-    });
-
-    if (!period || period.deletedAt !== null) {
-      throw new NotFoundException(`Period ${periodId} not found`);
-    }
-
+  async getById(periodId: string, authContext: AuthContext): Promise<PeriodDetailDto> {
+    const period = await this.findOwnedPeriod(periodId, authContext);
     return this.toDetailDto(period);
   }
 
@@ -115,6 +127,12 @@ export class PeriodService {
     input: CreatePeriodInput,
     authContext: AuthContext,
   ): Promise<PeriodDetailDto> {
+    // Crear períodos afecta a toda la org: path = tenant y alcance central (C20b).
+    if (authContext.organizationId !== organizationId) {
+      throw new ForbiddenException('TenantMismatch');
+    }
+    await this.orgUnitScope.assertCentralScope(authContext);
+
     const status = input.status ?? 'future';
 
     // Validate date range
@@ -189,13 +207,8 @@ export class PeriodService {
    * Throws 422 if the period is not in 'future' status.
    */
   async openPeriod(periodId: string, authContext: AuthContext): Promise<PeriodDetailDto> {
-    const period = await this.prismaService.raw.period.findUnique({
-      where: { id: periodId },
-    });
-
-    if (!period || period.deletedAt !== null) {
-      throw new NotFoundException(`Period ${periodId} not found`);
-    }
+    const period = await this.findOwnedPeriod(periodId, authContext);
+    await this.orgUnitScope.assertCentralScope(authContext);
 
     if (period.status !== 'future') {
       throw new UnprocessableEntityException(
@@ -245,13 +258,10 @@ export class PeriodService {
     authContext: AuthContext,
     reason: 'manual' | 'automatic' = 'manual',
   ): Promise<PeriodDetailDto> {
-    const period = await this.prismaService.raw.period.findUnique({
-      where: { id: periodId },
-    });
-
-    if (!period || period.deletedAt !== null) {
-      throw new NotFoundException(`Period ${periodId} not found`);
-    }
+    // El cierre automático lo dispara el cron (actor 'system', sin pasar por controller): filtra org igual,
+    // pero no evalúa alcance de unidad. El cierre manual exige alcance central.
+    const period = await this.findOwnedPeriod(periodId, authContext);
+    if (reason === 'manual') await this.orgUnitScope.assertCentralScope(authContext);
 
     if (period.status !== 'open') {
       throw new UnprocessableEntityException(
@@ -326,13 +336,8 @@ export class PeriodService {
       throw new ForbiddenException('Insufficient permissions to delete a period');
     }
 
-    const period = await this.prismaService.raw.period.findUnique({
-      where: { id: periodId },
-    });
-
-    if (!period || period.deletedAt !== null) {
-      throw new NotFoundException(`Period ${periodId} not found`);
-    }
+    await this.findOwnedPeriod(periodId, authContext);
+    await this.orgUnitScope.assertCentralScope(authContext);
 
     const deletedAt = new Date();
 
