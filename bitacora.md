@@ -15,10 +15,17 @@ Formato:
 
 ---
 
+## 2026-10-08 · Fix · Claude · fix/web-server-actions-async, chore/ci-workflow
+- Hecho: el deploy de producción en Vercel del merge de la Fase 3 (PR #12) falló con `Server Actions must be async functions`: `features/projects/project-actions.ts` es `'use server'` y exportaba arrow functions no `async`. Producción quedó en el deploy del PR #11 sin que se notara. Fix: las 11 acciones pasan a `export async function` (PR #13). Se agrega CI (`.github/workflows/ci.yml`, PR #14): install, `prisma:generate`, build de `packages/*`, `pnpm typecheck`, `pnpm lint`, `pnpm test` y `pnpm --filter web build`, en cada PR y en `main`. Para que `pnpm lint` pase se borró un mock sin usar en `task.service.spec.ts`.
+- Commit: `38dae55` (PR #13), `0a3a2ae` (PR #14)
+- Verificación: `pnpm --filter web build` local → OK; deploy de producción de `fb269b8` y de `65837ba` → READY; primera corrida del CI en el PR y en `main` → success.
+- Pendiente / desvíos: `tsc --noEmit` y lint no detectan errores propios de `next build`; desde ahora el CI lo cubre. Los e2e y Playwright quedan fuera del CI (necesitan DB). La protección de `main` que exige el check `verify` la decide Pedro.
+- Preguntas abiertas: ninguna.
+
 ## 2026-10-07 · C09 · frontend-dev · feature/plan-f3-proyectos
 - Hecho: `features/projects` (acciones de servidor tipadas con `shared-types/okr`, hooks `useObjectiveProjects`, `useProjectTasks`, `useWeightedGroup`, `useWeightDraft`, helpers puros de pesos en bp, formularios y estado de presentación). Ficha de objetivo con pestañas "Resultados Clave" (camino KR intacto) y "Proyectos": lista con ABM (crear acá; editar desde la ficha), warning de borrado con `taskCount` y Gantt proyecto → tareas (reusa `GanttAxis`/`GanttRow`). Nueva ficha de proyecto `/objectives/[id]/projects/[projectId]` con tareas (ABM, avance con el slider existente), Gantt y toggle "Ponderar" (reparto equitativo editable, PUT en bloque; quitar pesos con confirmación). Barra "Avance de gestión" (`executionProgressCachedBp`) en el encabezado del objetivo, sola: no se muestra ni se combina con resultado. Mensajes en español para `WeightSumInvalid`, `MixedWeightGroup`, `TaskOutsideProject`, `TaskDatesInvalid`, `ObjectiveWithoutOrgUnit`, `ProjectProgressModeNotSupported`, `ProjectOutsidePeriod`, `ProjectDatesInvalid`, `ProjectOrgUnitOutOfScope`, `OwnerNotMember`. Etiquetas de ponderación en `lib/labels.ts`.
 - Commit: este commit (`feat(web): ficha de objetivo con proyectos y avance de gestión`)
-- Verificación: `cd apps/web && npx tsc --noEmit` → sin errores; `pnpm --filter web lint` → 0 errores, 2 warnings preexistentes; `pnpm typecheck` → 5/5 OK; `pnpm --filter web test` → web no tiene script de tests (no hay runner). No se probó contra la API levantada: falta el smoke de Pedro con "Ciclovías".
+- Verificación: `cd apps/web && npx tsc --noEmit` → sin errores; `pnpm --filter web lint` → 0 errores, 2 warnings preexistentes; `pnpm typecheck` → 5/5 OK; `pnpm --filter web test` → web no tiene script de tests (no hay runner). No se probó contra la API levantada (lo cubre el smoke de Pedro).
 - Pendiente / desvíos:
   - Sin tests de web (no hay Vitest en `apps/web`); las funciones puras quedaron aisladas para testearlas (tech-debt).
   - Objetivo sin unidad: la pestaña Proyectos muestra el aviso en lugar de la lista y el botón de crear (la API da 422 `ObjectiveWithoutOrgUnit`). El form no ofrece `from_indicator`; el selector de unidad lista la del objetivo y sus descendientes.
@@ -26,6 +33,7 @@ Formato:
   - La lista del objetivo no edita proyectos: el lápiz abre la ficha, que sí tiene el detalle completo.
   - Fuera de alcance, ya planificado: Gantt de la vista ejecutiva en Objetivo → Proyecto → Tarea (C22) y desvío/semáforo de gestión (RN-P9, C14–C16). Tampoco hay "aportes a indicadores" en la ficha (F4) ni slot de resultado (C12).
   - La UI todavía no oculta escritura por permisos (`/me`): solo por período cerrado, igual que el resto de la ficha (ya figura en los ítems de C06).
+  - Smoke de Pedro en el deploy (2026-10-08): OK, objetivo "Ciclovías" con 2 proyectos y tareas, ponderación y avance de gestión verificados. Fase 3 mergeada (PR #12); el deploy de Vercel de ese merge falló y se corrigió en PR #13.
 - Preguntas abiertas (respondidas por Pedro el 2026-10-07):
   - ✅ Crear un proyecto o tarea en un grupo ya ponderado: la UI lo crea con peso 0 % y avisa que hay que usar "Editar pesos". Pedro confirma el flujo tal cual.
   - ✅ Borrar un proyecto o tarea de un grupo ponderado devuelve 422 `WeightSumInvalid` y la UI pide redistribuir primero, sin redistribución en el mismo paso. Pedro confirma la regla actual.
