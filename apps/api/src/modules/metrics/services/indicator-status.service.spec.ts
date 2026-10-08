@@ -15,6 +15,7 @@ let indicators: Row[];
 let metrics: Row[];
 let entries: Row[];
 let points: Row[];
+let contributions: Row[];
 
 function matches(row: Row, where: Row): boolean {
   return Object.entries(where).every(([k, v]) => {
@@ -33,14 +34,20 @@ const scoped = {
   metric: table(() => metrics),
   metricEntry: table(() => entries),
   indicatorTargetPoint: table(() => points),
+  projectContribution: table(() => contributions),
   period: table(() => [{ id: 'period-1', organizationId: ORG, startsAt: d('2027-01-01'), endsAt: d('2027-12-31') }]),
 };
 const lookup = { findLiveObjective: vi.fn(), filterLiveObjectiveIds: vi.fn() };
 const reader = { readObjectiveProgress: vi.fn() };
+/** Puerto `PROJECT_LINK_READER` fake: proyectos vivos por id. */
+let liveProjects: Row[];
+const projectLinks = {
+  findLiveProjects: vi.fn(async (_org: string, ids: string[]) => liveProjects.filter((p) => ids.includes(p['id'] as string))),
+};
 
 function build(): IndicatorStatusService {
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  return new IndicatorStatusService({ scoped } as any, lookup as any, reader as any);
+  return new IndicatorStatusService({ scoped } as any, lookup as any, reader as any, projectLinks as any);
   /* eslint-enable @typescript-eslint/no-explicit-any */
 }
 
@@ -57,6 +64,7 @@ function indicator(id: string, metricId: string, extra: Row = {}): Row {
     targetValue: D('100'),
     weightBp: null,
     expectedCurveMode: 'manual',
+    linkMode: 'independent',
     deletedAt: null,
     createdAt: d('2027-01-01'),
     ...extra,
@@ -77,6 +85,8 @@ beforeEach(() => {
   metrics = [metric('m-1'), metric('m-2')];
   entries = [];
   points = [point('oi-1', '2027-06-01', '50'), point('oi-1', '2027-12-01', '100')];
+  contributions = [];
+  liveProjects = [];
   lookup.findLiveObjective.mockResolvedValue({ id: 'obj-1', periodId: 'period-1', period: { id: 'period-1', code: '2027', status: 'open' } });
   reader.readObjectiveProgress.mockResolvedValue({
     resultProgressBp: 3000,
@@ -227,5 +237,54 @@ describe('getObjectiveStatus', () => {
     reader.readObjectiveProgress.mockResolvedValue(null);
     await expect(build().getObjectiveStatus('obj-1', ORG, NOW)).rejects.toBeInstanceOf(NotFoundException);
     expect(reader.readObjectiveProgress).toHaveBeenCalledWith(ORG, 'obj-1', NOW);
+  });
+});
+
+describe('curva from_projects y aportes (RN-P12, RN-P17)', () => {
+  const contribution = (projectId: string, value: string, indicatorId = 'oi-1'): Row => ({
+    objectiveIndicatorId: indicatorId,
+    organizationId: ORG,
+    projectId,
+    contributionValue: D(value),
+  });
+  const project = (id: string, endsAt: string): Row => ({ id, endsAt: new Date(`${endsAt}T12:00:00Z`) });
+
+  it('los pasos salen del endsAt planificado del proyecto y su contributionValue', async () => {
+    indicators.push(indicator('oi-1', 'm-1', { expectedCurveMode: 'from_projects', linkMode: 'execution_feeds_indicator', baselineValue: D('5'), targetValue: D('35') }));
+    contributions.push(contribution('p-1', '10'), contribution('p-2', '20'));
+    liveProjects.push(project('p-1', '2027-03-15'), project('p-2', '2027-10-01'));
+    // Carga en junio (bucket 1/6): ya cerró p-1 (15/3) pero no p-2 (1/10): esperado = 5 + 10.
+    entries.push(entry('m-1', '2027-06-01', '5'));
+
+    const status = await build().getIndicatorStatus('oi-1', ORG, NOW);
+    expect(status.expectedCurveMode).toBe('from_projects');
+    expect(status.expectedValue).toBe('15');
+    // Hoy (20/8) todavía falta p-2.
+    expect(status.expectedToday).toBe('15');
+    expect(status.contributions).toEqual({ count: 2, total: '30', projectedValue: '35', coversTarget: true });
+    expect(projectLinks.findLiveProjects).toHaveBeenCalledWith(ORG, expect.arrayContaining(['p-1', 'p-2']));
+  });
+
+  it('ignora el aporte de un proyecto que ya no existe y avisa si los aportes no alcanzan la meta', async () => {
+    indicators.push(indicator('oi-1', 'm-1', { expectedCurveMode: 'from_projects', linkMode: 'execution_feeds_indicator', baselineValue: D('5'), targetValue: D('35') }));
+    contributions.push(contribution('p-1', '4'), contribution('p-dead', '20'));
+    liveProjects.push(project('p-1', '2027-03-15'));
+
+    const status = await build().getIndicatorStatus('oi-1', ORG, NOW);
+    expect(status.contributions).toEqual({ count: 1, total: '4', projectedValue: '9', coversTarget: false });
+    expect(status.expectedToday).toBe('9');
+  });
+
+  it('indicador sin vínculo de ejecución: contributions es null y no consulta aportes', async () => {
+    indicators.push(indicator('oi-1', 'm-1', { expectedCurveMode: 'linear' }));
+    const status = await build().getIndicatorStatus('oi-1', ORG, NOW);
+    expect(status.contributions).toBeNull();
+    expect(scoped.projectContribution.findMany).not.toHaveBeenCalled();
+  });
+
+  it('execution_feeds_indicator con curva lineal igual resume los aportes (aviso de C18)', async () => {
+    indicators.push(indicator('oi-1', 'm-1', { expectedCurveMode: 'linear', linkMode: 'execution_feeds_indicator' }));
+    const status = await build().getIndicatorStatus('oi-1', ORG, NOW);
+    expect(status.contributions).toEqual({ count: 0, total: '0', projectedValue: '0', coversTarget: false });
   });
 });

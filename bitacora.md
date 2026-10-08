@@ -15,6 +15,28 @@ Formato:
 
 ---
 
+## 2026-10-08 · C17 · backend-dev · feature/plan-f7-aportes
+- Hecho:
+  - **Aportes** (migración `20261008000004_project_contribution`, escrita a mano + `migrate deploy`): `metrics.project_contribution` (`contribution_value NUMERIC(18,4)` ≠ 0, único `(project_id, objective_indicator_id)`, `applied_entry_id`, FKs RESTRICT) con scoping de tenant. `metric_entry` suma `origin` (`manual` | `project_contribution`) y `source_project_id`, con un CHECK que los ata. ABM en `okr/indicators/:id/contributions`, `okr/projects/:id/contributions` y `okr/contributions/:id` (`TenantGuard` + `PermissionsGuard`, `okr:read` / `okr:write`), con audit `project_contribution.*`. 422 tipados: métrica no `output`, indicador no `execution_feeds_indicator`, proyecto inexistente, de otro objetivo o `from_indicator` hacia ese indicador (puerto nuevo `PROJECT_LINK_READER`, lo implementa `okr`); 409 `ContributionAlreadyExists`.
+  - **Hook** (RN-P13): `okr` publica `project.completed` / `project.reopened` después del commit cuando el avance cruza el 100 %. El oyente de `metrics` reconcilia contra el estado actual del proyecto (fila del aporte con `FOR UPDATE`): crea la carga `+contributionValue` con el comentario "Aporte automático — Proyecto X" o la compensatoria `−` de lo aplicado; nunca borra. Es idempotente frente a eventos repetidos o desordenados y escribe su propio audit. Las cargas automáticas se distinguen por `origin` en `MetricEntryDto` (RN-P14) y son de solo lectura; la carga manual sigue permitida.
+  - **`from_projects`** habilitado solo para `output` + `execution_feeds_indicator`: los pasos salen del `endsAt` planificado del proyecto y del `contributionValue`. `IndicatorStatusDto.contributions = { count, total, projectedValue, coversTarget }` para el aviso "los aportes no alcanzan la meta" (C18).
+  - **RN-P12**: el cambio de `kind` `output` → `outcome` también se bloquea si algún indicador de la métrica tiene aportes. **ADR D5 regla 3** (lado de los aportes): cambiar el `linkMode` o borrar un indicador con proyectos vinculados da 422 `IndicatorHasLinkedProjects` con `details.projects`. Para eso el filtro global de errores ahora reenvía `details`.
+  - `metrics-domain`: `bucketContaining` y `summarizeContributions`.
+- Commit: este commit (`feat(metrics): aportes de proyectos a indicadores, carga automática al 100 % y curva from_projects`)
+- Verificación:
+  - `pnpm typecheck` 7/7; `pnpm lint` 0 errores (1 warning preexistente en api); `pnpm test` 12/12 (api 475, metrics-domain 75, web 49).
+  - `psql`: `\d metrics.project_contribution` (único, CHECK y FKs) y `\d metrics.metric_entry` (`origin`, `source_project_id`, CHECKs y FK); migración `20261008000004` aplicada.
+  - E2E en DB descartable `gp_c17` (ya borrada), corrido por el subagente: `project-contribution.e2e-spec.ts` 3/3 + `indicator-curves.e2e-spec.ts` 3/3. Cubre el 100 % que crea +4 y mueve el indicador, la baja que crea −4, la idempotencia, la compensación al borrar el proyecto, el 422 con la lista de proyectos y el aislamiento entre orgs. No lo volví a correr en el cierre.
+- Pendiente / desvíos:
+  - Fuera del plan, en la misma corrida: la regla 3 de ADR D5 (lado de los aportes) y el reenvío de `details` en el filtro de errores. `ObjectiveIndicatorService` toma el `requestId` del request real (antes fallaba el audit del oyente en el harness e2e).
+  - TODO.md: el ítem de `from_projects` queda hecho (se mueve a Completados al mergear); nuevo ítem de reconciliación si el oyente falla; falta el otro sentido de la regla 3 (`INDICATOR_LINK_READER` y proyectos `from_indicator`). El seed demo todavía no tiene aportes ni `from_projects` (ítem existente).
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08; se mantiene lo implementado):
+  - ✅ Fecha de la carga automática: el bucket del momento real en que el proyecto llega al 100 % (no el `endsAt` planificado). La baja del 100 % se fecha en el bucket de la reapertura.
+  - ✅ Un aporte ya aplicado no se edita ni se borra hasta que el proyecto baje del 100 % (422 `ContributionAlreadyApplied`).
+  - ✅ Borrar un proyecto con aporte aplicado: se compensa y el aporte se da de baja (hard delete, con audit).
+  - ✅ Signo del aporte: cualquier valor ≠ 0, sin validar contra la dirección del indicador (los aportes pueden variar).
+  - ✅ Si el oyente falla, por ahora solo se loguea; la reconciliación queda en TODO.md.
+
 ## 2026-10-08 · C16 · frontend-dev · feature/plan-f6-curvas
 - Hecho:
   - **Editor de curva** en el diálogo del indicador (`indicator-form-dialog.tsx`): modo Lineal / Manual y "Desde proyectos" deshabilitado con su explicación (la API lo rechaza hasta C17). En manual hay un campo por intervalo (los buckets salen de `buildBuckets` de `metrics-domain` con el período del objetivo y la frecuencia, así que coinciden con la validación de la API); los vacíos se interpolan y el último intervalo queda bloqueado y siempre vale la meta, de modo que "el último punto = meta" no se puede romper. Validación de decimales en `curve-form.ts` y DTOs con `expectedCurveMode` + `targetPoints` en el mismo POST/PATCH (hace falta si cambió la meta). Mensajes en español para `IndicatorTargetPointsInvalid` (con el detalle de la API) y `ExpectedCurveModeNotAvailable`.

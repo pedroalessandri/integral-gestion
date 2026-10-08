@@ -6,6 +6,7 @@ import { ObjectiveService } from './services/objective.service.js';
 import { KeyResultService } from './services/key-result.service.js';
 import { TaskService } from './services/task.service.js';
 import { ProjectService } from './services/project.service.js';
+import { ProjectLifecyclePublisher } from './services/project-lifecycle-publisher.js';
 import { IndicatorProgressListener } from './listeners/indicator-progress.listener.js';
 import { ObjectiveController } from './controllers/objective.controller.js';
 import { KeyResultController } from './controllers/key-result.controller.js';
@@ -20,7 +21,7 @@ import { ProjectController } from './controllers/project.controller.js';
 @Module({
   imports: [CoreModule, AuditModule, AuthModule],
   controllers: [ObjectiveController, KeyResultController, TaskController, ProjectController],
-  providers: [ObjectiveService, KeyResultService, TaskService, ProjectService, IndicatorProgressListener],
+  providers: [ObjectiveService, KeyResultService, TaskService, ProjectService, ProjectLifecyclePublisher, IndicatorProgressListener],
   exports: [ObjectiveService, KeyResultService, TaskService, ProjectService],
 })
 export class OkrModule {}

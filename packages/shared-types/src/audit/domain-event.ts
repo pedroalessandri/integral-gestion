@@ -477,6 +477,58 @@ type ObjectiveIndicatorDeletedEvent = BaseEvent<
   { before: { deletedAt: null }; after: { deletedAt: string } }
 >;
 
+/** Aporte de un proyecto a un indicador (RN-P12/P13). */
+type ProjectContributionSnapshot = {
+  projectId: string;
+  objectiveIndicatorId: string;
+  /** Decimal string. */
+  contributionValue: string;
+};
+
+type ProjectContributionCreatedEvent = BaseEvent<
+  'project_contribution.created',
+  'metrics.project_contribution',
+  { before: null; after: ProjectContributionSnapshot }
+>;
+
+type ProjectContributionUpdatedEvent = BaseEvent<
+  'project_contribution.updated',
+  'metrics.project_contribution',
+  { before: { contributionValue: string }; after: { contributionValue: string } }
+>;
+
+type ProjectContributionDeletedEvent = BaseEvent<
+  'project_contribution.deleted',
+  'metrics.project_contribution',
+  { before: ProjectContributionSnapshot; after: null; reason?: 'project_deleted' }
+>;
+
+/** El proyecto llegó al 100 %: se creó la carga automática positiva (RN-P13). */
+type ProjectContributionAppliedEvent = BaseEvent<
+  'project_contribution.applied',
+  'metrics.project_contribution',
+  {
+    before: { appliedEntryId: null };
+    after: { appliedEntryId: string; projectId: string; incrementValue: string; bucketDate: string };
+  }
+>;
+
+/** El proyecto bajó del 100 % (o se borró): se creó una carga compensatoria negativa; la original no se toca. */
+type ProjectContributionRevertedEvent = BaseEvent<
+  'project_contribution.reverted',
+  'metrics.project_contribution',
+  {
+    before: { appliedEntryId: string | null };
+    after: {
+      appliedEntryId: null;
+      compensationEntryId: string | null;
+      incrementValue: string | null;
+      bucketDate: string | null;
+      reason: string;
+    };
+  }
+>;
+
 // ---------------------------------------------------------------------------
 // Metrics events (Módulo 1 "Indicadores de gestión")
 // ---------------------------------------------------------------------------
@@ -535,7 +587,15 @@ type MetricEntryCreatedEvent = BaseEvent<
   'metrics.metric_entry',
   {
     before: null;
-    after: { metricId: string; bucketDate: string; incrementValue: string; comment: string | null };
+    after: {
+      metricId: string;
+      bucketDate: string;
+      incrementValue: string;
+      comment: string | null;
+      /** Solo en las cargas automáticas de un aporte de proyecto (RN-P14); ausente = manual. */
+      origin?: 'manual' | 'project_contribution';
+      sourceProjectId?: string;
+    };
   }
 >;
 
@@ -679,6 +739,11 @@ export type DomainEvent =
   | ObjectiveIndicatorCreatedEvent
   | ObjectiveIndicatorUpdatedEvent
   | ObjectiveIndicatorDeletedEvent
+  | ProjectContributionCreatedEvent
+  | ProjectContributionUpdatedEvent
+  | ProjectContributionDeletedEvent
+  | ProjectContributionAppliedEvent
+  | ProjectContributionRevertedEvent
   | IndicatorTargetPointsReplacedEvent
   // Metrics — metric (3)
   | MetricCreatedEvent

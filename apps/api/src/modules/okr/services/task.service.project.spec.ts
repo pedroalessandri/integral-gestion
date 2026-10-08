@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { TaskService } from './task.service.js';
+import { ProjectLifecyclePublisher } from './project-lifecycle-publisher.js';
 import { createInMemoryOkrDb, type InMemoryOkrDb } from '../testing/in-memory-okr-db.js';
 
 const ORG = 'org-1';
@@ -30,6 +31,7 @@ const authCtx: AuthContext = {
 };
 
 let db: InMemoryOkrDb;
+let committed = false;
 const scoped = {
   project: { findFirst: vi.fn() },
   task: { findFirst: vi.fn(), findMany: vi.fn() },
@@ -37,12 +39,25 @@ const scoped = {
 const audit = { emit: vi.fn().mockResolvedValue(undefined) };
 const prisma = {
   scoped,
-  runInTransaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db.tx)),
+  runInTransaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+    const result = await fn(db.tx);
+    committed = true; // si fn lanza, nunca llega acá (rollback)
+    return result;
+  }),
+};
+
+/** Publicador REAL con un emisor falso: el evento solo sale de `emitAsync`, que se captura y se ordena contra el commit. */
+const events: Array<{ name: string; payload: Record<string, unknown>; afterCommit: boolean }> = [];
+const eventEmitter = {
+  emitAsync: vi.fn(async (name: string, payload: Record<string, unknown>) => {
+    events.push({ name, payload, afterCommit: committed });
+    return [];
+  }),
 };
 
 function build(): TaskService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new TaskService(prisma as any, audit as any);
+  return new TaskService(prisma as any, audit as any, new ProjectLifecyclePublisher(eventEmitter as any));
 }
 
 const taskDto = { title: 'Asfaltar', startsAt: '2027-03-01T00:00:00.000Z', endsAt: '2027-04-01T00:00:00.000Z' };
@@ -64,6 +79,8 @@ const execution = () => db.objective.rows[0]?.['executionProgressCachedBp'];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  committed = false;
+  events.length = 0;
   db = createInMemoryOkrDb();
   db.objective.insert({ id: 'obj-1', organizationId: ORG });
   db.project.insert({ id: 'p1', objectiveId: 'obj-1', organizationId: ORG, startsAt: P_START, endsAt: P_END });
@@ -227,5 +244,62 @@ describe('TaskService.setProjectTaskWeights', () => {
       build().setProjectTaskWeights('p1', ORG, { weights: [{ id: 't1', weightBp: 10000 }] }, authCtx),
     ).rejects.toThrow(/WeightsSetMismatch/);
     expect(db.task.rows.every((t) => t['weightBp'] === null)).toBe(true);
+  });
+});
+
+describe('TaskService: eventos del ciclo de vida del proyecto (ADR-0009 D5, RN-P13)', () => {
+  it('llegar al 100 % emite project.completed DESPUÉS del commit, con organización, actor y request', async () => {
+    addTask('t1', 0, null, 'p1');
+    addTask('t2', 10000, null, 'p1');
+    await build().setProgress('t1', ORG, 10000, authCtx);
+
+    expect(projectRow('p1')?.['progressCachedBp']).toBe(10000);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      name: 'project.completed',
+      afterCommit: true,
+      payload: { organizationId: ORG, actorId: 'user-1', requestId: 'req-1', projectId: 'p1', objectiveId: 'obj-1' },
+    });
+    expect(typeof events[0]?.payload['occurredAt']).toBe('string');
+  });
+
+  it('bajar del 100 % emite project.reopened (progress_dropped)', async () => {
+    addTask('t1', 10000, null, 'p1');
+    db.project.rows.find((r) => r['id'] === 'p1')!['progressCachedBp'] = 10000;
+    await build().setProgress('t1', ORG, 5000, authCtx);
+
+    expect(events.map((e) => e.name)).toEqual(['project.reopened']);
+    expect(events[0]?.payload).toMatchObject({ reason: 'progress_dropped', projectId: 'p1' });
+  });
+
+  it('agregar una tarea a un proyecto completo lo reabre; borrar la única tarea pendiente lo completa', async () => {
+    addTask('t1', 10000, null, 'p1');
+    db.project.rows.find((r) => r['id'] === 'p1')!['progressCachedBp'] = 10000;
+    const svc = build();
+    await svc.createInProject('p1', ORG, taskDto, authCtx);
+    expect(events.map((e) => e.name)).toEqual(['project.reopened']);
+
+    events.length = 0;
+    const pending = db.task.rows.find((r) => r['progressBp'] === 0 && r['projectId'] === 'p1');
+    await svc.softDelete(pending?.['id'] as string, ORG, authCtx);
+    expect(events.map((e) => e.name)).toEqual(['project.completed']);
+  });
+
+  it('sin cruzar el 100 % no se emite nada, y si la transacción falla tampoco', async () => {
+    addTask('t1', 0, null, 'p1');
+    addTask('t2', 0, null, 'p1');
+    await build().setProgress('t1', ORG, 4000, authCtx);
+    expect(events).toHaveLength(0);
+
+    prisma.runInTransaction.mockRejectedValueOnce(new Error('rollback'));
+    await expect(build().setProgress('t2', ORG, 10000, authCtx)).rejects.toThrow('rollback');
+    expect(events).toHaveLength(0);
+  });
+
+  it('si el oyente falla, la mutación ya está confirmada: se loguea y no se propaga', async () => {
+    addTask('t1', 0, null, 'p1');
+    eventEmitter.emitAsync.mockRejectedValueOnce(new Error('listener down'));
+    await expect(build().setProgress('t1', ORG, 10000, authCtx)).resolves.toBeDefined();
+    expect(projectRow('p1')?.['progressCachedBp']).toBe(10000);
   });
 });

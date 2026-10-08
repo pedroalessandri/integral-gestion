@@ -136,3 +136,4 @@
 - **Por qué importa**: el CI no corre e2e, así que nadie lo nota; no hay red de integración real para el resto del módulo.
 - **Posible solución**: helper compartido de bootstrap de org/objetivo para los e2e, registrar el middleware de request-id en el harness y reparar o borrar los specs viejos.
 - **Prioridad**: media.
+- **Actualización (C17, 2026-10-08)**: `ObjectiveIndicatorService` y el publicador de eventos de proyecto toman el `requestId` del request real (`requestContextStorage`) con el del `AuthContext` solo de respaldo, así que los audits de los oyentes de C17 (y `objective.result_progress_changed` cuando el origen es un aporte) funcionan en el harness. `project-contribution.e2e-spec.ts` (DB real) está al día; para evitar el 429 del throttler global reemplaza `ThrottlerStorage`.

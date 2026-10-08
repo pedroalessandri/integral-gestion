@@ -19,3 +19,5 @@ export { OBJECTIVE_LOOKUP } from './objective-indicator.port.js';
 export type { ObjectiveRef, ObjectiveLookup } from './objective-indicator.port.js';
 export { OBJECTIVE_PROGRESS_READER } from './objective-progress.port.js';
 export type { ObjectiveProgressReading, ObjectiveProgressReader } from './objective-progress.port.js';
+export { PROJECT_LINK_READER } from './project-link.port.js';
+export type { ProjectLinkRef, ProjectLinkReader } from './project-link.port.js';

@@ -1,6 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   ExpectedCurveMode,
+  IndicatorContributionsSummaryDto,
   IndicatorStatusDto,
   MetricFrequency,
   ObjectiveStatusDto,
@@ -12,8 +13,10 @@ import {
   deviationBp,
   expectedCurve,
   pendingBuckets,
+  summarizeContributions,
   toUTCMidnight,
   type PeriodRange,
+  type ProjectStepInput,
   type TargetPointInput,
 } from '@gestion-publica/metrics-domain';
 import { aggregateDeviationBp, progressDeviationBp, semaphore } from '@gestion-publica/deviation-domain';
@@ -21,8 +24,10 @@ import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import {
   OBJECTIVE_LOOKUP,
   OBJECTIVE_PROGRESS_READER,
+  PROJECT_LINK_READER,
   type ObjectiveLookup,
   type ObjectiveProgressReader,
+  type ProjectLinkReader,
 } from '../../../common/contracts/index.js';
 import { toCurvePoints, toDateOnly } from './target-points.js';
 
@@ -36,6 +41,7 @@ interface IndicatorForStatus {
   targetValue: Decimalish;
   weightBp: number | null;
   expectedCurveMode: string;
+  linkMode: string;
 }
 
 interface MetricForStatus {
@@ -61,6 +67,7 @@ export class IndicatorStatusService {
     private readonly prisma: PrismaService,
     @Inject(OBJECTIVE_LOOKUP) private readonly objectiveLookup: ObjectiveLookup,
     @Inject(OBJECTIVE_PROGRESS_READER) private readonly progressReader: ObjectiveProgressReader,
+    @Inject(PROJECT_LINK_READER) private readonly projectLinks: ProjectLinkReader,
   ) {}
 
   async getIndicatorStatus(id: string, orgId: string, now: Date = new Date()): Promise<IndicatorStatusDto> {
@@ -147,6 +154,23 @@ export class IndicatorStatusService {
       select: { objectiveIndicatorId: true, bucketDate: true, expectedValue: true },
     });
 
+    // Aportes de proyectos (RN-P12/P17): solo de proyectos vivos. Dan los pasos de la curva `from_projects`
+    // (endsAt planificado + contributionValue) y el aviso "los aportes no alcanzan la meta".
+    const contributionIndicatorIds = indicators
+      .filter((i) => i.linkMode === 'execution_feeds_indicator' || i.expectedCurveMode === 'from_projects')
+      .map((i) => i.id);
+    const contributions =
+      contributionIndicatorIds.length === 0
+        ? []
+        : await this.prisma.scoped.projectContribution.findMany({
+            where: { objectiveIndicatorId: { in: contributionIndicatorIds }, organizationId: orgId },
+            select: { objectiveIndicatorId: true, projectId: true, contributionValue: true },
+          });
+    const liveProjects = await this.projectLinks.findLiveProjects(orgId, [
+      ...new Set(contributions.map((c) => c.projectId)),
+    ]);
+    const projectsById = new Map(liveProjects.map((p) => [p.id, p]));
+
     const today = toUTCMidnight(now);
     return indicators.map((indicator) => {
       const metric = metricsById.get(indicator.metricId);
@@ -161,6 +185,12 @@ export class IndicatorStatusService {
         range,
         entries.filter((e) => e.metricId === metric.id),
         toCurvePoints(points.filter((p) => p.objectiveIndicatorId === indicator.id)),
+        contributions
+          .filter((c) => c.objectiveIndicatorId === indicator.id && projectsById.has(c.projectId))
+          .map((c) => ({
+            endsAt: (projectsById.get(c.projectId) as { endsAt: Date }).endsAt,
+            contributionValue: c.contributionValue.toString(),
+          })),
         today,
       );
     });
@@ -172,6 +202,7 @@ export class IndicatorStatusService {
     range: PeriodRange,
     entries: ReadonlyArray<{ bucketDate: Date; incrementValue: Decimalish }>,
     points: ReadonlyArray<TargetPointInput>,
+    steps: ReadonlyArray<ProjectStepInput>,
     today: Date,
   ): IndicatorStatusDto {
     const baseline = indicator.baselineValue.toString();
@@ -182,8 +213,7 @@ export class IndicatorStatusService {
       mode === 'manual'
         ? expectedCurve({ mode, at, range, baseline, target, points })
         : mode === 'from_projects'
-          ? // Sin `ProjectContribution` (F7) no hay pasos: la curva queda en la base. Hoy no se puede elegir este modo.
-            expectedCurve({ mode, at, range, baseline, target, steps: [] })
+          ? expectedCurve({ mode, at, range, baseline, target, steps })
           : expectedCurve({ mode, at, range, baseline, target });
 
     const actualValue = accumulatedValue(
@@ -207,6 +237,12 @@ export class IndicatorStatusService {
       range.endsAt,
     );
 
+    // Aviso de aportes que no alcanzan la meta (C18): solo con vínculo `execution_feeds_indicator`.
+    const contributionsSummary: IndicatorContributionsSummaryDto | null =
+      indicator.linkMode === 'execution_feeds_indicator'
+        ? summarizeContributions({ baseline, target, contributionValues: steps.map((st) => st.contributionValue) })
+        : null;
+
     return {
       objectiveIndicatorId: indicator.id,
       objectiveId: indicator.objectiveId,
@@ -220,6 +256,7 @@ export class IndicatorStatusService {
       semaphore: deviation === null ? null : semaphore(deviation),
       pendingBuckets: pending.map(toDateOnly),
       graceDays: DEFAULT_GRACE_DAYS,
+      contributions: contributionsSummary,
     };
   }
 }

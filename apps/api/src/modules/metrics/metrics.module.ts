@@ -9,10 +9,14 @@ import { MetricEntryService } from './services/metric-entry.service.js';
 import { MetricLinkService } from './services/metric-link.service.js';
 import { ObjectiveIndicatorService } from './services/objective-indicator.service.js';
 import { IndicatorStatusService } from './services/indicator-status.service.js';
+import { ProjectContributionService } from './services/project-contribution.service.js';
+import { ProjectContributionApplier } from './services/project-contribution-applier.service.js';
+import { ProjectLifecycleListener } from './listeners/project-lifecycle.listener.js';
 import { MetricController } from './controllers/metric.controller.js';
 import { MetricEntryController } from './controllers/metric-entry.controller.js';
 import { MetricLinkController } from './controllers/metric-link.controller.js';
 import { ObjectiveIndicatorController } from './controllers/objective-indicator.controller.js';
+import { ProjectContributionController } from './controllers/project-contribution.controller.js';
 
 /**
  * MetricsModule — Módulo 1 "Indicadores de gestión".
@@ -23,8 +27,31 @@ import { ObjectiveIndicatorController } from './controllers/objective-indicator.
  */
 @Module({
   imports: [CoreModule, AuditModule, AuthModule, OkrModule],
-  controllers: [MetricController, MetricEntryController, MetricLinkController, ObjectiveIndicatorController],
-  providers: [MetricService, MetricEntryService, MetricLinkService, ObjectiveIndicatorService, IndicatorStatusService, ModuleEnabledGuard],
-  exports: [MetricService, MetricEntryService, MetricLinkService, ObjectiveIndicatorService, IndicatorStatusService],
+  controllers: [
+    MetricController,
+    MetricEntryController,
+    MetricLinkController,
+    ObjectiveIndicatorController,
+    ProjectContributionController,
+  ],
+  providers: [
+    MetricService,
+    MetricEntryService,
+    MetricLinkService,
+    ObjectiveIndicatorService,
+    IndicatorStatusService,
+    ProjectContributionService,
+    ProjectContributionApplier,
+    ProjectLifecycleListener,
+    ModuleEnabledGuard,
+  ],
+  exports: [
+    MetricService,
+    MetricEntryService,
+    MetricLinkService,
+    ObjectiveIndicatorService,
+    IndicatorStatusService,
+    ProjectContributionService,
+  ],
 })
 export class MetricsModule {}

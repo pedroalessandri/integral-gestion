@@ -21,6 +21,7 @@ import type { CreateProjectDto } from '../dto/create-project.dto.js';
 import type { UpdateProjectDto } from '../dto/update-project.dto.js';
 import type { SetSiblingWeightsDto } from '../dto/set-sibling-weights.dto.js';
 import { lockObjective, recomputeObjectiveExecution } from './project-recompute.js';
+import { ProjectLifecyclePublisher } from './project-lifecycle-publisher.js';
 import { assertSameSiblingSet, assertValidWeightGroup } from './weight-group.js';
 
 type PeriodRow = { id: string; code: string; status: string; startsAt: Date; endsAt: Date };
@@ -68,6 +69,7 @@ export class ProjectService {
     private readonly memberService: MemberService,
     @Inject(ORG_UNIT_LOOKUP) private readonly orgUnitLookup: OrgUnitLookup,
     @Inject(ORG_UNIT_HIERARCHY) private readonly orgUnitHierarchy: OrgUnitHierarchy,
+    private readonly lifecycle: ProjectLifecyclePublisher,
   ) {}
 
   async listByObjective(objectiveId: string, orgId: string): Promise<ProjectSummaryDto[]> {
@@ -324,7 +326,7 @@ export class ProjectService {
     const objective = await this.findObjectiveOrThrow(existing.objectiveId, orgId);
     assertPeriodOpen(objective.period as PeriodRef);
 
-    return tenantContextStorage.run(authContext, () =>
+    const result = await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         await lockObjective(tx, existing.objectiveId, orgId);
 
@@ -372,6 +374,14 @@ export class ProjectService {
         return { deletedTaskCount: deletedTaskIds.length, deletedTaskIds };
       }),
     );
+
+    // ADR-0009 D5: después del commit, `metrics` revierte los aportes ya aplicados del proyecto y los da de baja.
+    await this.lifecycle.publishDeleted(orgId, authContext, {
+      id,
+      title: existing.title,
+      objectiveId: existing.objectiveId,
+    });
+    return result;
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────

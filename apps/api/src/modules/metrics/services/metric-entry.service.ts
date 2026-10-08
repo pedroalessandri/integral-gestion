@@ -3,7 +3,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import type { MetricEntryDto, MetricFrequency } from '@gestion-publica/shared-types/metrics';
+import type { MetricEntryDto, MetricEntryOrigin, MetricFrequency } from '@gestion-publica/shared-types/metrics';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import {
   formatDecimal4,
@@ -41,6 +41,8 @@ type EntryRow = {
   bucketDate: Date;
   incrementValue: { toString(): string };
   comment: string | null;
+  origin: string;
+  sourceProjectId: string | null;
   createdByUserId: string;
   deletedAt: Date | null;
   createdAt: Date;
@@ -136,6 +138,7 @@ export class MetricEntryService {
     const metric = await this.findMetricOrThrow(metricId, orgId);
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
     const existing = await this.findEntryOrThrow(metricId, entryId, orgId);
+    this.assertManual(existing);
 
     const { entry: updated, events } = await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
@@ -193,7 +196,7 @@ export class MetricEntryService {
   ): Promise<void> {
     const metric = await this.findMetricOrThrow(metricId, orgId);
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
-    await this.findEntryOrThrow(metricId, entryId, orgId);
+    this.assertManual(await this.findEntryOrThrow(metricId, entryId, orgId));
 
     const events = await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
@@ -250,6 +253,19 @@ export class MetricEntryService {
     return entry;
   }
 
+  /**
+   * RN-P14: las cargas automáticas (aporte de un proyecto y su compensación) son de solo lectura. Editarlas o borrarlas
+   * desincronizaría el aporte aplicado; si el aporte estuvo mal, se reabre el proyecto y se corrige con una carga
+   * manual compensatoria (RN-C6).
+   */
+  private assertManual(entry: EntryRow): void {
+    if (entry.origin !== 'manual') {
+      throw new UnprocessableEntityException(
+        'AutomaticEntryReadOnly: la carga fue generada automáticamente por un aporte de proyecto y no se edita ni se borra. Corregí con una carga manual compensatoria (RN-C6).',
+      );
+    }
+  }
+
   private assertValidBucket(bucketDate: Date, metric: MetricWithPeriod): void {
     const range = { startsAt: metric.period.startsAt, endsAt: metric.period.endsAt };
     if (!isValidBucketDate(bucketDate, range, metric.frequency as MetricFrequency)) {
@@ -288,6 +304,8 @@ export class MetricEntryService {
         incrementValue: entry.incrementValue.toString(),
         cumulativeAfter: formatDecimal4(running),
         comment: entry.comment,
+        origin: entry.origin as MetricEntryOrigin,
+        sourceProjectId: entry.sourceProjectId,
         createdBy: user ? { id: user.id, displayName: user.displayName } : null,
         createdAt: entry.createdAt.toISOString(),
         updatedAt: entry.updatedAt.toISOString(),

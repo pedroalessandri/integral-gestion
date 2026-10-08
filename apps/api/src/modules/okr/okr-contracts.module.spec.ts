@@ -4,6 +4,7 @@ import {
   PrismaObjectiveAxisCounter,
   PrismaObjectiveAxisUnassigner,
   PrismaObjectiveOrgUnitCounter,
+  PrismaProjectLinkReader,
 } from './okr-contracts.module.js';
 
 describe('contratos de okr', () => {
@@ -78,5 +79,63 @@ describe('contratos de okr', () => {
       const unassigner = new PrismaObjectiveAxisUnassigner({ emit: vi.fn() } as never);
       await expect(unassigner.unassignAxisFromObjectives('org-1', 'axis-1')).rejects.toThrow(/transaction/i);
     });
+  });
+});
+
+describe('PROJECT_LINK_READER (PrismaProjectLinkReader)', () => {
+  const row = {
+    id: 'p-1',
+    objectiveId: 'obj-1',
+    title: 'Ciclovía Av. Y',
+    endsAt: new Date('2027-06-30T00:00:00Z'),
+    progressCachedBp: 10000,
+    progressMode: 'from_tasks',
+    sourceObjectiveIndicatorId: null,
+  };
+
+  it('findLiveProject filtra por organización y deletedAt, y mapea el avance a bp', async () => {
+    const findFirst = vi.fn().mockResolvedValue(row);
+    const reader = new PrismaProjectLinkReader({ raw: { project: { findFirst } } } as never);
+
+    await expect(reader.findLiveProject('org-1', 'p-1')).resolves.toEqual({
+      id: 'p-1',
+      objectiveId: 'obj-1',
+      title: 'Ciclovía Av. Y',
+      endsAt: row.endsAt,
+      progressBp: 10000,
+      progressMode: 'from_tasks',
+      sourceObjectiveIndicatorId: null,
+    });
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'p-1', organizationId: 'org-1', deletedAt: null } }),
+    );
+  });
+
+  it('un proyecto inexistente, borrado o de otra org da null (no un error)', async () => {
+    const reader = new PrismaProjectLinkReader({ raw: { project: { findFirst: vi.fn().mockResolvedValue(null) } } } as never);
+    await expect(reader.findLiveProject('org-1', 'nope')).resolves.toBeNull();
+  });
+
+  it('findLiveProjects filtra por organización y no consulta con lista vacía', async () => {
+    const findMany = vi.fn().mockResolvedValue([row]);
+    const reader = new PrismaProjectLinkReader({ raw: { project: { findMany } } } as never);
+
+    await expect(reader.findLiveProjects('org-1', [])).resolves.toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+    await reader.findLiveProjects('org-1', ['p-1', 'p-2']);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ['p-1', 'p-2'] }, organizationId: 'org-1', deletedAt: null } }),
+    );
+  });
+
+  it('findLiveProjectsBySourceIndicator lista los from_indicator que toman su avance del indicador', async () => {
+    const findMany = vi.fn().mockResolvedValue([{ ...row, progressMode: 'from_indicator', sourceObjectiveIndicatorId: 'oi-1' }]);
+    const reader = new PrismaProjectLinkReader({ raw: { project: { findMany } } } as never);
+
+    const projects = await reader.findLiveProjectsBySourceIndicator('org-1', 'oi-1');
+    expect(projects[0]).toMatchObject({ progressMode: 'from_indicator', sourceObjectiveIndicatorId: 'oi-1' });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: 'org-1', sourceObjectiveIndicatorId: 'oi-1', deletedAt: null } }),
+    );
   });
 });

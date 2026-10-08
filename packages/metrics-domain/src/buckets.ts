@@ -69,3 +69,19 @@ export function isValidBucketDate(
   const target = toUTCMidnight(date).getTime();
   return buildBuckets(range, frequency).some((b) => b.getTime() === target);
 }
+
+/**
+ * Inicio del bucket que contiene a `date` (RN-C4), para fechar una carga automática (RN-P13). Si `date` cae antes
+ * del primer bucket devuelve el primero; si cae después del período, el último (la carga siempre cae en un bucket
+ * válido, nunca fuera del período).
+ */
+export function bucketContaining(date: Date, range: PeriodRange, frequency: MetricFrequency): Date {
+  const buckets = buildBuckets(range, frequency);
+  const target = toUTCMidnight(date).getTime();
+  let found = buckets[0] as Date;
+  for (const bucket of buckets) {
+    if (bucket.getTime() <= target) found = bucket;
+    else break;
+  }
+  return found;
+}

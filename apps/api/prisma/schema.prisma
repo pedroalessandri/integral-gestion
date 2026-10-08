@@ -54,6 +54,7 @@ model Organization {
   metricKrLinks           MetricKrLink[]
   objectiveIndicators     ObjectiveIndicator[]
   indicatorTargetPoints   IndicatorTargetPoint[]
+  projectContributions    ProjectContribution[]
   metricObjectiveContexts MetricObjectiveContext[]
   orgUnits                OrgUnit[]
   strategicPlans          StrategicPlan[]
@@ -516,6 +517,7 @@ model ObjectiveIndicator {
   organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   metric       Metric                 @relation(fields: [metricId], references: [id], onDelete: Restrict)
   targetPoints IndicatorTargetPoint[]
+  contributions ProjectContribution[]
 
   @@index([organizationId, objectiveId], map: "idx_objective_indicator_org_objective")
   @@index([objectiveId], map: "idx_objective_indicator_objective")
@@ -548,6 +550,33 @@ model IndicatorTargetPoint {
   @@schema("metrics")
 }
 
+/// Aporte de un proyecto a un indicador `output` con `linkMode = execution_feeds_indicator` (RN-P12/P13, ADR-0009 D2).
+/// Cuando el proyecto llega al 100 % se crea un MetricEntry automático por `contributionValue`; si baja, uno
+/// compensatorio negativo (nunca se borra). `appliedEntryId` apunta a la carga positiva vigente (null = no aplicado)
+/// y es lo que vuelve idempotente al oyente. `projectId` tiene FK a okr.project por SQL crudo (convención cross-schema).
+model ProjectContribution {
+  id                   String   @id @default(cuid())
+  organizationId       String   @map("organization_id")
+  projectId            String   @map("project_id")
+  objectiveIndicatorId String   @map("objective_indicator_id")
+  /// Cuánto suma el proyecto al indicador al completarse (distinto de cero). Decimal(18,4), nunca Float.
+  contributionValue    Decimal  @map("contribution_value") @db.Decimal(18, 4)
+  appliedEntryId       String?  @map("applied_entry_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  objectiveIndicator ObjectiveIndicator @relation(fields: [objectiveIndicatorId], references: [id], onDelete: Restrict)
+  appliedEntry       MetricEntry?       @relation("ProjectContributionAppliedEntry", fields: [appliedEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, objectiveIndicatorId], map: "uq_project_contribution_pair")
+  @@index([organizationId], map: "idx_project_contribution_org")
+  @@index([objectiveIndicatorId], map: "idx_project_contribution_indicator")
+  @@index([projectId], map: "idx_project_contribution_project")
+  @@map("project_contribution")
+  @@schema("metrics")
+}
+
 model MetricObjectiveContext {
   metricId        String   @map("metric_id")
   objectiveId     String   @map("objective_id")
@@ -573,13 +602,19 @@ model MetricEntry {
   /// INCREMENT for the bucket (not accumulated). May be negative (correction, RN-C6).
   incrementValue  Decimal   @map("increment_value") @db.Decimal(18, 4)
   comment         String?   @db.Text
+  /// 'manual' | 'project_contribution' — CHECK en la migración (RN-P14). Las automáticas (aporte de un proyecto al
+  /// llegar al 100 % o su compensación) son de solo lectura para el usuario y la UI las distingue.
+  origin          String    @default("manual") @db.VarChar(20)
+  /// Proyecto que originó la carga automática (FK a okr.project por SQL crudo). `null` en las manuales.
+  sourceProjectId String?   @map("source_project_id")
   createdByUserId String    @map("created_by_user_id")
   deletedAt       DateTime? @map("deleted_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  metric       Metric       @relation(fields: [metricId], references: [id], onDelete: Restrict)
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  metric                Metric                @relation(fields: [metricId], references: [id], onDelete: Restrict)
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  appliedByContribution ProjectContribution[] @relation("ProjectContributionAppliedEntry")
 
   @@index([metricId, bucketDate], map: "idx_metric_entry_metric_bucket")
   @@index([organizationId], map: "idx_metric_entry_org")

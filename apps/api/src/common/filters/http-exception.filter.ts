@@ -38,12 +38,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const { statusCode, message, error } = this.resolve(exception);
+    const { statusCode, message, error, details } = this.resolve(exception);
 
     const body: ErrorResponseDto = {
       statusCode,
       message,
       error,
+      ...(details !== undefined && { details }),
     };
 
     if (statusCode >= 500) {
@@ -64,6 +65,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     statusCode: number;
     message: string;
     error: string;
+    details?: Record<string, unknown>;
   } {
     // Infrastructure wiring errors → 500
     if (exception instanceof MissingTenantContextError) {
@@ -152,10 +154,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
               'message' in response
             ? String((response as Record<string, unknown>)['message'])
             : exception.message;
+      // Contexto estructurado opcional (p. ej. la lista de proyectos vinculados de un 422): `{ message, details }`.
+      const details =
+        typeof response === 'object' && response !== null && 'details' in response
+          ? (response as { details?: unknown }).details
+          : undefined;
       return {
         statusCode: status,
         message,
         error: exception.constructor.name,
+        ...(typeof details === 'object' && details !== null && { details: details as Record<string, unknown> }),
       };
     }
 

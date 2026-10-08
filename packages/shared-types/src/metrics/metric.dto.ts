@@ -92,6 +92,12 @@ export interface MetricSeriesDto {
   };
 }
 
+/**
+ * Origen de una carga (RN-P14): `manual` la cargó una persona; `project_contribution` la generó el sistema cuando un
+ * proyecto llegó al 100 % (aporte positivo) o bajó de ahí (compensatoria negativa). La UI las distingue.
+ */
+export type MetricEntryOrigin = 'manual' | 'project_contribution';
+
 export interface MetricEntryDto {
   id: string;
   metricId: string;
@@ -102,6 +108,10 @@ export interface MetricEntryDto {
   /** Accumulated value after this entry (chronological order). Decimal string. */
   cumulativeAfter: string;
   comment: string | null;
+  /** `project_contribution` = carga automática (solo lectura; no se edita ni se borra). */
+  origin: MetricEntryOrigin;
+  /** Proyecto que originó la carga automática; `null` en las manuales. */
+  sourceProjectId: string | null;
   createdBy: { id: string; displayName: string } | null;
   /** ISO-8601 UTC. */
   createdAt: string;

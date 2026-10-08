@@ -361,14 +361,30 @@ export class MetricService {
     return rows.filter((r) => liveObjectiveIds.has(r.objectiveId));
   }
 
-  /** RN-P12: `output` -> `outcome` se rechaza (422) si algún indicador de la métrica es `execution_feeds_indicator`. */
+  /**
+   * RN-P12: `output` -> `outcome` se rechaza (422) si algún indicador de la métrica es `execution_feeds_indicator`
+   * o si tiene aportes de proyectos (`ProjectContribution`).
+   */
   private async assertNoExecutionFeedsIndicator(metricId: string, orgId: string): Promise<void> {
-    const blocking = (await this.findLiveObjectiveIndicators(metricId, orgId)).filter(
-      (r) => r.linkMode === 'execution_feeds_indicator',
-    );
-    if (blocking.length > 0) {
+    const indicators = await this.findLiveObjectiveIndicators(metricId, orgId);
+    const blocking = indicators.filter((r) => r.linkMode === 'execution_feeds_indicator');
+    const contributionCount =
+      indicators.length === 0
+        ? 0
+        : await this.prisma.scoped.projectContribution.count({
+            where: { objectiveIndicatorId: { in: indicators.map((i) => i.id) }, organizationId: orgId },
+          });
+    if (blocking.length > 0 || contributionCount > 0) {
+      const detail = [
+        blocking.length > 0
+          ? `alimenta con aportes de proyectos a ${blocking.length} indicador(es) de objetivos (${blocking.map((b) => b.id).join(', ')})`
+          : null,
+        contributionCount > 0 ? `tiene ${contributionCount} aporte(s) de proyectos` : null,
+      ]
+        .filter((d): d is string => d !== null)
+        .join(' y ');
       throw new UnprocessableEntityException(
-        `MetricKindChangeBlocked: no se puede pasar el indicador de producto (output) a resultado (outcome): alimenta con aportes de proyectos a ${blocking.length} indicador(es) de objetivos (${blocking.map((b) => b.id).join(', ')}). Cambiá primero su vínculo con la gestión (RN-P12).`,
+        `MetricKindChangeBlocked: no se puede pasar el indicador de producto (output) a resultado (outcome): ${detail}. Cambiá primero su vínculo con la gestión y quitá los aportes (RN-P12).`,
       );
     }
   }

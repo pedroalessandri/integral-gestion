@@ -93,7 +93,7 @@ export class CreateObjectiveIndicatorDto implements CreateObjectiveIndicatorCont
   @IsIn(['independent', 'execution_feeds_indicator', 'indicator_feeds_execution'])
   linkMode?: ObjectiveIndicatorLinkMode;
 
-  /** `from_projects` pasa la validación de forma pero el service lo rechaza con 422 hasta F7. */
+  /** `from_projects` solo es válido para `output` con `execution_feeds_indicator`; el service lo rechaza con 422 si no (RN-P17). */
   @IsOptional()
   @IsIn(['linear', 'manual', 'from_projects'])
   expectedCurveMode?: ExpectedCurveMode;
