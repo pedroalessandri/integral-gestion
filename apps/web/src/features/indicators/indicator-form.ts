@@ -4,13 +4,24 @@ import type {
   MetricFrequency,
   MetricKind,
   MetricSummaryDto,
+  IndicatorTargetPointDto,
   MetricUnit,
   ObjectiveIndicatorDto,
   UpdateObjectiveIndicatorDto,
 } from '@gestion-publica/shared-types/metrics';
+import { scaleDecimal } from './decimal';
+import {
+  curveBuckets,
+  pointsToValues,
+  toEditableCurveMode,
+  toTargetPointInputs,
+  validateCurvePoints,
+  type CurvePeriod,
+  type EditableCurveMode,
+  type PointValues,
+} from './curve-form';
 
-/** Decimal con hasta 4 decimales, como lo valida la API (NUMERIC(18,4)). */
-export const DECIMAL_RE = /^-?\d{1,14}(\.\d{1,4})?$/;
+export { DECIMAL_RE, scaleDecimal } from './decimal';
 
 export type IndicatorSourceMode = 'existing' | 'new';
 
@@ -28,6 +39,10 @@ export interface IndicatorFormValues {
   direction: MetricDirection;
   baselineValue: string;
   targetValue: string;
+  /** Curva esperada (RN-P17). `from_projects` todavía no se ofrece. */
+  curveMode: EditableCurveMode;
+  /** Valores de la curva manual por inicio de bucket; el último bucket siempre vale la meta. */
+  pointValues: PointValues;
 }
 
 export function emptyIndicatorForm(): IndicatorFormValues {
@@ -43,10 +58,16 @@ export function emptyIndicatorForm(): IndicatorFormValues {
     direction: 'increasing',
     baselineValue: '0',
     targetValue: '',
+    curveMode: 'linear',
+    pointValues: {},
   };
 }
 
-export function indicatorToFormValues(indicator: ObjectiveIndicatorDto, metric: MetricSummaryDto | null): IndicatorFormValues {
+export function indicatorToFormValues(
+  indicator: ObjectiveIndicatorDto,
+  metric: MetricSummaryDto | null,
+  targetPoints: ReadonlyArray<IndicatorTargetPointDto> = [],
+): IndicatorFormValues {
   return {
     sourceMode: 'existing',
     metricId: indicator.metricId,
@@ -59,6 +80,8 @@ export function indicatorToFormValues(indicator: ObjectiveIndicatorDto, metric: 
     direction: indicator.direction,
     baselineValue: indicator.baselineValue,
     targetValue: indicator.targetValue,
+    curveMode: toEditableCurveMode(indicator.expectedCurveMode),
+    pointValues: pointsToValues(targetPoints),
   };
 }
 
@@ -74,18 +97,6 @@ export function applyExistingMetric(values: IndicatorFormValues, metric: MetricS
     baselineValue: metric.baselineValue,
     targetValue: metric.targetValue,
   };
-}
-
-const SCALE = 4;
-
-/** Decimal string -> entero escalado 10^4, sin pasar por floats. `null` si no es un decimal válido. */
-export function scaleDecimal(input: string): bigint | null {
-  const value = input.trim();
-  if (!DECIMAL_RE.test(value)) return null;
-  const negative = value.startsWith('-');
-  const [whole = '0', frac = ''] = value.replace('-', '').split('.');
-  const scaled = BigInt(whole + frac.padEnd(SCALE, '0'));
-  return negative ? -scaled : scaled;
 }
 
 /** Valida base, meta y dirección con las mismas reglas que la API (422). `null` si está todo bien. */
@@ -108,24 +119,53 @@ export function inferDirection(baseline: string, target: string): MetricDirectio
   return t > b ? 'increasing' : 'decreasing';
 }
 
-export function validateIndicatorForm(values: IndicatorFormValues, editing: boolean): string | null {
+export function validateIndicatorForm(
+  values: IndicatorFormValues,
+  editing: boolean,
+  period: CurvePeriod,
+): string | null {
   if (!editing) {
     if (values.sourceMode === 'existing' && values.metricId === '') return 'Elegí una métrica existente.';
     if (values.sourceMode === 'new' && values.name.trim() === '') return 'Ingresá un nombre para el indicador.';
   }
-  return validateBaselineTarget(values.baselineValue, values.targetValue, values.direction);
+  const baseTarget = validateBaselineTarget(values.baselineValue, values.targetValue, values.direction);
+  if (baseTarget) return baseTarget;
+  if (values.curveMode === 'manual') {
+    return validateCurvePoints(values.pointValues, curveBuckets(period, values.frequency), values.targetValue);
+  }
+  return null;
+}
+
+/**
+ * Curva del indicador para el DTO. En `manual` siempre se mandan los puntos (la API los valida contra la meta
+ * vigente: si la meta cambió, tienen que viajar en el mismo pedido). En `linear` solo el modo.
+ */
+function curveFields(values: IndicatorFormValues, period: CurvePeriod) {
+  if (values.curveMode === 'manual') {
+    const buckets = curveBuckets(period, values.frequency);
+    return {
+      expectedCurveMode: 'manual' as const,
+      targetPoints: toTargetPointInputs(values.pointValues, buckets, values.targetValue),
+    };
+  }
+  return { expectedCurveMode: 'linear' as const };
 }
 
 /**
  * Crear con métrica existente o nueva en un solo paso. Sin `weightBp` salvo que el grupo ya esté ponderado: ahí va
  * `0` para que la suma siga en 10000 y se ajuste después con "Editar pesos" (mismo criterio que proyectos y tareas).
  */
-export function toCreateIndicatorDto(values: IndicatorFormValues, groupWeighted: boolean): CreateObjectiveIndicatorDto {
+export function toCreateIndicatorDto(
+  values: IndicatorFormValues,
+  groupWeighted: boolean,
+  period: CurvePeriod,
+): CreateObjectiveIndicatorDto {
   const common = {
     baselineValue: values.baselineValue.trim(),
     targetValue: values.targetValue.trim(),
     direction: values.direction,
     ...(groupWeighted && { weightBp: 0 }),
+    ...curveFields(values, period),
   };
   if (values.sourceMode === 'existing') return { metricId: values.metricId, ...common };
   const source = values.source.trim();
@@ -143,9 +183,10 @@ export function toCreateIndicatorDto(values: IndicatorFormValues, groupWeighted:
   };
 }
 
-/** Base, meta y dirección van al indicador (D8). Los pesos viajan solo por el PUT en bloque. */
-export function toUpdateIndicatorDto(values: IndicatorFormValues): UpdateObjectiveIndicatorDto {
+/** Base, meta, dirección y curva van al indicador (D8). Los pesos viajan solo por el PUT en bloque. */
+export function toUpdateIndicatorDto(values: IndicatorFormValues, period: CurvePeriod): UpdateObjectiveIndicatorDto {
   return {
+    ...curveFields(values, period),
     baselineValue: values.baselineValue.trim(),
     targetValue: values.targetValue.trim(),
     direction: values.direction,

@@ -12,6 +12,7 @@ import {
   setIndicatorWeightsAction,
   updateIndicatorAction,
 } from './indicator-actions';
+import type { CurvePeriod } from './curve-form';
 import {
   toCreateIndicatorDto,
   toMetricAttributesPatch,
@@ -25,7 +26,12 @@ interface CurrentMetricAttributes {
   description: string | null;
 }
 
-export function useObjectiveIndicators(orgId: string, objectiveId: string, indicators: ObjectiveIndicatorDto[]) {
+export function useObjectiveIndicators(
+  orgId: string,
+  objectiveId: string,
+  indicators: ObjectiveIndicatorDto[],
+  period: CurvePeriod,
+) {
   const { pending, error, run, clearError } = useActionRunner();
 
   const saveWeights = useCallback(
@@ -38,15 +44,15 @@ export function useObjectiveIndicators(orgId: string, objectiveId: string, indic
     async (values: IndicatorFormValues) =>
       (
         await run(() =>
-          createIndicatorAction(orgId, objectiveId, toCreateIndicatorDto(values, weights.mode === 'weighted')),
+          createIndicatorAction(orgId, objectiveId, toCreateIndicatorDto(values, weights.mode === 'weighted', period)),
         )
       ).ok,
-    [orgId, objectiveId, run, weights.mode],
+    [orgId, objectiveId, run, weights.mode, period],
   );
 
   /**
    * Tipo, fuente y descripción viven en la métrica (PATCH propio, primero: puede dar 422 por RN-P12);
-   * base, meta y dirección en el indicador (D8).
+   * base, meta, dirección y curva (con sus puntos, en el mismo PATCH) en el indicador (D8, RN-P17).
    */
   const updateIndicator = useCallback(
     async (indicator: ObjectiveIndicatorDto, current: CurrentMetricAttributes, values: IndicatorFormValues) =>
@@ -57,10 +63,10 @@ export function useObjectiveIndicators(orgId: string, objectiveId: string, indic
             const metricResult = await updateMetricAction({ orgId, metricId: indicator.metricId, ...patch });
             if (metricResult.error) return { ok: false, error: metricResult.error, code: null, status: 0 };
           }
-          return updateIndicatorAction(orgId, indicator.id, toUpdateIndicatorDto(values));
+          return updateIndicatorAction(orgId, indicator.id, toUpdateIndicatorDto(values, period));
         })
       ).ok,
-    [orgId, run],
+    [orgId, run, period],
   );
 
   const deleteIndicator = useCallback(

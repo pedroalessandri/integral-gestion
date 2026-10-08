@@ -16,3 +16,14 @@ export {
   computeAutomaticKrProgressBp,
   objectiveIndicatorProgressBp,
 } from './progress';
+export {
+  expectedCurve,
+  pendingBuckets,
+  DEFAULT_GRACE_DAYS,
+} from './curves';
+export type {
+  ExpectedCurveMode,
+  ExpectedCurveInput,
+  TargetPointInput,
+  ProjectStepInput,
+} from './curves';

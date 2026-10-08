@@ -27,10 +27,12 @@ import {
   ObjectiveIndicatorsPanel,
   ResultProgressBar,
   getIndicatorChartDataAction,
+  getIndicatorExtrasAction,
+  getObjectiveStatusAction,
   listIndicatorsAction,
   listOrgMetricsAction,
 } from '@/features/indicators';
-import type { IndicatorChartData } from '@/features/indicators';
+import type { IndicatorChartData, IndicatorExtras } from '@/features/indicators';
 import type { ActionResult } from '@/features/planning/error-messages';
 import { LABELS } from '@/lib/labels';
 import type { TaskStatus, TaskSummaryDto, ProgressStatus, OwnerSummaryDto } from '@gestion-publica/shared-types/okr';
@@ -198,6 +200,16 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
   // "Indicadores de gestión": si no está habilitado se omiten y la pestaña lo avisa).
   const indicatorsResult = await listIndicatorsAction(orgId, id);
   const indicators = indicatorsResult.ok ? indicatorsResult.data : [];
+  // Estado de cada indicador (semáforo, cargas pendientes, puntos de la curva manual) y de las dos lecturas del
+  // objetivo. Solo requieren `okr:read`; si fallan, se muestran las barras y tarjetas sin semáforo.
+  const [indicatorExtras, objectiveStatusResult] = await Promise.all([
+    Promise.all(indicators.map((i) => getIndicatorExtrasAction(orgId, i))),
+    getObjectiveStatusAction(orgId, id),
+  ]);
+  const extrasByIndicatorId: Record<string, IndicatorExtras> = Object.fromEntries(
+    indicators.map((i, idx) => [i.id, indicatorExtras[idx]!]),
+  );
+  const objectiveStatus = objectiveStatusResult.ok ? objectiveStatusResult.data : null;
   let chartsByMetricId: Record<string, ActionResult<IndicatorChartData>> | null = null;
   let availableMetrics: MetricSummaryDto[] = [];
   let catalogError: string | null = null;
@@ -274,10 +286,12 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
               <ResultProgressBar
                 valueBp={objective.resultProgressCachedBp ?? 0}
                 indicatorCount={indicators.length}
+                status={objectiveStatus?.result ?? null}
               />
               <ExecutionProgressBar
                 valueBp={objective.executionProgressCachedBp ?? 0}
                 projectCount={projects.length}
+                status={objectiveStatus?.execution ?? null}
               />
             </div>
           </div>
@@ -401,6 +415,8 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
             objective={{ id: objective.id }}
             indicators={indicators}
             chartsByMetricId={chartsByMetricId}
+            extrasByIndicatorId={extrasByIndicatorId}
+            period={{ startsAt: periodStartsAt ?? '', endsAt: periodEndsAt ?? '' }}
             availableMetrics={availableMetrics}
             catalogError={catalogError}
             readOnly={isReadOnly}

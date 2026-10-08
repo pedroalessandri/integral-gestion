@@ -115,4 +115,10 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
    * Vínculo objetivo <-> métrica; organizationId requerido e inmutable.
    */
   'ObjectiveIndicator',
+
+  /**
+   * `metrics.indicator_target_point` — ADR-0009 D2 / SPEC §3.1 (RN-P17).
+   * Puntos de la curva esperada manual; organizationId requerido e inmutable.
+   */
+  'IndicatorTargetPoint',
 ]);

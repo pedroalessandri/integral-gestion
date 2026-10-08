@@ -30,6 +30,7 @@ type Row = Record<string, unknown>;
 let indicators: Row[];
 let entries: Row[];
 let metrics: Row[];
+let points: Row[];
 let committed: boolean;
 let emitted: Array<{ name: string; payload: Record<string, unknown>; afterCommit: boolean }>;
 let seq: number;
@@ -85,12 +86,30 @@ const tx = {
   },
   metric: table(() => metrics),
   metricEntry: table(() => entries),
+  indicatorTargetPoint: {
+    ...table(() => points),
+    deleteMany: vi.fn(async ({ where }: { where: Row }) => {
+      points = points.filter((p) => !matches(p, where));
+      return { count: 0 };
+    }),
+    createMany: vi.fn(async ({ data }: { data: Row[] }) => {
+      for (const d of data) points.push({ id: `tp-${++seq}`, ...d, expectedValue: D(String(d['expectedValue'])) });
+      return { count: data.length };
+    }),
+  },
 };
 // Orden de lectura de los DTO dentro del tx: usan las mismas tablas
 const scoped = {
   objectiveIndicator: table(() => indicators),
   metric: table(() => metrics),
   metricEntry: table(() => entries),
+  indicatorTargetPoint: table(() => points),
+  period: {
+    findFirst: vi.fn(async () => ({
+      startsAt: new Date('2027-01-01T00:00:00Z'),
+      endsAt: new Date('2027-12-31T00:00:00Z'),
+    })),
+  },
 };
 const prisma = {
   scoped,
@@ -183,6 +202,7 @@ beforeEach(() => {
   seq = 0;
   indicators = [];
   entries = [];
+  points = [];
   metrics = [metric('m-1'), metric('m-2')];
   committed = false;
   emitted = [];
@@ -638,5 +658,162 @@ describe('listByObjective', () => {
   it('objetivo inexistente -> 404', async () => {
     lookup.findLiveObjective.mockResolvedValueOnce(null);
     await expect(build().listByObjective('nope', ORG)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('curva esperada (RN-P17)', () => {
+  const valid = [
+    { bucketDate: '2027-06-01', expectedValue: '40' },
+    { bucketDate: '2027-12-01', expectedValue: '100' },
+  ];
+
+  it('create sin modo: queda en linear y no toca puntos', async () => {
+    const dto = await build().create('obj-1', ORG, { metricId: 'm-1' }, authCtx);
+    expect(dto.expectedCurveMode).toBe('linear');
+    expect(points).toHaveLength(0);
+    expect(tx.indicatorTargetPoint.createMany).not.toHaveBeenCalled();
+  });
+
+  it('create manual con puntos válidos: guarda los puntos ordenados y audita created + replaced', async () => {
+    const dto = await build().create(
+      'obj-1',
+      ORG,
+      { metricId: 'm-1', expectedCurveMode: 'manual', targetPoints: [valid[1] as never, valid[0] as never] },
+      authCtx,
+    );
+    expect(dto.expectedCurveMode).toBe('manual');
+    expect(points.map((p) => [p['objectiveIndicatorId'], p['organizationId']])).toEqual([
+      [dto.id, ORG],
+      [dto.id, ORG],
+    ]);
+    expect(audit.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'objective_indicator.created',
+        diff: expect.objectContaining({ after: expect.objectContaining({ expectedCurveMode: 'manual' }) }),
+      }),
+    );
+    expect(audit.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'indicator_target_points.replaced',
+        entityId: dto.id,
+        diff: { before: { points: [] }, after: { points: valid } },
+      }),
+    );
+  });
+
+  it('create manual sin puntos -> 422', async () => {
+    await expect(
+      build().create('obj-1', ORG, { metricId: 'm-1', expectedCurveMode: 'manual' }, authCtx),
+    ).rejects.toThrow(/IndicatorTargetPointsInvalid/);
+    expect(indicators).toHaveLength(0);
+  });
+
+  it('from_projects se rechaza con 422 tipado (no hay ProjectContribution todavía)', async () => {
+    await expect(
+      build().create('obj-1', ORG, { metricId: 'm-1', expectedCurveMode: 'from_projects' }, authCtx),
+    ).rejects.toThrow(/ExpectedCurveModeNotAvailable/);
+    indicators.push(indicator('oi-1', 'm-1'));
+    await expect(build().update('oi-1', ORG, { expectedCurveMode: 'from_projects' }, authCtx)).rejects.toThrow(
+      /ExpectedCurveModeNotAvailable/,
+    );
+  });
+
+  it('el último punto debe ser igual a la meta (RN-P17)', async () => {
+    indicators.push(indicator('oi-1', 'm-1'));
+    await expect(
+      build().setTargetPoints('oi-1', ORG, { points: [{ bucketDate: '2027-12-01', expectedValue: '90' }] }, authCtx),
+    ).rejects.toThrow(/último punto.*igual a la meta/);
+    expect(points).toHaveLength(0);
+  });
+
+  it('fecha que no es inicio de bucket, fecha inexistente y bucket repetido -> 422', async () => {
+    indicators.push(indicator('oi-1', 'm-1'));
+    const set = (p: Array<{ bucketDate: string; expectedValue: string }>) =>
+      build().setTargetPoints('oi-1', ORG, { points: p }, authCtx);
+    await expect(set([{ bucketDate: '2027-06-15', expectedValue: '100' }])).rejects.toThrow(/no es el inicio de un bucket/);
+    await expect(set([{ bucketDate: '2027-02-30', expectedValue: '100' }])).rejects.toThrow(/no es una fecha válida/);
+    await expect(
+      set([
+        { bucketDate: '2027-06-01', expectedValue: '100' },
+        { bucketDate: '2027-06-01', expectedValue: '100' },
+      ]),
+    ).rejects.toThrow(/más de un punto/);
+  });
+
+  it('PUT reemplaza los puntos, audita before/after y vuelve a ser no-op si no cambian', async () => {
+    indicators.push(indicator('oi-1', 'm-1'));
+    const svc = build();
+    const out = await svc.setTargetPoints('oi-1', ORG, { points: valid }, authCtx);
+    expect(out).toEqual(valid);
+    expect(points.every((p) => p['organizationId'] === ORG)).toBe(true);
+    expect(audit.emit).toHaveBeenCalledTimes(1);
+
+    await svc.setTargetPoints('oi-1', ORG, { points: valid }, authCtx);
+    expect(audit.emit).toHaveBeenCalledTimes(1); // sin cambios: sin audit
+
+    await svc.setTargetPoints('oi-1', ORG, { points: [{ bucketDate: '2027-12-01', expectedValue: '100' }] }, authCtx);
+    expect(audit.emit).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'indicator_target_points.replaced',
+        diff: { before: { points: valid }, after: { points: [{ bucketDate: '2027-12-01', expectedValue: '100' }] } },
+      }),
+    );
+  });
+
+  it('un indicador manual no puede quedarse sin puntos', async () => {
+    indicators.push(indicator('oi-1', 'm-1', { expectedCurveMode: 'manual' }));
+    await expect(build().setTargetPoints('oi-1', ORG, { points: [] }, authCtx)).rejects.toThrow(
+      /IndicatorTargetPointsInvalid/,
+    );
+  });
+
+  it('pasar a manual sin puntos guardados -> 422; con puntos guardados válidos -> ok', async () => {
+    indicators.push(indicator('oi-1', 'm-1'));
+    await expect(build().update('oi-1', ORG, { expectedCurveMode: 'manual' }, authCtx)).rejects.toThrow(
+      /IndicatorTargetPointsInvalid/,
+    );
+
+    points.push(
+      { id: 'tp-a', organizationId: ORG, objectiveIndicatorId: 'oi-1', bucketDate: new Date('2027-12-01T00:00:00Z'), expectedValue: D('100') },
+    );
+    const dto = await build().update('oi-1', ORG, { expectedCurveMode: 'manual' }, authCtx);
+    expect(dto.expectedCurveMode).toBe('manual');
+    expect(audit.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'objective_indicator.updated',
+        diff: { before: { expectedCurveMode: 'linear' }, after: { expectedCurveMode: 'manual' } },
+      }),
+    );
+  });
+
+  it('en modo manual, cambiar la meta sin ajustar los puntos -> 422; ajustándolos en el mismo PATCH -> ok', async () => {
+    indicators.push(indicator('oi-1', 'm-1', { expectedCurveMode: 'manual' }));
+    points.push(
+      { id: 'tp-a', organizationId: ORG, objectiveIndicatorId: 'oi-1', bucketDate: new Date('2027-12-01T00:00:00Z'), expectedValue: D('100') },
+    );
+    await expect(build().update('oi-1', ORG, { targetValue: '200' }, authCtx)).rejects.toThrow(/igual a la meta/);
+
+    const dto = await build().update(
+      'oi-1',
+      ORG,
+      { targetValue: '200', targetPoints: [{ bucketDate: '2027-12-01', expectedValue: '200' }] },
+      authCtx,
+    );
+    expect(dto.targetValue).toBe('200');
+    expect(points.map((p) => p['expectedValue']?.toString())).toEqual(['200']);
+  });
+
+  it('indicador de otra organización -> 404 al pedir o reemplazar puntos', async () => {
+    await expect(build().getTargetPoints('nope', ORG)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(build().setTargetPoints('nope', ORG, { points: [] }, authCtx)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('getTargetPoints filtra por organizationId y devuelve fechas YYYY-MM-DD', async () => {
+    indicators.push(indicator('oi-1', 'm-1'));
+    points.push({ id: 'tp-a', organizationId: ORG, objectiveIndicatorId: 'oi-1', bucketDate: new Date('2027-12-01T00:00:00Z'), expectedValue: D('100') });
+    expect(await build().getTargetPoints('oi-1', ORG)).toEqual([{ bucketDate: '2027-12-01', expectedValue: '100' }]);
+    expect(scoped.indicatorTargetPoint.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: ORG, objectiveIndicatorId: 'oi-1' }) }),
+    );
   });
 });

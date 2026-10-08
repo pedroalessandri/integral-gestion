@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import type { ObjectiveIndicatorDto } from '@gestion-publica/shared-types/metrics';
 import { Badge } from '@/components/ui/badge';
+import { PendingLoadBadge } from '@/components/pending-load-badge';
+import { SemaphoreBadge } from '@/components/semaphore-badge';
 import { Button } from '@/components/ui/button';
 import { EntryFormPanel } from '@/components/metrics/entry-form-panel';
 import { EntryHistoryTable } from '@/components/metrics/entry-history-table';
@@ -11,14 +13,17 @@ import { MetricChart } from '@/components/metrics/metric-chart';
 import { FREQUENCY_LABELS, formatMetricValue } from '@/components/metrics/format';
 import type { ActionResult } from '@/features/planning/error-messages';
 import { formatBpPercent } from '@/features/projects/weights';
-import { INDICATOR_KIND_LABELS, LABELS } from '@/lib/labels';
-import { withIndicatorLinearExpected } from '../chart-data';
-import type { IndicatorChartData } from '../indicator-actions';
+import { EXPECTED_CURVE_MODE_LABELS, INDICATOR_KIND_LABELS, LABELS } from '@/lib/labels';
+import { seriesForIndicator } from '../chart-data';
+import { formatBucketDate } from '../curve-form';
+import type { IndicatorChartData, IndicatorExtras } from '../indicator-actions';
 
 interface Props {
   orgId: string;
   indicator: ObjectiveIndicatorDto;
   chart: ActionResult<IndicatorChartData> | null;
+  /** Estado (`/status`) y puntos de la curva manual; `null` si no se pidieron. */
+  extras: IndicatorExtras | null;
   /** Período cerrado: solo lectura. */
   readOnly: boolean;
   defaultOpen: boolean;
@@ -26,11 +31,16 @@ interface Props {
   onDelete: () => void;
 }
 
-export function IndicatorCard({ orgId, indicator, chart, readOnly, defaultOpen, onEdit, onDelete }: Props) {
+export function IndicatorCard({ orgId, indicator, chart, extras, readOnly, defaultOpen, onEdit, onDelete }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const pct = Math.max(0, Math.min(10000, indicator.progressCachedBp)) / 100;
   const detailsId = `indicator-details-${indicator.id}`;
   const DirectionIcon = indicator.direction === 'increasing' ? TrendingUp : TrendingDown;
+  const status = extras?.status ?? null;
+  const pendingBuckets = status?.pendingBuckets ?? [];
+  const curve = EXPECTED_CURVE_MODE_LABELS[indicator.expectedCurveMode];
+  // Manual sin puntos cargados: no se dibuja una curva falsa (ver `seriesForIndicator`).
+  const targetPoints = extras ? extras.targetPoints : indicator.expectedCurveMode === 'manual' ? null : [];
 
   return (
     <li className="space-y-3 rounded-xl border border-neutral-200 bg-white p-4">
@@ -57,7 +67,36 @@ export function IndicatorCard({ orgId, indicator, chart, readOnly, defaultOpen, 
             <Badge variant="outline" className="text-xs">
               {FREQUENCY_LABELS[indicator.frequency]}
             </Badge>
+            <Badge variant="outline" className="text-xs" title={curve.hint}>
+              {LABELS.expectedCurve}: {curve.label.toLowerCase()}
+            </Badge>
           </div>
+          {status && (
+            <div className="flex flex-wrap items-center gap-2" data-testid="indicator-status">
+              <SemaphoreBadge
+                color={status.semaphore}
+                deviationBp={status.deviationBp}
+                reading={indicator.metricName}
+                testId="indicator-semaphore"
+              />
+              <PendingLoadBadge
+                count={pendingBuckets.length}
+                detail={pendingBuckets.map(formatBucketDate).join(', ')}
+                testId="indicator-pending"
+              />
+              {status.hasData && status.expectedValue !== null && (
+                <span className="text-xs text-neutral-500">
+                  Esperado al {status.asOf ? formatBucketDate(status.asOf) : 'último intervalo'}:{' '}
+                  <span className="font-mono text-neutral-800">
+                    {formatMetricValue(status.expectedValue, indicator.unit)}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
+          {extras?.statusError && (
+            <p className="text-xs text-amber-800">No pudimos calcular el semáforo. {extras.statusError}</p>
+          )}
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
             <span className="inline-flex items-center gap-1">
               <DirectionIcon className="h-3.5 w-3.5" aria-hidden />
@@ -113,8 +152,15 @@ export function IndicatorCard({ orgId, indicator, chart, readOnly, defaultOpen, 
             <>
               <div className="space-y-4 lg:col-span-2">
                 <div className="rounded-lg border border-neutral-200 p-3">
+                  {extras?.pointsError && (
+                    <p role="alert" className="mb-2 text-xs text-amber-800">
+                      No pudimos cargar los puntos de la curva manual, así que el gráfico muestra la recta lineal.{' '}
+                      {extras.pointsError}
+                    </p>
+                  )}
                   <MetricChart
-                    series={withIndicatorLinearExpected(chart.data.series, indicator.baselineValue, indicator.targetValue)}
+                    series={seriesForIndicator(chart.data.series, indicator, targetPoints, chart.data.metric.period)}
+                    expectedLabel={`${LABELS.expectedCurve} (${curve.label.toLowerCase()})`}
                     unit={indicator.unit}
                     baselineValue={indicator.baselineValue}
                     targetValue={indicator.targetValue}

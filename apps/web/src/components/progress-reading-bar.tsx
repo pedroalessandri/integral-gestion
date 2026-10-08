@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 interface Props {
   label: string;
   valueBp: number;
@@ -7,13 +9,15 @@ interface Props {
   barClassName: string;
   testId: string;
   className?: string;
+  /** Semáforo y avisos de ESTA lectura (se muestran junto a la barra). */
+  badges?: ReactNode;
 }
 
 /**
  * Barra de una lectura de avance (resultado o gestión). Cada lectura usa su propia instancia: nunca se combinan.
  * El valor viene calculado del backend; acá solo se redondea para mostrarlo.
  */
-export function ProgressReadingBar({ label, valueBp, hasItems, emptyText, barClassName, testId, className = '' }: Props) {
+export function ProgressReadingBar({ label, valueBp, hasItems, emptyText, barClassName, testId, className = '', badges }: Props) {
   const pct = Math.max(0, Math.min(10000, valueBp)) / 100;
   return (
     <div className={`space-y-1 ${className}`} data-testid={testId}>
@@ -25,6 +29,7 @@ export function ProgressReadingBar({ label, valueBp, hasItems, emptyText, barCla
           <span className="text-neutral-500">{emptyText}</span>
         )}
       </div>
+      {badges && <div className="flex flex-wrap items-center gap-1.5">{badges}</div>}
       <div
         role="progressbar"
         aria-label={label}

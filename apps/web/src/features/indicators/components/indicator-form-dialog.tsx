@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type {
   MetricDirection,
   MetricFrequency,
   MetricKind,
   MetricSummaryDto,
+  IndicatorTargetPointDto,
   MetricUnit,
   ObjectiveIndicatorDto,
 } from '@gestion-publica/shared-types/metrics';
@@ -22,8 +23,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { FREQUENCY_LABELS, UNIT_LABELS } from '@/components/metrics/format';
-import { INDICATOR_KIND_LABELS, LABELS } from '@/lib/labels';
+import { EXPECTED_CURVE_MODE_LABELS, INDICATOR_KIND_LABELS, LABELS } from '@/lib/labels';
 import { formatBpPercent } from '@/features/projects/weights';
+import {
+  curveBuckets,
+  formatBucketDate,
+  isLockedBucket,
+  type CurvePeriod,
+  type EditableCurveMode,
+} from '../curve-form';
 import {
   applyExistingMetric,
   emptyIndicatorForm,
@@ -41,6 +49,10 @@ interface Props {
   indicator: ObjectiveIndicatorDto | null;
   /** Métrica del indicador que se edita (fuente y descripción). */
   metric: MetricSummaryDto | null;
+  /** Puntos guardados de la curva manual; `null` si no se pudieron cargar. */
+  targetPoints: IndicatorTargetPointDto[] | null;
+  /** Período del objetivo: define los intervalos de la curva manual junto con la frecuencia. */
+  period: CurvePeriod;
   /** Métricas del período del objetivo que todavía no son indicadores de él. */
   availableMetrics: MetricSummaryDto[];
   /** Si no se pudo cargar el catálogo de métricas, solo se puede crear con una métrica nueva. */
@@ -56,6 +68,8 @@ interface Props {
 export function IndicatorFormDialog({
   indicator,
   metric,
+  targetPoints,
+  period,
   availableMetrics,
   catalogError,
   groupWeighted,
@@ -67,12 +81,14 @@ export function IndicatorFormDialog({
   const editing = indicator !== null;
   const canPickExisting = availableMetrics.length > 0;
   const [values, setValues] = useState<IndicatorFormValues>(() =>
-    indicator ? indicatorToFormValues(indicator, metric) : emptyIndicatorForm(),
+    indicator ? indicatorToFormValues(indicator, metric, targetPoints ?? []) : emptyIndicatorForm(),
   );
   const [localError, setLocalError] = useState<string | null>(null);
   const set = <K extends keyof IndicatorFormValues>(key: K, value: IndicatorFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
+  const pointsUnavailable = editing && targetPoints === null && indicator.expectedCurveMode === 'manual';
+  const buckets = useMemo(() => curveBuckets(period, values.frequency), [period, values.frequency]);
   const metricIsExisting = values.sourceMode === 'existing';
   const metricFieldsLocked = editing || metricIsExisting;
 
@@ -92,7 +108,7 @@ export function IndicatorFormDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const problem = validateIndicatorForm(values, editing);
+    const problem = validateIndicatorForm(values, editing, period);
     setLocalError(problem);
     if (problem) return;
     if (await onSubmit(values)) onClose();
@@ -299,6 +315,16 @@ export function IndicatorFormDialog({
             </div>
           </div>
 
+          <CurveEditor
+            mode={values.curveMode}
+            buckets={buckets}
+            pointValues={values.pointValues}
+            targetValue={values.targetValue}
+            unavailable={pointsUnavailable}
+            onModeChange={(curveMode) => set('curveMode', curveMode)}
+            onPointChange={(bucket, value) => set('pointValues', { ...values.pointValues, [bucket]: value })}
+          />
+
           {editing && indicator && (
             <p className="text-xs text-neutral-500">
               {LABELS.weighting.weight}:{' '}
@@ -326,12 +352,126 @@ export function IndicatorFormDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || pointsUnavailable}>
               {pending ? 'Guardando...' : editing ? 'Guardar cambios' : `Crear ${noun}`}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface CurveEditorProps {
+  mode: EditableCurveMode;
+  buckets: string[];
+  pointValues: Record<string, string>;
+  targetValue: string;
+  /** Es manual pero no pudimos traer sus puntos: editarlos pisaría la curva guardada. */
+  unavailable: boolean;
+  onModeChange: (mode: EditableCurveMode) => void;
+  onPointChange: (bucket: string, value: string) => void;
+}
+
+/**
+ * Modo de la curva esperada (RN-P17) y, en manual, un valor esperado acumulado por intervalo. El último intervalo vale
+ * siempre la meta (la API exige que el último punto sea igual a ella); los demás son opcionales y, vacíos, se
+ * interpolan. `Desde proyectos` se muestra deshabilitado hasta que existan los aportes de proyecto.
+ */
+function CurveEditor({
+  mode,
+  buckets,
+  pointValues,
+  targetValue,
+  unavailable,
+  onModeChange,
+  onPointChange,
+}: CurveEditorProps) {
+  const fromProjects = EXPECTED_CURVE_MODE_LABELS.from_projects;
+  return (
+    <fieldset className="space-y-3 rounded-lg border border-neutral-200 p-3">
+      <legend className="px-1 text-sm font-medium text-neutral-800">{LABELS.expectedCurve}</legend>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={LABELS.expectedCurve}>
+        {(['linear', 'manual'] as const).map((m) => (
+          <Button
+            key={m}
+            type="button"
+            size="sm"
+            role="radio"
+            aria-checked={mode === m}
+            variant={mode === m ? 'default' : 'outline'}
+            onClick={() => onModeChange(m)}
+          >
+            {EXPECTED_CURVE_MODE_LABELS[m].label}
+          </Button>
+        ))}
+        <Button
+          type="button"
+          size="sm"
+          role="radio"
+          aria-checked={false}
+          variant="outline"
+          disabled
+          title={fromProjects.hint}
+        >
+          {fromProjects.label}
+        </Button>
+      </div>
+      <p className="text-xs text-neutral-500">{EXPECTED_CURVE_MODE_LABELS[mode].hint}</p>
+      <p className="text-xs text-neutral-500">
+        {fromProjects.label}: {fromProjects.hint}
+      </p>
+
+      {unavailable && (
+        <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+          No pudimos cargar los puntos guardados de la curva manual. Cerrá este diálogo y recargá la página antes de
+          editar el indicador, así no se pisan.
+        </p>
+      )}
+
+      {mode === 'manual' && !unavailable && (
+        <div className="space-y-2">
+          {buckets.length < 2 && (
+            <p className="text-xs text-amber-800">
+              {buckets.length === 0
+                ? 'No pudimos calcular los intervalos del período.'
+                : 'Con esta frecuencia el período tiene un solo intervalo: la curva manual queda igual que llegar a la meta de una vez. Probá con la curva lineal.'}
+            </p>
+          )}
+          <p className="text-xs text-neutral-600">
+            Indicá cuánto esperás tener acumulado al inicio de cada intervalo. Si dejás uno vacío, se interpola entre
+            los vecinos. El último intervalo es siempre la meta.
+          </p>
+          <ul className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+            {buckets.map((bucket) => {
+              const locked = isLockedBucket(buckets, bucket);
+              const id = `curve-point-${bucket}`;
+              return (
+                <li key={bucket} className="grid grid-cols-[7rem_1fr] items-center gap-2">
+                  <Label htmlFor={id} className="text-xs font-normal text-neutral-700">
+                    {formatBucketDate(bucket)}
+                  </Label>
+                  <Input
+                    id={id}
+                    inputMode="decimal"
+                    value={locked ? targetValue : (pointValues[bucket] ?? '')}
+                    readOnly={locked}
+                    disabled={locked}
+                    onChange={(e) => onPointChange(bucket, e.target.value)}
+                    placeholder="Interpolado"
+                    aria-describedby={locked ? `${id}-hint` : undefined}
+                  />
+                  {locked && (
+                    <span id={`${id}-hint`} className="col-span-2 -mt-1 text-xs text-neutral-500">
+                      Igual a la meta.
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </fieldset>
   );
 }

@@ -15,6 +15,7 @@ import type {
   ObjectiveIndicatorLinkMode,
   ExpectedCurveMode,
   IndicatorProgressChangedEvent,
+  IndicatorTargetPointDto,
 } from '@gestion-publica/shared-types/metrics';
 import { INDICATOR_PROGRESS_CHANGED } from '@gestion-publica/shared-types/metrics';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -24,6 +25,7 @@ import {
   accumulatedValue,
   objectiveIndicatorProgressBp,
   parseDecimal4,
+  type PeriodRange,
 } from '@gestion-publica/metrics-domain';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService, type PrismaTransactionClient } from '../../audit/index.js';
@@ -38,7 +40,9 @@ import { assertSameSiblingSet, assertValidWeightGroup } from '../../../common/we
 import type { CreateObjectiveIndicatorDto } from '../dto/create-objective-indicator.dto.js';
 import type { UpdateObjectiveIndicatorDto } from '../dto/update-objective-indicator.dto.js';
 import type { SetObjectiveIndicatorWeightsDto } from '../dto/set-objective-indicator-weights.dto.js';
+import type { SetIndicatorTargetPointsDto } from '../dto/indicator-target-point.dto.js';
 import { MetricService } from './metric.service.js';
+import { sameTargetPoints, toDateOnly, validateTargetPoints, type ValidTargetPoint } from './target-points.js';
 
 type Decimalish = { toString(): string };
 
@@ -165,6 +169,21 @@ export class ObjectiveIndicatorService {
     this.assertLinkModeAllowedForKind(linkMode, kind);
     const weightBp = dto.weightBp ?? null;
 
+    // RN-P17: curva esperada. `manual` necesita puntos válidos en el mismo pedido.
+    const expectedCurveMode: ExpectedCurveMode = dto.expectedCurveMode ?? 'linear';
+    this.assertCurveModeAvailable(expectedCurveMode);
+    let targetPoints: ValidTargetPoint[] = [];
+    if (dto.targetPoints !== undefined && dto.targetPoints.length > 0) {
+      targetPoints = validateTargetPoints(dto.targetPoints, {
+        range: await this.findPeriodRange(objective.periodId, orgId),
+        frequency: (existingMetric?.frequency ?? dto.metric?.frequency) as MetricFrequency,
+        target: targetValue,
+      });
+    }
+    if (expectedCurveMode === 'manual' && targetPoints.length === 0) {
+      throw this.manualNeedsPoints();
+    }
+
     const { dto: created, events } = await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         await this.lockGroup(tx, objectiveId);
@@ -209,6 +228,7 @@ export class ObjectiveIndicatorService {
             direction,
             weightBp,
             linkMode,
+            expectedCurveMode,
             progressCachedBp: objectiveIndicatorProgressBp({
               metricBaseline,
               increments,
@@ -232,9 +252,11 @@ export class ObjectiveIndicatorService {
               direction: row.direction as MetricDirection,
               weightBp: row.weightBp,
               linkMode: row.linkMode as ObjectiveIndicatorLinkMode,
+              expectedCurveMode: row.expectedCurveMode as ExpectedCurveMode,
             },
           },
         });
+        if (targetPoints.length > 0) await this.replacePoints(tx, orgId, row.id, targetPoints);
 
         const resultBp = await this.aggregateResult(tx, orgId, objectiveId);
         return {
@@ -269,6 +291,26 @@ export class ObjectiveIndicatorService {
     }
     const weightBp = dto.weightBp !== undefined ? dto.weightBp : existing.weightBp;
 
+    // RN-P17: curva esperada. Si queda en `manual`, los puntos (nuevos o los guardados) deben ser válidos
+    // contra la meta resultante (el último punto == meta).
+    const expectedCurveMode = dto.expectedCurveMode ?? (existing.expectedCurveMode as ExpectedCurveMode);
+    if (dto.expectedCurveMode !== undefined && dto.expectedCurveMode !== existing.expectedCurveMode) {
+      this.assertCurveModeAvailable(dto.expectedCurveMode);
+    }
+    const rawPoints: Array<{ bucketDate: string; expectedValue: string }> =
+      dto.targetPoints ?? (expectedCurveMode === 'manual' ? await this.loadStoredPointsRaw(id, orgId) : []);
+    const targetPoints =
+      rawPoints.length > 0
+        ? validateTargetPoints(rawPoints, {
+            range: await this.findPeriodRange(metric.periodId, orgId),
+            frequency: metric.frequency as MetricFrequency,
+            target: targetValue,
+          })
+        : [];
+    if (expectedCurveMode === 'manual' && targetPoints.length === 0) {
+      throw this.manualNeedsPoints();
+    }
+
     const { dto: updated, events } = await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         await this.lockGroup(tx, existing.objectiveId);
@@ -291,7 +333,7 @@ export class ObjectiveIndicatorService {
 
         const row = (await tx.objectiveIndicator.update({
           where: { id },
-          data: { baselineValue, targetValue, direction, weightBp, linkMode, progressCachedBp },
+          data: { baselineValue, targetValue, direction, weightBp, linkMode, expectedCurveMode, progressCachedBp },
         })) as IndicatorRow;
 
         const before: Record<string, unknown> = {};
@@ -307,6 +349,7 @@ export class ObjectiveIndicatorService {
         track('direction', existing.direction, row.direction);
         track('weightBp', existing.weightBp, row.weightBp);
         track('linkMode', existing.linkMode, row.linkMode);
+        track('expectedCurveMode', existing.expectedCurveMode, row.expectedCurveMode);
         if (Object.keys(after).length > 0) {
           await this.auditEmitter.emit({
             action: 'objective_indicator.updated',
@@ -314,6 +357,9 @@ export class ObjectiveIndicatorService {
             entityId: id,
             diff: { before, after },
           });
+        }
+        if (dto.targetPoints !== undefined) {
+          await this.replacePoints(tx, orgId, id, targetPoints);
         }
 
         const resultBp = await this.aggregateResult(tx, orgId, existing.objectiveId);
@@ -325,6 +371,53 @@ export class ObjectiveIndicatorService {
     );
     await this.publishProgressChanged(events);
     return updated;
+  }
+
+  /** Puntos de la curva esperada manual (RN-P17), ordenados por fecha. */
+  async getTargetPoints(id: string, orgId: string): Promise<IndicatorTargetPointDto[]> {
+    await this.findIndicatorOrThrow(id, orgId);
+    const rows = await this.prisma.scoped.indicatorTargetPoint.findMany({
+      where: { objectiveIndicatorId: id, organizationId: orgId },
+      orderBy: { bucketDate: 'asc' },
+    });
+    return rows.map((r) => ({ bucketDate: toDateOnly(r.bucketDate), expectedValue: r.expectedValue.toString() }));
+  }
+
+  /**
+   * Reemplazo atómico de los puntos de la curva manual (RN-P17). Se validan contra la meta VIGENTE del indicador
+   * (el último punto == meta) y las fechas contra los buckets de su métrica. No cambia el modo de curva (eso es el
+   * PATCH), pero no se puede vaciar la lista de un indicador que está en modo `manual`. Lista vacía = borrar.
+   */
+  async setTargetPoints(
+    id: string,
+    orgId: string,
+    dto: SetIndicatorTargetPointsDto,
+    authContext: AuthContext,
+  ): Promise<IndicatorTargetPointDto[]> {
+    const existing = await this.findIndicatorOrThrow(id, orgId);
+    const objective = await this.findObjectiveOrThrow(existing.objectiveId, orgId);
+    assertPeriodOpen(objective.period);
+    const metric = await this.findMetricOrThrow(existing.metricId, orgId);
+
+    const points =
+      dto.points.length > 0
+        ? validateTargetPoints(dto.points, {
+            range: await this.findPeriodRange(metric.periodId, orgId),
+            frequency: metric.frequency as MetricFrequency,
+            target: existing.targetValue.toString(),
+          })
+        : [];
+    if (existing.expectedCurveMode === 'manual' && points.length === 0) {
+      throw this.manualNeedsPoints();
+    }
+
+    await tenantContextStorage.run(authContext, () =>
+      this.prisma.runInTransaction(async (tx) => {
+        await this.lockGroup(tx, existing.objectiveId);
+        await this.replacePoints(tx, orgId, id, points);
+      }),
+    );
+    return points.map((p) => ({ bucketDate: toDateOnly(p.bucketDate), expectedValue: p.expectedValue }));
   }
 
   /** Reemplazo atómico de los pesos de todo el grupo (RN-P6/P7): todos con peso y suma 10000, o todos `null`. */
@@ -532,6 +625,84 @@ export class ObjectiveIndicatorService {
       throw new NotFoundException(`Objective ${objectiveId} not found`);
     }
     return objective;
+  }
+
+  /**
+   * Reemplaza los puntos del indicador dentro de la transacción. No-op (y sin audit) si no cambian. Audita
+   * `indicator_target_points.replaced` con la lista completa antes/después.
+   */
+  private async replacePoints(
+    tx: PrismaTransactionClient,
+    orgId: string,
+    indicatorId: string,
+    points: ReadonlyArray<ValidTargetPoint>,
+  ): Promise<void> {
+    const stored = await tx.indicatorTargetPoint.findMany({
+      where: { objectiveIndicatorId: indicatorId, organizationId: orgId },
+      orderBy: { bucketDate: 'asc' },
+    });
+    const before = stored.map((r) => ({ bucketDate: r.bucketDate, expectedValue: r.expectedValue.toString() }));
+    if (sameTargetPoints(before, points)) return;
+
+    await tx.indicatorTargetPoint.deleteMany({ where: { objectiveIndicatorId: indicatorId, organizationId: orgId } });
+    if (points.length > 0) {
+      await tx.indicatorTargetPoint.createMany({
+        data: points.map((p) => ({
+          organizationId: orgId,
+          objectiveIndicatorId: indicatorId,
+          bucketDate: p.bucketDate,
+          expectedValue: p.expectedValue,
+        })),
+      });
+    }
+    const snapshot = (list: ReadonlyArray<{ bucketDate: Date; expectedValue: string }>) =>
+      list.map((p) => ({ bucketDate: toDateOnly(p.bucketDate), expectedValue: p.expectedValue }));
+    await this.auditEmitter.emit({
+      action: 'indicator_target_points.replaced',
+      entityType: 'metrics.objective_indicator',
+      entityId: indicatorId,
+      diff: { before: { points: snapshot(before) }, after: { points: snapshot(points) } },
+    });
+  }
+
+  private async loadStoredPointsRaw(
+    indicatorId: string,
+    orgId: string,
+  ): Promise<Array<{ bucketDate: string; expectedValue: string }>> {
+    const rows = await this.prisma.scoped.indicatorTargetPoint.findMany({
+      where: { objectiveIndicatorId: indicatorId, organizationId: orgId },
+      orderBy: { bucketDate: 'asc' },
+    });
+    return rows.map((r) => ({ bucketDate: toDateOnly(r.bucketDate), expectedValue: r.expectedValue.toString() }));
+  }
+
+  private async findPeriodRange(periodId: string, orgId: string): Promise<PeriodRange> {
+    const period = await this.prisma.scoped.period.findFirst({
+      where: { id: periodId, organizationId: orgId },
+      select: { startsAt: true, endsAt: true },
+    });
+    if (!period) {
+      throw new NotFoundException(`Period ${periodId} not found`);
+    }
+    return { startsAt: period.startsAt, endsAt: period.endsAt };
+  }
+
+  /**
+   * RN-P17: `from_projects` es la curva escalonada de los aportes de proyectos (`ProjectContribution`, F7). Sin esa
+   * tabla no hay con qué construirla, así que hoy no se puede elegir.
+   */
+  private assertCurveModeAvailable(mode: ExpectedCurveMode): void {
+    if (mode === 'from_projects') {
+      throw new UnprocessableEntityException(
+        'ExpectedCurveModeNotAvailable: la curva "from_projects" depende de los aportes de proyectos al indicador (RN-P17), que todavía no existen. Usá "linear" o "manual".',
+      );
+    }
+  }
+
+  private manualNeedsPoints(): UnprocessableEntityException {
+    return new UnprocessableEntityException(
+      'IndicatorTargetPointsInvalid: la curva "manual" necesita al menos un punto, y el último debe ser igual a la meta (RN-P17).',
+    );
   }
 
   private async findIndicatorOrThrow(id: string, orgId: string): Promise<IndicatorRow> {

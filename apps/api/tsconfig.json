@@ -59,6 +59,9 @@
       "@gestion-publica/prisma-tenant-extension": [
         "../../packages/prisma-tenant-extension/dist/index.d.ts"
       ],
+      "@gestion-publica/deviation-domain": [
+        "../../packages/deviation-domain/dist/index.d.ts"
+      ],
       "@gestion-publica/metrics-domain": [
         "../../packages/metrics-domain/dist/index.d.ts"
       ]

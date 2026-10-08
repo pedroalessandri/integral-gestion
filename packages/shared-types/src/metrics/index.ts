@@ -25,6 +25,16 @@ export type {
   CreateObjectiveIndicatorDto,
   UpdateObjectiveIndicatorDto,
   SetObjectiveIndicatorWeightsDto,
+  IndicatorTargetPointInput,
+  IndicatorTargetPointDto,
+  SetIndicatorTargetPointsDto,
 } from './objective-indicator.dto.js';
+export type {
+  SemaphoreColor,
+  IndicatorStatusDto,
+  ObjectiveResultStatusDto,
+  ObjectiveExecutionStatusDto,
+  ObjectiveStatusDto,
+} from './indicator-status.dto.js';
 export { INDICATOR_PROGRESS_CHANGED } from './indicator-events.js';
 export type { IndicatorProgressChangedEvent } from './indicator-events.js';

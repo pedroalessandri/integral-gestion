@@ -15,6 +15,72 @@ Formato:
 
 ---
 
+## 2026-10-08 · C16 · frontend-dev · feature/plan-f6-curvas
+- Hecho:
+  - **Editor de curva** en el diálogo del indicador (`indicator-form-dialog.tsx`): modo Lineal / Manual y "Desde proyectos" deshabilitado con su explicación (la API lo rechaza hasta C17). En manual hay un campo por intervalo (los buckets salen de `buildBuckets` de `metrics-domain` con el período del objetivo y la frecuencia, así que coinciden con la validación de la API); los vacíos se interpolan y el último intervalo queda bloqueado y siempre vale la meta, de modo que "el último punto = meta" no se puede romper. Validación de decimales en `curve-form.ts` y DTOs con `expectedCurveMode` + `targetPoints` en el mismo POST/PATCH (hace falta si cambió la meta). Mensajes en español para `IndicatorTargetPointsInvalid` (con el detalle de la API) y `ExpectedCurveModeNotAvailable`.
+  - **Curva en el gráfico**: `chart-data.ts` ahora evalúa `expectedCurve` de `@gestion-publica/metrics-domain` (función pura, la misma del backend; no se duplicó lógica) sobre las fechas de muestreo de `series.expected` y los puntos de `GET okr/indicators/:id/target-points`. Reemplaza la recta con `Number`. La leyenda dice "Curva esperada (manual|lineal)". Si no se pueden cargar los puntos de un manual, se deja la serie de la API y se avisa.
+  - **Semáforos**: `SemaphoreBadge` (texto + ícono + desvío en puntos, `lib/format-deviation.ts` con enteros) en la tarjeta del indicador (desde `/status`), junto a la barra de resultado y junto a la de gestión en el encabezado del objetivo (`GET okr/objectives/:id/status`). Uno por lectura; nunca combinados. Sin cargas: "Sin datos".
+  - **"Carga pendiente"**: `PendingLoadBadge` en la tarjeta del indicador (con las fechas en el tooltip) y en la barra de resultado del objetivo (`pendingBucketsCount`).
+  - `apps/web` suma la dependencia de workspace `@gestion-publica/metrics-domain` (consume `dist` igual que `shared-types`; turbo la buildea antes por `^build`). Etiquetas en `lib/labels.ts` (`SEMAPHORE_LABELS`, `DEVIATION_LABELS`, `PENDING_LOAD_LABELS`, `EXPECTED_CURVE_MODE_LABELS`). Vitest de web ahora incluye `*.test.tsx`.
+- Commit: este commit (`feat(web): editor de curva manual, curva esperada en el gráfico, semáforos y carga pendiente`)
+- Verificación:
+  - `pnpm typecheck` 7/7; `pnpm lint` 0 errores (2 warnings preexistentes en web); `pnpm test` 12/12 (web 49 tests, 24 nuevos); `pnpm --filter web build` OK.
+  - No se probó contra la API levantada: lo cubre el smoke de Pedro (indicador `outcome` semestral con curva manual).
+- Pendiente / desvíos:
+  - **Listado de objetivos sin semáforo ni badge**: `ObjectiveSummaryDto` no trae el estado y pedirlo por fila sería N+1. Contrato faltante anotado en TODO.md (estado en los ítems de `GET okr/objectives` o `GET okr/objectives/status?periodId=`); los componentes ya existen para enchufarlo.
+  - Bug de C14 detectado acá y corregido en este mismo commit (no quedó en TODO.md): `expectedCurve` manual devolvía la base en el instante exacto del inicio del período aunque hubiera un punto ahí (el seed tiene 1/ene → 18), así que el desvío con carga solo en el primer bucket se medía contra la base. Ahora un punto en el inicio (o antes) reemplaza al ancla (inicio, base); test de regresión en `curves.test.ts`.
+  - La pestaña hace 1 request extra de `/status` por indicador (y uno de `target-points` por cada manual) más el del objetivo, en paralelo en el servidor.
+  - Sin tests de componentes con Testing Library (no está en web): se probaron `SemaphoreBadge` y `PendingLoadBadge` con `renderToStaticMarkup`.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ La meta queda en el inicio del último intervalo (para semestral en período anual, el 1/jul). Se deja así.
+  - ✅ Nombres del semáforo: "En tiempo", "Atención", "Atrasado".
+  - ✅ Un solo intervalo en el período: se permite; es una curva para ese período y listo. No se bloquea.
+
+## 2026-10-08 · C15 · backend-dev · feature/plan-f6-curvas
+- Hecho:
+  - **Lugar común del desvío** (decisión de Pedro en C14): paquete puro nuevo `packages/deviation-domain` (`@gestion-publica/deviation-domain`, misma config que los otros: tsconfig, tsup, vitest, exports; sin dependencias). Tiene `deviationBp` (sobre enteros `bigint` en la misma escala), `progressDeviationBp` (gestión: real − planificado, bp), `aggregateDeviationBp` (media simple o ponderada de los hermanos medibles), `semaphore` y `DEFAULT_SEMAPHORE_THRESHOLDS` (10/25 puntos; -10 exacto verde, -25 exacto amarillo; adelantado siempre verde). Se movieron ahí las funciones y sus tests. `metrics-domain` ya no exporta `deviation` ni `semaphore`; conserva `deviationBp(strings)` solo como adaptador que parsea decimales y delega (lo usa `MetricService`). `okr-domain` suma `plannedExecutionProgress(projects, at)` (RN-P9: planificado de gestión del objetivo, con los mismos pesos todo-o-nada).
+  - **Persistencia** (migración `20261008000003_indicator_target_point`, escrita a mano + `migrate deploy`): `metrics.indicator_target_point` (`bucket_date` DATE, `expected_value` NUMERIC(18,4), único `(objective_indicator_id, bucket_date)`, FKs RESTRICT, `organization_id`). Modelo Prisma `IndicatorTargetPoint` agregado a los modelos con scoping de tenant. Los puntos se reemplazan en bloque y se borran físicamente (el before/after completo queda en audit).
+  - **API** (`okr/...`, `TenantGuard` + `PermissionsGuard`, `okr:read` / `okr:write`, `ValidationPipe` con whitelist): `expectedCurveMode` y `targetPoints` opcionales en create/PATCH de `ObjectiveIndicator`; `GET|PUT indicators/:id/target-points`; `GET indicators/:id/status`; `GET objectives/:objectiveId/status`. Validaciones 422 tipadas: `IndicatorTargetPointsInvalid` (fecha que no es inicio de bucket de la frecuencia dentro del período, fecha repetida, el último punto debe ser igual a la meta vigente, `manual` sin puntos) y `ExpectedCurveModeNotAvailable`. Si la meta cambia con la curva en `manual`, hay que mandar los puntos en el mismo PATCH. Audit: `indicator_target_points.replaced` (before/after con la lista) y `expectedCurveMode` en `objective_indicator.created/updated`.
+  - **`from_projects`**: rechazado con 422 `ExpectedCurveModeNotAvailable`. La SPEC (RN-P17) lo limita a `output` con aportes y los aportes (`ProjectContribution`) son C17: hoy sería una curva plana en la base. `IndicatorStatusService` ya tiene la rama (pasos vacíos). TODO.md suma el ítem para C17.
+  - **Estado del indicador**: valor acumulado, `asOf` (último bucket cargado), esperado en `asOf` y esperado hoy, desvío (bp) y semáforo, y buckets pendientes (gracia 10 días, constante). Sin cargas: desvío y semáforo `null`. **Estado del objetivo**: `{ objectiveId, asOf, result, execution }` con cada lectura con su desvío y semáforo; nunca un número único. Resultado: media simple/ponderada de los desvíos medibles de sus indicadores; gestión: `executionProgressCachedBp` contra `plannedExecutionProgress`. `metrics` lee el objetivo por un puerto nuevo `OBJECTIVE_PROGRESS_READER` (`common/contracts`, lo implementa `okr`), sin importar `okr`.
+  - Contratos en `shared-types/metrics`: `IndicatorTargetPointInput/Dto`, `SetIndicatorTargetPointsDto`, `IndicatorStatusDto`, `ObjectiveStatusDto` (+ `ObjectiveResultStatusDto`, `ObjectiveExecutionStatusDto`), `SemaphoreColor`, y `expectedCurveMode`/`targetPoints` en los DTOs de create/update. `apps/api/Dockerfile` y `tsconfig.json` conocen el paquete nuevo.
+  - Seed: el `outcome` semestral "Viajes diarios en bicicleta" usa curva manual (1/ene → 18, 1/jul → 30 = meta); TODO.md actualizado.
+- Commit: este commit (`feat(metrics): curvas esperadas manuales, estado de indicador y objetivo, y paquete deviation-domain`)
+- Verificación:
+  - `pnpm typecheck` 7/7; `pnpm lint` 0 errores (1 warning preexistente en api, 2 en web); `pnpm test` 12/12 (api 419, deviation-domain 19, metrics-domain 65, okr-domain 106); `pnpm --filter web build` OK.
+  - `psql` en la DB local: `\d metrics.indicator_target_point` (columnas, único, FKs) y `\d metrics.objective_indicator`; migración `20261008000003` registrada como aplicada.
+  - Punta a punta en DB descartable `gp_c15` (ya borrada), nuevo `test/indicator-curves.e2e-spec.ts` por HTTP real: 3/3 (curva manual con todas las validaciones, estado del indicador -2000 bp amarillo, estado del objetivo con gestión 0 vs planificado 10000 = rojo y resultado intacto, aislamiento entre orgs y default deny). El seed corrió dos veces sin errores y dejó los 2 puntos de la curva.
+- Pendiente / desvíos:
+  - El desvío se mide en el **inicio** del último bucket cargado (misma x que el gráfico y que los puntos manuales). Con la curva lineal, un bucket recién cargado se compara con el esperado al inicio de ese bucket: el desvío es algo optimista (ver preguntas).
+  - En el harness e2e el `requestId` es `'unknown'` y el audit del oyente de resultado falla por la columna `uuid` (solo en el harness; en runtime lo pone el middleware). Los otros e2e del repo están desactualizados. Va a `docs/tech-debt.md`, junto con el adaptador `deviationBp`.
+  - TODO.md suma: habilitar `from_projects` (C17) y umbrales del semáforo por org. El ítem de la serie del indicador queda anotado para C16.
+  - Se tocó `apps/api/Dockerfile` (copiar y construir el paquete nuevo) para que el deploy no se rompa; no es infra de CI.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ El desvío de resultado se mide contra lo esperado al inicio del último bucket cargado, por ahora.
+  - ✅ Desvío del objetivo (resultado): media simple o ponderada de los desvíos de los indicadores con datos; los que no tienen cargas no cuentan y los pesos se renormalizan.
+  - ✅ Proyectos `from_indicator`: el planificado sale de las fechas de sus tareas y el real del indicador ("una proporción lineal del avance vs. la realidad").
+  - ✅ Los puntos manuales no se obligan a ser monótonos ni a quedar entre base y meta.
+
+---
+
+## 2026-10-08 · C14 · backend-dev · feature/plan-f6-curvas
+- Hecho:
+  - `metrics-domain/src/curves.ts` (puro, sin DB, valores como strings decimales / bp enteros):
+    - `expectedCurve({ mode, at, range, baseline, target, points | steps })`: `linear` reusa `expectedAt`; `manual` interpola en el tiempo entre `IndicatorTargetPoint` (desde (inicio, base) hasta el primer punto; constante después del último); `from_projects` es escalonada: `baseline + Σ contributionValue` de los pasos con `endsAt <= at`.
+    - `deviation({ actual, expected, baseline, target })`: envoltorio de `deviationBp` (ya existía; no se duplicó). Signo: positivo = adelantado hacia la meta, para ambas direcciones.
+    - `semaphore(devBp, thresholds = { yellowBp: 1000, redBp: 2500 })`: verde `dev >= -yellow`, amarillo `>= -red`, rojo debajo; adelantado siempre verde.
+    - `pendingBuckets(entries, buckets, today, graceDays = 10, periodEnd?)`: buckets cerrados hace más de `graceDays` días sin entry.
+  - Exportado desde el index; `dist` rebuildeado. `okr-domain` no se tocó (el desvío de gestión de RN-P9 sigue sin función propia ahí; ver preguntas).
+- Commit: este commit (`feat(metrics-domain): curvas esperadas, desvío, semáforo y cargas vencidas`)
+- Verificación: `pnpm --filter @gestion-publica/metrics-domain test` → 71/71 (25 nuevos, con fast-check); `pnpm typecheck` 6/6; `pnpm lint` 0 errores (1 warning preexistente); `pnpm test` 10/10 (api 390).
+- Pendiente / desvíos: `pendingBuckets` recibe un 5to parámetro opcional `periodEnd` (no está en el plan): sin él, el último bucket no tiene cierre conocido y nunca vence.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ Umbrales 10/25 puntos; bordes: exactamente -10 puntos es verde y exactamente -25 es amarillo.
+  - ✅ Manual: antes del primer punto se interpola desde la base en el inicio del período, por tiempo.
+  - ✅ Desvío y semáforo se mueven a un lugar común, ni `okr-domain` ni `metrics-domain` ("los OKR progresivamente van a tener menos peso"). Se hace en C15; el desvío de gestión (RN-P9) usa ese mismo lugar.
+  - ✅ El parámetro `periodEnd` de `pendingBuckets` queda aprobado.
+  - Sin cambio: `from_projects` parte de la base del indicador (D8) y sube en el `endsAt` planificado de cada proyecto con aporte (RN-P17); se revisa en C17.
+
 ## 2026-10-08 · C13 · backend-dev · feature/plan-f5-migracion
 - Hecho:
   - PA-1 quedó respondida por Pedro y registrada en SPEC §8 y en las Open questions del ADR-0009: no hay clientes con datos reales en producción; los datos viejos son descartables y se pueden borrar siempre. Desbloquea la Fase 5.
@@ -38,6 +104,7 @@ Formato:
   - ✅ "Sin asignar" se crea siempre, como dice la SPEC (corregido en un commit aparte sobre la misma rama).
   - ✅ "3 unidades" del seed: 3 operativas bajo la central (4 en total).
   - ✅ El seed no emite audit.
+- Smoke de Pedro (2026-10-08): OK en Railway (migración y seed), con todo el contenido levantado. Fase 5 mergeada (PR #18).
 
 ## 2026-10-08 · C12 · frontend-dev · feature/plan-f4-indicadores
 - Hecho:

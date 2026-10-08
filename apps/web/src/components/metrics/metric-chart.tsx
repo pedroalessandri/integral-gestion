@@ -10,6 +10,8 @@ interface Props {
   targetValue: string;
   periodStartsAt: string;
   periodEndsAt: string;
+  /** Leyenda de la curva esperada. Por defecto, lineal (Módulo 1). */
+  expectedLabel?: string;
 }
 
 // SVG viewport (scales responsively via width:100%). Hand-rolled like the Gantt
@@ -20,7 +22,7 @@ const PAD = { top: 16, right: 16, bottom: 28, left: 56 };
 const PLOT_W = W - PAD.left - PAD.right;
 const PLOT_H = H - PAD.top - PAD.bottom;
 
-export function MetricChart({ series, unit, baselineValue, targetValue, periodStartsAt, periodEndsAt }: Props) {
+export function MetricChart({ series, unit, baselineValue, targetValue, periodStartsAt, periodEndsAt, expectedLabel = 'Esperado (lineal)' }: Props) {
   const xMin = new Date(periodStartsAt).getTime();
   const xMax = new Date(periodEndsAt).getTime();
   const xSpan = Math.max(1, xMax - xMin);
@@ -105,7 +107,7 @@ export function MetricChart({ series, unit, baselineValue, targetValue, periodSt
       {/* Legend */}
       <div className="flex items-center gap-4 mt-2 text-xs" style={{ color: 'var(--color-neutral-500)' }}>
         <LegendItem color="var(--color-primary-600)" label="Real (acumulado)" />
-        <LegendItem color="var(--color-neutral-400)" label="Esperado (lineal)" dashed />
+        <LegendItem color="var(--color-neutral-400)" label={expectedLabel} dashed />
         <LegendItem color="#f59e0b" label="Meta" dashed />
       </div>
     </div>

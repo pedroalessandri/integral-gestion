@@ -22,6 +22,8 @@ import { ObjectiveIndicatorService } from '../services/objective-indicator.servi
 import { CreateObjectiveIndicatorDto } from '../dto/create-objective-indicator.dto.js';
 import { UpdateObjectiveIndicatorDto } from '../dto/update-objective-indicator.dto.js';
 import { SetObjectiveIndicatorWeightsDto } from '../dto/set-objective-indicator-weights.dto.js';
+import { SetIndicatorTargetPointsDto } from '../dto/indicator-target-point.dto.js';
+import { IndicatorStatusService } from '../services/indicator-status.service.js';
 
 /** Validación de DTOs en el borde (class-validator). Campos extra se rechazan, no se ignoran. */
 const bodyPipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
@@ -46,7 +48,10 @@ function requireOrgId(user: AuthContext): string {
 @UseGuards(TenantGuard, PermissionsGuard)
 @Controller('okr')
 export class ObjectiveIndicatorController {
-  constructor(private readonly objectiveIndicatorService: ObjectiveIndicatorService) {}
+  constructor(
+    private readonly objectiveIndicatorService: ObjectiveIndicatorService,
+    private readonly indicatorStatusService: IndicatorStatusService,
+  ) {}
 
   @Get('objectives/:objectiveId/indicators')
   @Permissions('okr:read')
@@ -81,6 +86,38 @@ export class ObjectiveIndicatorController {
   @Permissions('okr:read')
   getById(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.objectiveIndicatorService.getById(id, requireOrgId(user));
+  }
+
+  /** Esperado, desvío, semáforo y buckets vencidos del indicador (RN-P9, RN-P15, RN-P17). */
+  @Get('indicators/:id/status')
+  @Permissions('okr:read')
+  getStatus(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.indicatorStatusService.getIndicatorStatus(id, requireOrgId(user));
+  }
+
+  /** Estado del objetivo: las dos lecturas (resultado y gestión), cada una con su desvío. Nunca combinadas. */
+  @Get('objectives/:objectiveId/status')
+  @Permissions('okr:read')
+  getObjectiveStatus(@CurrentUser() user: AuthContext, @Param('objectiveId') objectiveId: string) {
+    return this.indicatorStatusService.getObjectiveStatus(objectiveId, requireOrgId(user));
+  }
+
+  @Get('indicators/:id/target-points')
+  @Permissions('okr:read')
+  async getTargetPoints(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    const items = await this.objectiveIndicatorService.getTargetPoints(id, requireOrgId(user));
+    return { items };
+  }
+
+  @Put('indicators/:id/target-points')
+  @Permissions('okr:write')
+  async setTargetPoints(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body(bodyPipe) dto: SetIndicatorTargetPointsDto,
+  ) {
+    const items = await this.objectiveIndicatorService.setTargetPoints(id, requireOrgId(user), dto, user);
+    return { items };
   }
 
   @Patch('indicators/:id')

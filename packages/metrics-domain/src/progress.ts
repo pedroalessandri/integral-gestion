@@ -1,4 +1,5 @@
 import { parseDecimal4 } from './decimal';
+import { deviationBp as sharedDeviationBp } from '@gestion-publica/deviation-domain';
 import { accumulatedValue } from './accumulate';
 
 /**
@@ -52,10 +53,12 @@ export function computeAutomaticKrProgressBp(input: {
 }
 
 /**
- * Signed deviation of the real curve vs the expected one, in basis points of
- * the baseline→target span. Positive = ahead of the expected curve (in the
- * direction of the target), negative = behind. NOT clamped. Returns 0 when
- * baseline === target (undefined span).
+ * Signed deviation of the real value vs the expected one, in basis points of the baseline→target span
+ * (RN-P9). Positive = ahead, negative = behind; NOT clamped; 0 when baseline === target.
+ *
+ * Only an adapter: parses the decimal strings and delegates to `deviationBp` of
+ * `@gestion-publica/deviation-domain`, the shared place for deviation and semaphore (decision of
+ * Pedro, C14), so the math is not duplicated here.
  */
 export function deviationBp(input: {
   actual: string;
@@ -63,15 +66,12 @@ export function deviationBp(input: {
   baseline: string;
   target: string;
 }): number {
-  const actual = parseDecimal4(input.actual);
-  const expected = parseDecimal4(input.expected);
-  const baseline = parseDecimal4(input.baseline);
-  const target = parseDecimal4(input.target);
-
-  const span = target - baseline;
-  if (span === 0n) return 0;
-
-  return Number(((actual - expected) * 10_000n) / span);
+  return sharedDeviationBp({
+    actual: parseDecimal4(input.actual),
+    expected: parseDecimal4(input.expected),
+    baseline: parseDecimal4(input.baseline),
+    target: parseDecimal4(input.target),
+  });
 }
 
 /**

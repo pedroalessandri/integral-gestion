@@ -67,6 +67,13 @@ export interface CreateObjectiveIndicatorDto {
   /** Entero 0..10000. Todo-o-nada con los hermanos (RN-P6). */
   weightBp?: number | null;
   linkMode?: ObjectiveIndicatorLinkMode;
+  /**
+   * Curva esperada (RN-P17). Por defecto `linear`. `manual` exige `targetPoints` válidos en el mismo pedido.
+   * `from_projects` se rechaza con 422 `ExpectedCurveModeNotAvailable` hasta que existan los aportes (F7).
+   */
+  expectedCurveMode?: ExpectedCurveMode;
+  /** Puntos de la curva manual. Solo con `expectedCurveMode = 'manual'`. */
+  targetPoints?: IndicatorTargetPointInput[];
 }
 
 /** PATCH /okr/indicators/:id. La métrica no se cambia (borrar y crear otro indicador). */
@@ -76,6 +83,28 @@ export interface UpdateObjectiveIndicatorDto {
   direction?: MetricDirection;
   weightBp?: number | null;
   linkMode?: ObjectiveIndicatorLinkMode;
+  /**
+   * Cambia el modo de curva. `manual` exige puntos válidos (los guardados o `targetPoints` en este pedido).
+   * `from_projects` se rechaza con 422 hasta F7.
+   */
+  expectedCurveMode?: ExpectedCurveMode;
+  /** Reemplaza los puntos de la curva manual en el mismo pedido (se validan contra la meta resultante). */
+  targetPoints?: IndicatorTargetPointInput[];
+}
+
+/** Punto de la curva esperada manual (RN-P17): acumulado esperado absoluto en un bucket. */
+export interface IndicatorTargetPointInput {
+  /** YYYY-MM-DD: inicio de un bucket de la frecuencia de la métrica dentro del período. */
+  bucketDate: string;
+  /** Decimal string (hasta 4 decimales). */
+  expectedValue: string;
+}
+
+export type IndicatorTargetPointDto = IndicatorTargetPointInput;
+
+/** PUT /okr/indicators/:id/target-points — reemplazo atómico de todos los puntos. El último debe ser igual a la meta. */
+export interface SetIndicatorTargetPointsDto {
+  points: IndicatorTargetPointInput[];
 }
 
 /** PUT /okr/objectives/:objectiveId/indicators/weights — reemplazo atómico de todo el grupo (RN-P6/P7). */
