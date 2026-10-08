@@ -172,6 +172,7 @@ Patrón **expand → migrate → contract**:
 ## 8. Preguntas abiertas (Pedro)
 
 - **PA-1**: ¿Confirmás que no hay clientes con datos reales en producción? Si los hay, la migración necesita una ventana y una validación con el cliente.
+  - ✅ Respondida por Pedro (2026-10-08): no hay clientes con datos reales en producción. Los datos viejos son descartables y se pueden borrar siempre.
 - **PA-2**: ¿La lectura de toda la org para usuarios de unidad (RN-P20) está bien como default?
 - **PA-3**: ¿El aporte de un proyecto se aplica al llegar al 100% (RN-P13) o se quiere un aporte proporcional al avance? El 100% es más simple y más honesto para obras.
 - **PA-4**: ¿Los umbrales de semáforo de 10 y 25 puntos sirven como default?

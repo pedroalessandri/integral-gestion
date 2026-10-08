@@ -15,6 +15,29 @@ Formato:
 
 ---
 
+## 2026-10-08 · C13 · backend-dev · feature/plan-f5-migracion
+- Hecho:
+  - PA-1 quedó respondida por Pedro y registrada en SPEC §8 y en las Open questions del ADR-0009: no hay clientes con datos reales en producción; los datos viejos son descartables y se pueden borrar siempre. Desbloquea la Fase 5.
+  - `apps/api/src/database/migrate-to-planning.ts`: script idempotente con `--dry-run` (hace todo en una transacción por org y la revierte; los conteos son los reales) y `--org <slug>`. Por org: asegura la unidad central, crea "Sin asignar" (`ministry`) solo si hay objetivos sin unidad y se los asigna; KR `automatic` con `MetricKrLink` -> `ObjectiveIndicator` (métrica, base, meta, dirección y peso) y sus tareas a un proyecto "Tareas de <KR>"; KR `manual` (o automático sin vínculo) -> `Project` con título, owner, peso y fechas min/max de sus tareas o del período, y re-parenta sus tareas; recalcula indicador, proyecto y las dos lecturas del objetivo con `metrics-domain` / `okr-domain`. Idempotencia por `legacy_key_result_id` (indicador o proyecto). Audit `migration.*` con actor `system:migration` (un `request_id` por corrida); no hay UPDATE ni DELETE sobre `audit.event`.
+  - Lógica pura del mapeo en `planning-migration.ts` (19 tests Vitest sin DB, incluida la cascada de `okr-domain` sobre el resultado). Scripts de `apps/api`: `migrate:planning` y `migrate:planning:dry-run` (corren sobre `dist/`).
+  - `seed-demo.ts` reescrito: "Municipalidad de San Carrillo" (org `demo`, año en curso), 1 plan con 2 ejes, central + 3 unidades con visión y misión, 5 objetivos (uno sin eje), 8 métricas / 8 indicadores (`output` mensuales, `outcome` semestral, trimestral, anual y mensual), 8 proyectos y 19 tareas, con resultado y gestión derivados por las funciones puras. Borra primero los datos de negocio de la org demo (PA-1) y no toca `audit.event`.
+- Commit: este commit (`feat(api): script de migración KR -> planificación y seed demo de San Carrillo`)
+- Verificación:
+  - Seed viejo + datos legacy extra (2da org con KR auto sin tareas, KR manual con y sin tareas, objetivo borrado): `--dry-run` y real dieron 2 indicadores, 4 proyectos, 5 tareas re-parentadas, 3 objetivos asignados, 2 recalculados y 20 eventos `migration.*`; la 2da corrida real dio todo en 0. Con `psql`: 5 KR vivos = 2 indicadores + 3 proyectos de KR manual (más 1 proyecto "Tareas de" del KR automático con tareas), todos con `legacy_key_result_id`; 0 tareas quedan colgando de un KR.
+  - Seed nuevo sobre DB vacía descartable (ya borrada): 1 plan, 2 ejes, 4 unidades, 5 objetivos, 8 métricas, 22 cargas, 8 indicadores, 8 proyectos, 19 tareas; segunda corrida sin errores. También probado sobre una copia con datos migrados (se llevó los datos viejos de la org demo y no tocó la otra org).
+  - `pnpm typecheck` 6/6, `pnpm lint` 0 errores (1 warning preexistente), `pnpm test` 10/10 (api 390 tests).
+- Pendiente / desvíos:
+  - Fuera del seed por no existir todavía: curva manual (`IndicatorTargetPoint`), curva `from_projects`, `ProjectContribution`, `linkMode` distinto de `independent` y proyectos `from_indicator`. TODO.md suma el ítem para C15/C17.
+  - Los nuevos y viejos `progress_cached_bp` del KR legacy no se tocan (`KeyResult` y `MetricKrLink` siguen vivos hasta F10).
+  - El seed no emite audit (igual que el anterior y las migraciones de catálogo).
+  - Un solo `$transaction` por org con timeout de 120 s; para una org muy grande habría que partir.
+- Preguntas abiertas:
+  - Pesos al partir los KR en indicadores y proyectos: ningún grupo suele sumar 10000. Se aplicó RN-P6 de forma conservadora: si el grupo resultante no queda completo y sumando 10000, queda sin pesos (promedio simple); no se renormaliza. El proyecto "Tareas de <KR>" no lleva peso propio. La SPEC no lo define: confirmar o pedir renormalización proporcional.
+  - KR `automatic` sin `MetricKrLink` se migra como proyecto. La SPEC no lo cubre.
+  - Dos KR del mismo objetivo con la misma métrica: el segundo queda como CONFLICTO y no se migra (único parcial objetivo+métrica).
+  - "Sin asignar" se crea solo si la org tiene objetivos sin unidad (la SPEC dice crearla siempre).
+  - "3 unidades" del seed se interpretó como 3 operativas bajo la central (4 en total).
+
 ## 2026-10-08 · C12 · frontend-dev · feature/plan-f4-indicadores
 - Hecho:
   - `features/indicators`: acciones de servidor (`okr/objectives/:id/indicators`, `okr/indicators/:id`, `PUT .../weights`, catálogo de métricas, serie y cargas), hook `useObjectiveIndicators` (reusa `useWeightedGroup`/`WeightsControl`/`WeightsDialog` de proyectos), helpers puros (`indicator-form.ts`: validación de base/meta/dirección con enteros escalados, DTOs; `chart-data.ts`).

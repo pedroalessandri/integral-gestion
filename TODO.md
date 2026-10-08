@@ -8,6 +8,11 @@
 
 ## 🟡 Prioridad media — próximas semanas
 
+### [F] Seed demo: sumar curva manual, `from_projects`, aportes de proyecto y vínculos de gestión cuando existan (F6/F7)
+- Por qué: el seed de C13 solo usa lo que existe hoy (curva lineal, `linkMode = independent`). La SPEC §6 punto 4 pide un indicador `outcome` semestral con curva manual y uno `output` con aportes de proyectos y curva `from_projects`. El semestral `outcome` ya está; falta la curva manual (`IndicatorTargetPoint`, C15), `ProjectContribution` y `from_projects` (C17), y un proyecto `from_indicator`.
+- Posible solución: extender `apps/api/src/database/seed-demo.ts` en las corridas C15 y C17.
+- Origen: C13 (2026-10-08).
+
 ### [F] Edición completa de tareas de proyecto: falta `GET okr/tasks/:id` o ampliar `TaskSummaryDto`
 - Por qué: la lista `GET okr/projects/:id/tasks` devuelve `TaskSummaryDto` (sin `description` ni `ownerUserId`) y no existe `GET tasks/:id`. La ficha de proyecto (C09) solo permite editar título y fechas de una tarea; descripción y responsable se fijan al crearla.
 - Posible solución: sumar `description` y `ownerUserId` al resumen de tareas de proyecto, o exponer `GET okr/tasks/:id`.
