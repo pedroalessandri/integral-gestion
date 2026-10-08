@@ -38,6 +38,7 @@ Formato:
   - ✅ "Sin asignar" se crea siempre, como dice la SPEC (corregido en un commit aparte sobre la misma rama).
   - ✅ "3 unidades" del seed: 3 operativas bajo la central (4 en total).
   - ✅ El seed no emite audit.
+- Smoke de Pedro (2026-10-08): OK en Railway (migración y seed), con todo el contenido levantado. Fase 5 mergeada (PR #18).
 
 ## 2026-10-08 · C12 · frontend-dev · feature/plan-f4-indicadores
 - Hecho:

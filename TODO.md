@@ -90,6 +90,10 @@
 - Posible solución: selector de vínculo en el editor de indicador junto con C17, deshabilitando `execution_feeds_indicator` para `outcome` y mostrando el 422 con la lista de proyectos al cambiarlo.
 - Origen: C12 (2026-10-08).
 
+### [R] Renombrar el ítem de menú "Indicadores de gestión" (`/metrics`)
+- Por qué: en el modelo nuevo "indicador" es el `ObjectiveIndicator` y "gestión" es el avance de proyectos y tareas; la página `/metrics` es el catálogo de métricas sueltas y el nombre confunde (pasó en la preparación de la demo). Candidatos: "Métricas" o "Catálogo de métricas", vía `lib/labels.ts`.
+- Origen: cierre de la Fase 5 (2026-10-08), aprobado por Pedro.
+
 ## 🔵 Prioridad baja / cuando haya tiempo
 
 ### [R] Convergir CascadeResponse local en (app)/objectives/[id]/page.tsx con ObjectiveCascadeDto
