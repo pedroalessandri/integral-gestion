@@ -75,6 +75,16 @@
 - Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.
 - Origen: fix de `:orgId` (2026-10-07).
 
+### [F] Serie del indicador con base y meta del indicador (`GET okr/indicators/:id/series`)
+- Por qué: `GET metrics/:id/series` arma la curva esperada con la base y la meta de la `Metric`, pero para el objetivo mandan las del `ObjectiveIndicator` (ADR-0009 D8). C12 redibuja la recta esperada en el front (`features/indicators/chart-data.ts`) sobre las fechas que devuelve la API. Además el resumen (`expectedToDate`, `deviationPct`) sale con la base/meta de la métrica, así que la pestaña no lo muestra. El desvío de resultado (RN-P9) y la curva `manual`/`from_projects` (F6) necesitan el cálculo en el backend.
+- Posible solución: endpoint de serie por indicador en `metrics` que devuelva `expected`, `actual` y el desvío con los valores del indicador; el front deja de recalcular la recta.
+- Origen: C12 (2026-10-08).
+
+### [F] Exponer `linkMode` del indicador en la UI
+- Por qué: C12 crea indicadores siempre `independent`: los modos `execution_feeds_indicator` e `indicator_feeds_execution` no tienen efecto visible hasta que existan los aportes de proyecto (C17) y el modo `from_indicator` en el form de proyecto. El tipo `Producto`/`Resultado` ya se puede cargar.
+- Posible solución: selector de vínculo en el editor de indicador junto con C17, deshabilitando `execution_feeds_indicator` para `outcome` y mostrando el 422 con la lista de proyectos al cambiarlo.
+- Origen: C12 (2026-10-08).
+
 ## 🔵 Prioridad baja / cuando haya tiempo
 
 ### [R] Convergir CascadeResponse local en (app)/objectives/[id]/page.tsx con ObjectiveCascadeDto

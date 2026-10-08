@@ -23,6 +23,7 @@
 - **Por qué importa**: los errores de tipos del front solo salen con `next build` o `tsc --noEmit` a mano; la lógica de formularios no tiene red.
 - **Posible solución**: agregar `"typecheck": "tsc --noEmit"` a web, configurar Vitest + Testing Library y cubrir esos helpers y los hooks.
 - **Prioridad**: media.
+- **Actualización (C12, 2026-10-08)**: `apps/web` ya tiene `typecheck` (`tsc --noEmit`) y Vitest (solo tests de funciones puras, entorno node, sin Testing Library). Cubiertos: `projects/weights.ts`, `indicators/indicator-form.ts` y `indicators/chart-data.ts`. Faltan `project-form.ts`, `status.ts`, `plan-form.ts`, `tree.ts`, `objective-assignment.ts`, `lib/api-errors.ts` y los hooks (requieren Testing Library + jsdom).
 
 ### `listMembersAction` y `MemberItem` de la página Miembros no coinciden con `MemberDto` (C06)
 - **Qué**: `components/members/actions.ts` tipa `MemberItem` con `roleKey`/`roleName` planos, pero la API devuelve `MemberDto` con `role: { key, name }`. C06 usa `MemberDto` directo en su propia action (`listScopeMembersAction`) y no tocó el código viejo.
@@ -36,6 +37,7 @@
 
 ### Sin tests de `features/projects` por falta de Vitest en `apps/web` (C09)
 - Por qué: `weights.ts` (reparto equitativo, parseo de porcentajes en bp), `project-form.ts` (armado de DTOs) y `status.ts` son funciones puras listas para testear, pero web no tiene runner. Se suma al ítem de C06 sobre `apps/web` sin `typecheck` ni Vitest.
+- **Actualización (C12)**: `weights.ts` ya tiene tests; quedan `project-form.ts` y `status.ts`.
 
 
 ### Orden de aplicación de `indicator.progress_changed` (C11)
@@ -78,6 +80,11 @@
 - **Por qué importa**: los caminos de core con header ≠ path no tienen cobertura e2e real; solo los unit con el harness HTTP.
 - **Posible solución**: ver qué devuelve hoy `POST /orgs` (shape o guard) y alinear los e2e; correrlos en CI contra una DB descartable.
 - **Prioridad**: media.
+
+### Editar un indicador son dos llamadas no atómicas (C12)
+- **Qué**: tipo, fuente y descripción viven en la `Metric` (`PATCH metrics/:id`, permiso `metrics:write`) y base, meta y dirección en el `ObjectiveIndicator` (`PATCH okr/indicators/:id`, `okr:write`). `useObjectiveIndicators.updateIndicator` llama primero a la métrica (puede dar 422 `MetricKindChangeBlocked`) y después al indicador; si la segunda falla, la primera queda aplicada. Además un usuario con `okr:write` y sin `metrics:write` no puede cambiar esos tres campos desde el editor del objetivo.
+- **Posible solución**: aceptar `kind`/`source`/`description` en `UpdateObjectiveIndicatorDto` y que `metrics` los aplique en la misma transacción (en C11 la creación inline ya exige solo `okr:write`).
+- **Prioridad**: baja.
 
 ## Resuelto
 

@@ -50,3 +50,8 @@ export function formatBucketLabel(iso: string): string {
     timeZone: 'UTC',
   });
 }
+
+/** Type guard de las 6 frecuencias soportadas (RN-P15). */
+export function isMetricFrequency(value: string | null | undefined): value is MetricFrequency {
+  return typeof value === 'string' && Object.hasOwn(FREQUENCY_LABELS, value);
+}

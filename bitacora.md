@@ -15,6 +15,32 @@ Formato:
 
 ---
 
+## 2026-10-08 · C12 · frontend-dev · feature/plan-f4-indicadores
+- Hecho:
+  - `features/indicators`: acciones de servidor (`okr/objectives/:id/indicators`, `okr/indicators/:id`, `PUT .../weights`, catálogo de métricas, serie y cargas), hook `useObjectiveIndicators` (reusa `useWeightedGroup`/`WeightsControl`/`WeightsDialog` de proyectos), helpers puros (`indicator-form.ts`: validación de base/meta/dirección con enteros escalados, DTOs; `chart-data.ts`).
+  - Pestaña "Indicadores" en la ficha de objetivo: tarjeta por indicador (tipo, frecuencia, base → meta, valor actual o "Sin datos", peso, avance en bp), gráfico real vs. esperado lineal (reusa `MetricChart`), carga de valores y historial (reusa `EntryFormPanel` y `EntryHistoryTable`). Editor de indicador (crear con métrica nueva o existente en un solo paso; editar tipo, fuente, descripción, base, meta y dirección), baja, y toggle "Ponderar" todo-o-nada.
+  - Encabezado del objetivo: barra "Avance de resultado" (`resultProgressCachedBp`) al lado de "Avance de gestión", cada una con su propia instancia de `ProgressReadingBar`; nunca se combinan.
+  - Pendientes de C10: `metric-form-dialog.tsx` manda `kind` (obligatorio) y suma fuente y descripción; las frecuencias `quarterly`/`semiannual`/`annual` entran en `parseFrequency` y en los filtros (`isMetricFrequency`); `MetricRowActions` pasa los campos nuevos al editar.
+  - Mensajes en español para `MetricKindChangeBlocked`, `LinkModeRequiresOutputMetric`, `IndicatorDirectionMismatch`, `IndicatorBaselineEqualsTarget`, `IndicatorTargetRequired`, `IndicatorMetricSourceInvalid`, `IndicatorPeriodMismatch`, `IndicatorAlreadyLinked`, `MetricInUseByObjective` e `InvalidBucketDate`; las acciones de métricas ahora usan `describeApiError` (antes mostraban el mensaje crudo). Etiquetas de tipo en `lib/labels.ts` (`INDICATOR_KIND_LABELS`).
+  - `apps/web` suma `typecheck` (`tsc --noEmit`) y Vitest (devDependency `vitest`, la misma versión que el resto del monorepo): 25 tests de `weights.ts`, `indicator-form.ts` y `chart-data.ts`.
+- Commit: este commit (`feat(web): pestaña Indicadores con gráfico, carga de valores, ponderación y avance de resultado`)
+- Verificación:
+  - `pnpm typecheck`: 6/6 OK (web incluido).
+  - `pnpm --filter web lint` y `pnpm lint`: 0 errores, 2 warnings preexistentes en web y 3 en api.
+  - `pnpm test`: 10/10 tareas OK (web 25 tests, api 371 tests).
+  - `pnpm --filter web build`: OK.
+  - No se probó contra la API levantada (lo cubre el smoke de Pedro: cargar 3 buckets y ver las dos barras moverse por separado).
+- Pendiente / desvíos:
+  - El gráfico redibuja la recta esperada en el front con la base y la meta del indicador, porque `GET metrics/:id/series` usa las de la métrica (D8). El resumen de esa serie (esperado a hoy, desvío) no se muestra: el desvío de resultado es de C14–C16. Ítem en TODO.md.
+  - El gráfico y las cargas usan endpoints del módulo "Indicadores de gestión" (`metrics:*`). Si la org no lo tiene habilitado, la pestaña lista los indicadores igual y avisa en cada uno; la creación solo ofrece "métrica nueva".
+  - `linkMode` no está en el editor (siempre `independent`) hasta C17. Ítem en TODO.md.
+  - El peso del indicador no se edita en el form: solo por "Editar pesos" en bloque, como proyectos y tareas. Un indicador nuevo en un grupo ponderado entra con 0 %.
+  - Editar tipo, fuente o descripción son dos llamadas (métrica, luego indicador), no atómicas, y piden `metrics:write`. Ítem en tech-debt.
+  - Sin curva manual ni `from_projects` (F6), como indica el plan.
+- Preguntas abiertas:
+  - ¿La baja de un indicador tiene que advertir cuántas cargas tiene la métrica? Hoy el diálogo solo dice que la métrica y sus cargas se conservan.
+  - ¿El editor tiene que permitir cambiar el peso de un solo indicador? Se resolvió con el PUT en bloque por la regla todo-o-nada; si Pedro quiere un campo "peso" en el form, hay que decidir cómo se compensan los hermanos.
+
 ## 2026-10-08 · C11 · backend-dev · feature/plan-f4-indicadores
 - Hecho:
   - Migración `20261008000002_objective_indicator`, escrita a mano y aplicada con `migrate deploy`. Crea `metrics.objective_indicator`: base y meta NUMERIC(18,4), `direction`, `weight_bp` nullable, `expected_curve_mode`, `link_mode`, `progress_cached_bp`, `legacy_key_result_id` y `deleted_at`, con CHECKs, único parcial `(objective_id, metric_id)` entre vivos y FKs. También agrega la FK pendiente de C08 `okr.project.source_objective_indicator_id`.

@@ -21,7 +21,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import type { MetricUnit, MetricDirection, MetricFrequency } from '@gestion-publica/shared-types/metrics';
+import type {
+  MetricUnit,
+  MetricDirection,
+  MetricFrequency,
+  MetricKind,
+} from '@gestion-publica/shared-types/metrics';
 import { MetricFormDialog } from './metric-form-dialog';
 import { deleteMetricAction } from './actions';
 
@@ -31,6 +36,9 @@ interface MetricData {
   unit: MetricUnit;
   direction: MetricDirection;
   frequency: MetricFrequency;
+  kind: MetricKind;
+  source: string | null;
+  description: string | null;
   baselineValue: string;
   targetValue: string;
 }

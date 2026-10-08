@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import type { MetricFrequency } from '@gestion-publica/shared-types/metrics';
-import { FREQUENCY_LABELS } from './format';
+import { FREQUENCY_LABELS, isMetricFrequency } from './format';
 
 type FilterKey = 'all' | MetricFrequency | 'linked';
 
@@ -11,14 +11,16 @@ const CHIPS: Array<{ key: FilterKey; label: string }> = [
   { key: 'weekly', label: FREQUENCY_LABELS.weekly },
   { key: 'biweekly', label: FREQUENCY_LABELS.biweekly },
   { key: 'monthly', label: FREQUENCY_LABELS.monthly },
+  { key: 'quarterly', label: FREQUENCY_LABELS.quarterly },
+  { key: 'semiannual', label: FREQUENCY_LABELS.semiannual },
+  { key: 'annual', label: FREQUENCY_LABELS.annual },
   { key: 'linked', label: 'Vinculados a OKRs' },
 ];
 
 /** Reads the active filter from the current searchParams. */
 function activeFilter(frequency: string | null, linked: string | null): FilterKey {
   if (linked === 'okr') return 'linked';
-  if (frequency === 'weekly' || frequency === 'biweekly' || frequency === 'monthly') return frequency;
-  return 'all';
+  return isMetricFrequency(frequency) ? frequency : 'all';
 }
 
 export function MetricFilters() {

@@ -9,7 +9,7 @@ import { MetricFilters } from '@/components/metrics/metric-filters';
 import { MetricFormDialog } from '@/components/metrics/metric-form-dialog';
 import { MetricRowActions } from '@/components/metrics/metric-row-actions';
 import { listMetricsAction } from '@/components/metrics/actions';
-import { formatMetricValue, directionGoalLabel, FREQUENCY_LABELS } from '@/components/metrics/format';
+import { formatMetricValue, directionGoalLabel, FREQUENCY_LABELS, isMetricFrequency } from '@/components/metrics/format';
 import type { MetricFrequency } from '@gestion-publica/shared-types/metrics';
 
 interface PeriodItem {
@@ -18,7 +18,7 @@ interface PeriodItem {
 }
 
 function parseFrequency(v: string | undefined): MetricFrequency | undefined {
-  return v === 'weekly' || v === 'biweekly' || v === 'monthly' ? v : undefined;
+  return isMetricFrequency(v) ? v : undefined;
 }
 
 export default async function MetricsPage({
@@ -187,6 +187,9 @@ export default async function MetricsPage({
                             unit: m.unit,
                             direction: m.direction,
                             frequency: m.frequency,
+                            kind: m.kind,
+                            source: m.source,
+                            description: m.description,
                             baselineValue: m.baselineValue,
                             targetValue: m.targetValue,
                           }}

@@ -23,6 +23,15 @@ import {
   listProjectsAction,
   listProjectTasksAction,
 } from '@/features/projects';
+import {
+  ObjectiveIndicatorsPanel,
+  ResultProgressBar,
+  getIndicatorChartDataAction,
+  listIndicatorsAction,
+  listOrgMetricsAction,
+} from '@/features/indicators';
+import type { IndicatorChartData } from '@/features/indicators';
+import type { ActionResult } from '@/features/planning/error-messages';
 import { LABELS } from '@/lib/labels';
 import type { TaskStatus, TaskSummaryDto, ProgressStatus, OwnerSummaryDto } from '@gestion-publica/shared-types/okr';
 import type {
@@ -40,6 +49,8 @@ interface CascadeResponse {
     progressCachedBp: number;
     /** Avance de gestión (desde proyectos). Nunca se combina con el de resultado. */
     executionProgressCachedBp?: number;
+    /** Avance de resultado (desde indicadores). Nunca se combina con el de gestión. */
+    resultProgressCachedBp?: number;
     status: ProgressStatus;
     createdAt: string;
     /** Assigned owner — null when unassigned. */
@@ -131,12 +142,14 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
 
   // M2: does this org have "Indicadores en OKRs" enabled?
   let indicadoresOkrEnabled = false;
+  let indicadoresGestionEnabled = false;
   if (meRes.ok) {
     const me = (await meRes.json()) as {
       orgs?: Array<{ id: string; enabledModules?: string[] }>;
     };
-    indicadoresOkrEnabled =
-      me.orgs?.find((o) => o.id === orgId)?.enabledModules?.includes('indicadores-okr') ?? false;
+    const enabledModules = me.orgs?.find((o) => o.id === orgId)?.enabledModules ?? [];
+    indicadoresOkrEnabled = enabledModules.includes('indicadores-okr');
+    indicadoresGestionEnabled = enabledModules.includes('indicadores-gestion');
   }
 
   // Period metrics (for unit formatting + context enrichment/add) and the
@@ -180,7 +193,37 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
   if (!projectsLoadError && (!periodStartsAt || !periodEndsAt)) {
     projectsLoadError = 'No pudimos obtener las fechas del período del objetivo. Recargá la página.';
   }
-  const defaultTab = keyResults.length === 0 && projects.length > 0 ? 'projects' : 'key-results';
+
+  // Indicadores (N4): lista del objetivo, y gráfico + cargas de cada métrica (endpoints del módulo
+  // "Indicadores de gestión": si no está habilitado se omiten y la pestaña lo avisa).
+  const indicatorsResult = await listIndicatorsAction(orgId, id);
+  const indicators = indicatorsResult.ok ? indicatorsResult.data : [];
+  let chartsByMetricId: Record<string, ActionResult<IndicatorChartData>> | null = null;
+  let availableMetrics: MetricSummaryDto[] = [];
+  let catalogError: string | null = null;
+  if (indicatorsResult.ok && indicadoresGestionEnabled) {
+    const [chartResults, catalogResult] = await Promise.all([
+      Promise.all(indicators.map((i) => getIndicatorChartDataAction(orgId, i.metricId))),
+      listOrgMetricsAction(orgId),
+    ]);
+    chartsByMetricId = Object.fromEntries(indicators.map((i, idx) => [i.metricId, chartResults[idx]!]));
+    if (catalogResult.ok) {
+      const used = new Set(indicators.map((i) => i.metricId));
+      availableMetrics = catalogResult.data.filter((m) => m.period.id === periodId && !used.has(m.id));
+    } else {
+      catalogError = catalogResult.error;
+    }
+  } else if (!indicadoresGestionEnabled) {
+    catalogError = 'el módulo "Indicadores de gestión" no está habilitado para esta organización';
+  }
+  const defaultTab =
+    keyResults.length > 0
+      ? 'key-results'
+      : indicators.length > 0
+        ? 'indicators'
+        : projects.length > 0
+          ? 'projects'
+          : 'key-results';
 
   const unitByMetricId = new Map<string, MetricUnit>(periodMetrics.map((m) => [m.id, m.unit]));
 
@@ -226,11 +269,17 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
               </p>
             )}
             <ObjectiveDateRange startsAt={objective.startsAt} endsAt={objective.endsAt} />
-            <ExecutionProgressBar
-              className="max-w-sm pt-2"
-              valueBp={objective.executionProgressCachedBp ?? 0}
-              projectCount={projects.length}
-            />
+            {/* Dos lecturas independientes (RN-P8): nunca se suman ni se promedian entre sí. */}
+            <div className="grid max-w-xl grid-cols-1 gap-x-6 gap-y-3 pt-2 sm:grid-cols-2">
+              <ResultProgressBar
+                valueBp={objective.resultProgressCachedBp ?? 0}
+                indicatorCount={indicators.length}
+              />
+              <ExecutionProgressBar
+                valueBp={objective.executionProgressCachedBp ?? 0}
+                projectCount={projects.length}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <ObjectiveHeaderActions
@@ -258,6 +307,10 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
       <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="key-results">Resultados Clave</TabsTrigger>
+          <TabsTrigger value="indicators">
+            {LABELS.indicator.plural}
+            {indicators.length > 0 && ` (${indicators.length})`}
+          </TabsTrigger>
           <TabsTrigger value="projects">
             {LABELS.project.plural}
             {projects.length > 0 && ` (${projects.length})`}
@@ -340,6 +393,19 @@ export default async function ObjectiveDetailPage({ params }: { params: Promise<
             </div>
           )}
         </div>
+        </TabsContent>
+
+        <TabsContent value="indicators" className="mt-0">
+          <ObjectiveIndicatorsPanel
+            orgId={orgId}
+            objective={{ id: objective.id }}
+            indicators={indicators}
+            chartsByMetricId={chartsByMetricId}
+            availableMetrics={availableMetrics}
+            catalogError={catalogError}
+            readOnly={isReadOnly}
+            loadError={indicatorsResult.ok ? null : indicatorsResult.error}
+          />
         </TabsContent>
 
         <TabsContent value="projects" className="mt-0">

@@ -1,6 +1,8 @@
 'use server';
 
 import { apiFetch } from '@/lib/api-client';
+import { readApiError } from '@/lib/api-errors';
+import { describeApiError } from '@/features/planning/error-messages';
 import type {
   MetricSummaryDto,
   MetricDetailDto,
@@ -8,12 +10,12 @@ import type {
   MetricUnit,
   MetricDirection,
   MetricFrequency,
+  MetricKind,
 } from '@gestion-publica/shared-types/metrics';
 
-/** Extracts a human-readable message from a non-ok response. */
+/** Mensaje en español para una respuesta no-ok (códigos de dominio incluidos). */
 async function errorMessage(res: Response): Promise<string> {
-  const body = (await res.json().catch(() => ({}))) as { message?: string };
-  return body.message ?? `HTTP ${res.status}`;
+  return describeApiError(await readApiError(res));
 }
 
 /* ------------------------------------------------------------------ */
@@ -44,6 +46,9 @@ export async function createMetricAction(input: {
   unit: MetricUnit;
   direction: MetricDirection;
   frequency: MetricFrequency;
+  kind: MetricKind;
+  source?: string;
+  description?: string;
   baselineValue?: string;
   targetValue: string;
 }): Promise<{ error?: string; metric?: MetricDetailDto }> {
@@ -65,6 +70,9 @@ export async function updateMetricAction(input: {
   orgId: string;
   metricId: string;
   name?: string;
+  kind?: MetricKind;
+  source?: string | null;
+  description?: string | null;
   baselineValue?: string;
   targetValue?: string;
 }): Promise<{ error?: string; metric?: MetricDetailDto }> {
