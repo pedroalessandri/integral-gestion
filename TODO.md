@@ -58,11 +58,7 @@
 - Por qué: `inviteByEmail` no acepta `orgUnitId`; el alcance se setea después con `PATCH orgs/:orgId/members/:userId/scope`. Hoy un miembro invitado queda con alcance `null` (toda la org, RN-P19) hasta que alguien lo cambie.
 - Origen: pregunta abierta de C04 (2026-10-07), Pedro: "alcanza por ahora".
 - Resolver en: plan.md F8/C19.
-- Estado (C19, 2026-10-08): el backend ya acepta `orgUnitId` opcional al invitar (validado en la org; sin él queda `null`). Falta decidir el alcance por defecto (ver pregunta abierta en el reporte de C19) y el selector de unidad en el front de invitaciones.
-
-### [F] Alcance de unidad para Metric (catálogo) y para quitar o cambiar de rol a miembros
-- Por qué: C19 (RN-P20) aplicó el alcance a Objective, ObjectiveIndicator, Project, Task, MetricEntry, ProjectContribution, OrgUnit, Axis y N1, pero `Metric` (alta, edición, borrado) y `members` (cambiar rol, quitar) siguen solo con RBAC. Un usuario de unidad con `metrics:write` puede editar una métrica compartida con otras unidades; un org-admin de unidad puede quitar o cambiar de rol a miembros de otras.
-- Origen: decisión de alcance de C19; falta definir la regla (¿una métrica sin objetivos vinculados es de quién?).
+- Estado (C19, 2026-10-08): decidido por Pedro (opción b): `orgUnitId` es obligatorio en `POST members/invite` (`string | null`, `null` = toda la org explícito; falta la propiedad → 400). Backend hecho; falta el selector de unidad en el front de invitaciones (en curso en paralelo).
 
 ### [F] Archivar o cambiar el plan activo (hoy no hay endpoint)
 - Por qué: C05 solo hace upsert del plan activo. Decisión de Pedro (2026-10-07) para cuando se agregue: 409 mientras haya ejes con objetivos; hay que definir qué pasa con `axis_id` de los objetivos al cambiar de plan.
@@ -154,6 +150,7 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [F] Alcance de unidad para `Metric` (alta standalone solo central; edición/borrado como las cargas) y anti-escalada al cambiar rol / quitar miembros — C19, 8 octubre 2026 (pendiente de merge de la Fase 8)
 - [B] Validar `:orgId` del path contra el tenant del request (`OrgParamGuard` en org-units, members, modules, strategic-plan y metrics) — mergeado el 7 octubre 2026
 - [F] Módulo 2 "Indicadores en OKRs" completo (backend + frontend): `progress_mode` en KR, vínculo métrica↔KR con progreso automático (interpolación baseline→target), hook de recálculo, contexto a nivel objetivo, y la Pantalla 3 (badge automático, barra sin slider, sin-datos, editar/desvincular). Seed de demo + smoke checklist en docs/features/indicadores-smoke-checklist.md — mergeado el 10 julio 2026
 - [F] Módulo 1 "Indicadores de gestión" completo (backend + frontend): schema `metrics`, feature-gating por org (ModuleEnabledGuard), package `metrics-domain`, ABM + carga periódica con curva esperado-vs-real, nav gated y tab "Módulos" en Configuración — mergeado el 9 julio 2026

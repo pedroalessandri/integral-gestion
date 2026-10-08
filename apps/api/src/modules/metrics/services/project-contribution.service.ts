@@ -69,14 +69,21 @@ export class ProjectContributionService {
   ) {}
 
   /**
-   * RN-P20: un aporte modifica el valor del indicador del objetivo, así que se exige poder escribir en la unidad del
-   * OBJETIVO (que además incluye a la del proyecto, descendiente suya por RN-P4). Regla conservadora.
+   * RN-P20: un aporte pertenece a su PROYECTO, así que se exige poder escribir en la unidad del proyecto (que por
+   * RN-P4 está dentro de la del objetivo: quien tiene alcance sobre el objetivo también pasa). Si el proyecto
+   * del aporte ya no está vivo, se cae a la unidad del objetivo del indicador.
    */
-  private async assertCanWriteIndicator(
+  private async assertCanWriteContribution(
     authContext: AuthContext,
+    contribution: { projectId: string },
     indicator: IndicatorRef,
     orgId: string,
   ): Promise<void> {
+    const project = await this.projectLinks.findLiveProject(orgId, contribution.projectId);
+    if (project) {
+      await this.orgUnitScope.assertCanWriteInUnit(authContext, project.orgUnitId);
+      return;
+    }
     const objective = await this.objectiveLookup.findLiveObjective(orgId, indicator.objectiveId);
     if (!objective) {
       throw new NotFoundException(`Objective ${indicator.objectiveId} not found`);
@@ -116,7 +123,6 @@ export class ProjectContributionService {
     if (!objective) {
       throw new NotFoundException(`Objective ${indicator.objectiveId} not found`);
     }
-    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
     assertPeriodOpen(objective.period);
     await this.assertIndicatorAcceptsContributions(indicator, orgId);
 
@@ -126,6 +132,7 @@ export class ProjectContributionService {
         `ContributionProjectNotFound: el proyecto "${dto.projectId}" no existe en la organización.`,
       );
     }
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, project.orgUnitId); // RN-P20
     this.assertProjectCompatible(project, indicator);
 
     const created = await tenantContextStorage.run(authContext, () =>
@@ -197,7 +204,7 @@ export class ProjectContributionService {
   ): Promise<ProjectContributionDto> {
     const existing = await this.findContributionOrThrow(id, orgId);
     const indicator = await this.findIndicatorOrThrow(existing.objectiveIndicatorId, orgId);
-    await this.assertCanWriteIndicator(authContext, indicator, orgId);
+    await this.assertCanWriteContribution(authContext, existing, indicator, orgId);
     await this.assertPeriodOpenFor(indicator, orgId);
 
     await tenantContextStorage.run(authContext, () =>
@@ -227,7 +234,7 @@ export class ProjectContributionService {
   async remove(id: string, orgId: string, authContext: AuthContext): Promise<void> {
     const existing = await this.findContributionOrThrow(id, orgId);
     const indicator = await this.findIndicatorOrThrow(existing.objectiveIndicatorId, orgId);
-    await this.assertCanWriteIndicator(authContext, indicator, orgId);
+    await this.assertCanWriteContribution(authContext, existing, indicator, orgId);
     await this.assertPeriodOpenFor(indicator, orgId);
 
     await tenantContextStorage.run(authContext, () =>

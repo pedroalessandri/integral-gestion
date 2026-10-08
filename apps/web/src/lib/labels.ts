@@ -197,3 +197,15 @@ export const CONTRIBUTION_ERROR_MESSAGES: Record<string, string> = {
   IndicatorHasLinkedProjects:
     'El indicador tiene proyectos vinculados vigentes. Desvinculalos primero (quitá sus aportes o cambiá la fuente del proyecto).',
 };
+
+/** Selector de unidad (alcance inicial) del formulario de invitación de miembros (RN-P19/P20). */
+export const INVITE_SCOPE_LABELS = {
+  field: 'Unidad (alcance de escritura)',
+  placeholder: '— Elegí una unidad —',
+  hint: 'Define dónde va a poder cargar y editar la persona invitada. Es obligatorio.',
+  required: 'Elegí una unidad o "Toda la organización" para poder invitar.',
+  forbidden:
+    'No tenés alcance sobre esa unidad. Elegí una unidad dentro de tu alcance; "Toda la organización" solo está disponible para quienes tienen alcance total.',
+  missing: 'Falta indicar la unidad de la persona invitada. Elegí una unidad o "Toda la organización".',
+  loadError: 'No pudimos cargar las unidades. Cerrá y volvé a abrir el formulario.',
+} as const;

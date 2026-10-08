@@ -95,7 +95,7 @@ export class MemberService {
   async inviteByEmail(
     authContext: AuthContext,
     organizationId: string,
-    input: { email: string; roleKey: string; orgUnitId?: string | null },
+    input: { email: string; roleKey: string; orgUnitId: string | null },
   ): Promise<MemberDto> {
     if (!isInvitableRole(input.roleKey)) {
       throw new BadRequestException(
@@ -113,8 +113,9 @@ export class MemberService {
       );
     }
 
-    // Alcance del miembro nuevo: `orgUnitId` opcional; sin él queda en null (toda la org, comportamiento histórico).
-    const orgUnitId = input.orgUnitId ?? null;
+    // Alcance del miembro nuevo: `orgUnitId` explícito (unidad o null = toda la org); la validación del DTO ya
+    // rechazó la omisión. Sin escalada: otorgar null exige alcance central.
+    const orgUnitId = input.orgUnitId;
     await this.assertCanGrantScope(authContext, orgUnitId);
     if (orgUnitId !== null) await this.assertUnitInOrg(organizationId, orgUnitId);
 
@@ -220,6 +221,8 @@ export class MemberService {
     if (!existing) {
       throw new NotFoundException(`NotMember: User "${userId}" is not a member of this organization.`);
     }
+    // Sin escalada: hay que poder administrar el alcance actual del miembro (null = alcance central).
+    await this.assertCanGrantScope(authContext, existing.orgUnitId);
 
     // No-op if same role.
     if (existing.role.key === newRoleKey) {
@@ -334,6 +337,7 @@ export class MemberService {
     if (!existing) {
       throw new NotFoundException(`Member ${userId} not found in this organization.`);
     }
+    await this.assertCanGrantScope(authContext, existing.orgUnitId);
 
     const newRole = await this.prismaService.raw.role.findFirst({
       where: { OR: [{ id: input.roleId }, { key: input.roleId }] },
@@ -456,6 +460,7 @@ export class MemberService {
     if (!existing) {
       throw new NotFoundException(`Member ${userId} not found in this organization.`);
     }
+    await this.assertCanGrantScope(authContext, existing.orgUnitId);
 
     await tenantContextStorage.run(authContext, () =>
       this.prismaService.runInTransaction(async (tx) => {

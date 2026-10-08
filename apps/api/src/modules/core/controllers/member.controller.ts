@@ -82,7 +82,7 @@ export class MemberController {
     return this.memberService.inviteByEmail(user, orgId, {
       email: body.email,
       roleKey: body.roleKey,
-      orgUnitId: body.orgUnitId ?? null,
+      orgUnitId: body.orgUnitId,
     });
   }
 

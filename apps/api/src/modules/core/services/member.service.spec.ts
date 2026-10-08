@@ -134,8 +134,8 @@ describe('MemberService.inviteByEmail (alcance inicial)', () => {
     service = new MemberService(prisma as any, mockAudit as any, scope as any);
   });
 
-  it('sin orgUnitId queda en null (toda la org, comportamiento actual) y exige alcance central', async () => {
-    const result = await service.inviteByEmail(ctx, 'org-1', { email: 'n@x.com', roleKey: 'org-user' });
+  it('orgUnitId null explícito = toda la org y exige alcance central', async () => {
+    const result = await service.inviteByEmail(ctx, 'org-1', { email: 'n@x.com', roleKey: 'org-user', orgUnitId: null });
     expect(result.orgUnitId).toBeNull();
     expect(scope.assertCentralScope).toHaveBeenCalledWith(ctx);
     expect(prisma.raw.orgUnit.findFirst).not.toHaveBeenCalled();
@@ -165,9 +165,20 @@ describe('MemberService.inviteByEmail (alcance inicial)', () => {
   it('un actor sin alcance suficiente no puede otorgarlo (sin escalada)', async () => {
     const { ForbiddenException } = await import('@nestjs/common');
     scope.assertCentralScope.mockRejectedValueOnce(new ForbiddenException('OrgUnitScopeForbidden: x'));
-    await expect(service.inviteByEmail(ctx, 'org-1', { email: 'n@x.com', roleKey: 'org-user' })).rejects.toThrow(
+    await expect(service.inviteByEmail(ctx, 'org-1', { email: 'n@x.com', roleKey: 'org-user', orgUnitId: null })).rejects.toThrow(
       /OrgUnitScopeForbidden/,
     );
     expect(tx.userOrganizationRole.create).not.toHaveBeenCalled();
+  });
+
+  it('cambiar rol y quitar miembros exige administrar el alcance actual del miembro (sin escalada)', async () => {
+    const { ForbiddenException } = await import('@nestjs/common');
+    const target = { ...membership, orgUnitId: 'unit-b', role: { id: 'r1', key: 'org-user', name: 'User' } };
+    (prisma.raw as Record<string, unknown>)['userOrganizationRole'] = { findUnique: vi.fn().mockResolvedValue(target) };
+    scope.assertCanWriteInUnit.mockRejectedValue(new ForbiddenException('OrgUnitScopeForbidden: x'));
+    await expect(service.changeRole(ctx, 'org-1', 'u1', 'org-admin')).rejects.toThrow(/OrgUnitScopeForbidden/);
+    await expect(service.remove('org-1', 'u1', ctx)).rejects.toThrow(/OrgUnitScopeForbidden/);
+    expect(scope.assertCanWriteInUnit).toHaveBeenCalledWith(ctx, 'unit-b');
+    scope.assertCanWriteInUnit.mockResolvedValue(undefined);
   });
 });

@@ -1,5 +1,4 @@
 import {
-  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -15,13 +14,8 @@ import {
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
-import {
-  OBJECTIVE_LOOKUP,
-  ORG_UNIT_SCOPE,
-  type ObjectiveLookup,
-  type OrgUnitScope,
-} from '../../../common/contracts/index.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
+import { MetricService } from './metric.service.js';
 import { MetricLinkService } from './metric-link.service.js';
 import { ObjectiveIndicatorService } from './objective-indicator.service.js';
 
@@ -71,28 +65,8 @@ export class MetricEntryService {
     private readonly auditEmitter: AuditEventEmitterService,
     private readonly metricLinkService: MetricLinkService,
     private readonly objectiveIndicatorService: ObjectiveIndicatorService,
-    @Inject(OBJECTIVE_LOOKUP) private readonly objectiveLookup: ObjectiveLookup,
-    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
+    private readonly metricService: MetricService,
   ) {}
-
-  /**
-   * RN-P20: una carga mueve el avance de todos los objetivos que usan la métrica como indicador. Regla más
-   * conservadora: el actor debe poder escribir en la unidad de CADA objetivo vivo vinculado. Una métrica sin
-   * objetivos vinculados (standalone) no tiene unidad: solo alcance central. Los objetivos sin unidad (null)
-   * también exigen alcance central.
-   */
-  private async assertCanLoadMetric(metricId: string, orgId: string, authContext: AuthContext): Promise<void> {
-    const links = await this.prisma.scoped.objectiveIndicator.findMany({
-      where: { metricId, organizationId: orgId, deletedAt: null },
-      select: { objectiveId: true },
-    });
-    const objectiveIds = [...new Set(links.map((l: { objectiveId: string }) => l.objectiveId))];
-    const objectives = await this.objectiveLookup.findLiveObjectives(orgId, objectiveIds);
-    await this.orgUnitScope.assertCanWriteInAllUnits(
-      authContext,
-      objectives.map((o) => o.orgUnitId),
-    );
-  }
 
   async list(metricId: string, orgId: string): Promise<MetricEntryDto[]> {
     const metric = await this.findMetricOrThrow(metricId, orgId);
@@ -107,7 +81,8 @@ export class MetricEntryService {
     authContext: AuthContext,
   ): Promise<MetricEntryDto> {
     const metric = await this.findMetricOrThrow(metricId, orgId);
-    await this.assertCanLoadMetric(metricId, orgId, authContext);
+    // RN-P20: carga permitida solo si el alcance cubre todos los objetivos vinculados (standalone: central).
+    await this.metricService.assertCanWriteMetric(metricId, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
 
     const bucketDate = toUTCMidnight(new Date(dto.bucketDate));
@@ -165,7 +140,8 @@ export class MetricEntryService {
     authContext: AuthContext,
   ): Promise<MetricEntryDto> {
     const metric = await this.findMetricOrThrow(metricId, orgId);
-    await this.assertCanLoadMetric(metricId, orgId, authContext);
+    // RN-P20: carga permitida solo si el alcance cubre todos los objetivos vinculados (standalone: central).
+    await this.metricService.assertCanWriteMetric(metricId, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
     const existing = await this.findEntryOrThrow(metricId, entryId, orgId);
     this.assertManual(existing);
@@ -225,7 +201,8 @@ export class MetricEntryService {
     authContext: AuthContext,
   ): Promise<void> {
     const metric = await this.findMetricOrThrow(metricId, orgId);
-    await this.assertCanLoadMetric(metricId, orgId, authContext);
+    // RN-P20: carga permitida solo si el alcance cubre todos los objetivos vinculados (standalone: central).
+    await this.metricService.assertCanWriteMetric(metricId, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
     this.assertManual(await this.findEntryOrThrow(metricId, entryId, orgId));
 

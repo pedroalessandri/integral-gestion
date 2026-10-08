@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import {
   ForbiddenException,
   NotFoundException,
@@ -11,7 +10,6 @@ import { MetricEntryService } from './metric-entry.service.js';
 const mockScoped = {
   metric: { findFirst: vi.fn() },
   metricEntry: { findFirst: vi.fn(), findMany: vi.fn() },
-  objectiveIndicator: { findMany: vi.fn().mockResolvedValue([{ objectiveId: 'obj-1' }]) },
 };
 const mockRaw = {
   user: { findMany: vi.fn() },
@@ -27,7 +25,7 @@ const mockPrismaService = {
 };
 const mockAuditEmitter = { emit: vi.fn().mockResolvedValue(undefined) };
 const mockMetricLinkService = { recalcLinkedKrs: vi.fn().mockResolvedValue(undefined) };
-const mockObjectiveLookup = { findLiveObjectives: vi.fn().mockResolvedValue([{ id: 'obj-1', orgUnitId: 'unit-1' }]) };
+const mockMetricService = { assertCanWriteMetric: vi.fn().mockResolvedValue(undefined) };
 const mockObjectiveIndicatorService = {
   recomputeForMetric: vi.fn().mockResolvedValue([{ objectiveId: 'obj-1' }]),
   publishProgressChanged: vi.fn().mockResolvedValue(undefined),
@@ -96,8 +94,7 @@ describe('MetricEntryService', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockObjectiveIndicatorService as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      mockObjectiveLookup as any,
-      allowAllScope(),
+      mockMetricService as any,
     );
   });
 

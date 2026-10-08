@@ -32,12 +32,14 @@ Formato:
   - No hay guard nuevo: el chequeo vive en un servicio detrás del puerto (RN-P21 lo permite).
   - Los e2e viejos (`core-*`, `metrics-okr-link`) siguen fallando igual que en main (ya en `docs/tech-debt.md`).
   - Esta rama sale de main sin el PR #22 (cierre de Fase 7): web tiene 77 tests acá y 80 allá.
-- Preguntas abiertas:
-  - **Alcance por defecto de un miembro nuevo** (C04, TODO.md): hoy sin `orgUnitId` queda `null` (toda la org). Opciones: (a) dejar `null`; (b) `orgUnitId` obligatorio al invitar, con "toda la org" como elección explícita; (c) heredar el alcance de quien invita. El subagente recomienda (b) o (c).
-  - **`MetricEntry`**: se tomó la regla más conservadora: el actor tiene que poder escribir en la unidad de **todos** los objetivos vivos vinculados a la métrica; si alguno no tiene unidad o la métrica es standalone, solo central. Un usuario de área no puede cargar una métrica compartida con otra unidad. ¿Está bien?
-  - **Visión y misión por el usuario de unidad**: el alcance lo permite, pero `PATCH org-units/:id` sigue exigiendo `core:org-unit:manage` (solo org-admin). ¿Permiso más fino?
-  - **`ProjectContribution`**: se exige la unidad del objetivo, no la del proyecto. ¿Relajarlo para que el dueño del proyecto declare sus aportes?
-  - **`Metric` standalone**: ¿de quién es? Hoy solo la carga el alcance central.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08 y aplicadas en un segundo commit):
+  - ✅ (b) Al invitar, `orgUnitId` es obligatorio (`string | null`; `null` es la elección explícita de "Toda la organización"; si falta, 400). El front suma el selector obligatorio, sin valor preseleccionado (excluye la central, que equivale a "Toda la organización").
+  - ✅ `MetricEntry`: la regla conservadora queda como está.
+  - ✅ Permiso nuevo `core:org-unit:vision:write` (migración `20261008000005_org_unit_vision_permission`) en un endpoint aparte `PATCH org-units/:id/vision-mission` (solo `vision` y `mission`; otro campo da 400), con alcance sobre la unidad o un ancestro. La estructura sigue con `core:org-unit:manage` + central. Se otorgó a `org-admin` y `org-user` (hoy `org-user` no tiene `okr:write`; se priorizó que el usuario de unidad pueda editar su visión).
+  - ✅ `ProjectContribution`: alcance sobre la unidad del proyecto (si el proyecto ya no está vivo, la del objetivo).
+  - ✅ Métricas sin objetivos: de la org completa, asociadas a la unidad central → solo alcance central. El ABM de `Metric` usa la misma regla que las cargas (`MetricService.assertCanWriteMetric`). Cambiar rol y quitar miembros exigen administrar el alcance actual del miembro (anti-escalada, como `setScope`).
+  - Además: `OrgUnitScopeForbidden` tiene mensaje propio en el mapa central de errores del front.
+  - Verificación del ajuste: `turbo run typecheck/lint/test --force` verde (api 491, web 82); `pnpm --filter web build` OK; psql: migración `20261008000005` aplicada y `role_permission` con `core:org-unit:vision:write` para `org-admin` y `org-user`. E2E `org-unit-scope` 3/3 + `project-contribution`/`indicator-curves` 6/6 en DB descartable (subagente).
 
 ## 2026-10-08 · C18 · frontend-dev · feature/plan-f7-aportes
 - Hecho:

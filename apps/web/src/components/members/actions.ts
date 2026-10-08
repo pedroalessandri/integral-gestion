@@ -1,6 +1,8 @@
 'use server';
 
 import { apiFetch } from '@/lib/api-client';
+import { readApiError } from '@/lib/api-errors';
+import { describeInviteError } from '@/features/org-structure/invite-scope';
 
 export interface MemberItem {
   userId: string;
@@ -36,6 +38,8 @@ export async function inviteMemberAction(input: {
   orgId: string;
   email: string;
   roleKey: 'org-admin' | 'org-user' | 'org-reader';
+  /** Obligatorio: id de unidad, o null = "Toda la organización" (elección explícita). */
+  orgUnitId: string | null;
 }): Promise<{ error?: string; member?: unknown }> {
   try {
     const { orgId, ...body } = input;
@@ -44,10 +48,7 @@ export async function inviteMemberAction(input: {
       orgId,
       body: JSON.stringify(body),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
+    if (!res.ok) return { error: describeInviteError(await readApiError(res)) };
     return { member: await res.json() };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconocido' };

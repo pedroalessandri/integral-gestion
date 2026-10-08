@@ -80,7 +80,7 @@ async function inviteMember(orgId: string, email: string, roleKey: string, orgUn
   const res = await request(httpServer)
     .post(`/api/v1/orgs/${orgId}/members/invite`)
     .set(orgHeaders(orgId))
-    .send({ email, roleKey, ...(orgUnitId !== undefined && { orgUnitId }) });
+    .send({ email, roleKey, orgUnitId: orgUnitId ?? null });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   expect(res.body.orgUnitId).toBe(orgUnitId ?? null);
   return res.body.userId as string;
@@ -152,6 +152,7 @@ describe.skipIf(!process.env['DATABASE_URL'])('C19 — alcance por unidad', () =
 
     const adminA = await inviteMember(orgId, `admin-a-${Date.now()}@c19.test`, 'org-admin', a);
     const userA = await inviteMember(orgId, `user-a-${Date.now()}@c19.test`, 'org-user', a);
+    const readerA = await inviteMember(orgId, `reader-a-${Date.now()}@c19.test`, 'org-reader', a);
     const adminCentral = await inviteMember(orgId, `admin-c-${Date.now()}@c19.test`, 'org-admin');
     const hA = asUser(adminA, orgId);
     const hC = asUser(adminCentral, orgId);
@@ -234,13 +235,6 @@ describe.skipIf(!process.env['DATABASE_URL'])('C19 — alcance por unidad', () =
     expect((await request(httpServer).delete(`/api/v1/okr/indicators/${indB.body.id as string}`).set(hA)).status).toBe(403);
     expect((await request(httpServer).patch(`/api/v1/okr/indicators/${indA.body.id as string}`).set(hA).send({ targetValue: '50' })).status).toBe(200);
 
-    // ── Aportes de proyectos a indicadores: se exige la unidad del objetivo ───
-    const contrib = (h: Record<string, string>) =>
-      request(httpServer).post(`/api/v1/okr/indicators/${indB.body.id as string}/contributions`).set(h).send({ projectId: projB.projectId, contributionValue: '4' });
-    const cA = await contrib(hA);
-    expect(cA.status).toBe(403);
-    expect(cA.body.message).toMatch(FORBIDDEN);
-
     // ── Cargas de métrica: conservador = todas las unidades de los objetivos vinculados ──
     const entry = (h: Record<string, string>, metricId: string) =>
       request(httpServer).post(`/api/v1/metrics/${metricId}/entries`).set(h).send({ bucketDate: firstBucket, incrementValue: '5' });
@@ -285,12 +279,66 @@ describe.skipIf(!process.env['DATABASE_URL'])('C19 — alcance por unidad', () =
     const stamp = Date.now();
     expect((await invite(hA, { email: `n1-${stamp}@c19.test`, roleKey: 'org-reader', orgUnitId: a1 })).status).toBe(201);
     expect((await invite(hA, { email: `n2-${stamp}@c19.test`, roleKey: 'org-reader', orgUnitId: b })).status).toBe(403);
-    expect((await invite(hA, { email: `n3-${stamp}@c19.test`, roleKey: 'org-reader' })).status).toBe(403); // null = toda la org
+    expect((await invite(hA, { email: `n3-${stamp}@c19.test`, roleKey: 'org-reader', orgUnitId: null })).status).toBe(403); // null = toda la org
     const setScope = (h: Record<string, string>, userId: string, orgUnitId: string | null) =>
       request(httpServer).patch(`/api/v1/orgs/${orgId}/members/${userId}/scope`).set(h).send({ orgUnitId });
     expect((await setScope(hA, adminA, null)).status).toBe(403); // no se auto-promueve
     expect((await setScope(hC, userA, a1)).status).toBe(200);
     expect((await setScope(hC, userA, a)).status).toBe(200);
+
+    // ── Aportes: alcance sobre la unidad del PROYECTO (relajado) ──────────────
+    const feeds = await createIndicator(orgId, objM, {
+      metric: { ...metricBody, name: 'Aportable', kind: 'output' },
+      linkMode: 'execution_feeds_indicator',
+    });
+    expect(feeds.status, JSON.stringify(feeds.body)).toBe(201);
+    const feedsUrl = `/api/v1/okr/indicators/${feeds.body.id as string}/contributions`;
+    const projBinM = await createProject(orgId, objM, 'Proyecto de B dentro de M', b);
+    const own = await request(httpServer).post(feedsUrl).set(hA).send({ projectId: projAinM.projectId, contributionValue: '3' });
+    expect(own.status, JSON.stringify(own.body)).toBe(201); // proyecto de A, aunque el objetivo sea de M
+    expect((await request(httpServer).patch(`/api/v1/okr/contributions/${own.body.id as string}`).set(hA).send({ contributionValue: '4' })).status).toBe(200);
+    const otherProj = await request(httpServer).post(feedsUrl).set(hA).send({ projectId: projBinM.projectId, contributionValue: '3' });
+    expect(otherProj.status).toBe(403);
+    expect(otherProj.body.message).toMatch(FORBIDDEN);
+    expect((await request(httpServer).delete(`/api/v1/okr/contributions/${own.body.id as string}`).set(hA)).status).toBe(204);
+
+    // ── Metric (catálogo): misma regla que las cargas ─────────────────────────
+    const mk = (h: Record<string, string>, name: string) =>
+      request(httpServer).post(`/api/v1/orgs/${orgId}/metrics`).set(h).send({ ...metricBody, name, direction: 'increasing', baselineValue: '0', targetValue: '10' });
+    const mkA = await mk(hA, 'Standalone de A');
+    expect(mkA.status).toBe(403);
+    expect(mkA.body.message).toMatch(FORBIDDEN);
+    const mkC = await mk(hC, 'Standalone de C');
+    expect(mkC.status).toBe(201);
+    const patchMetric = (h: Record<string, string>, id: string) => request(httpServer).patch(`/api/v1/metrics/${id}`).set(h).send({ description: 'd' });
+    expect((await patchMetric(hA, metricOnlyA)).status).toBe(200);
+    expect((await patchMetric(hA, metricShared)).status).toBe(403); // usada por A y B
+    expect((await patchMetric(hA, metricStandalone)).status).toBe(403); // sin objetivos: central
+    expect((await request(httpServer).delete(`/api/v1/metrics/${mkC.body.id as string}`).set(hA)).status).toBe(403);
+    expect((await patchMetric(hC, metricShared)).status).toBe(200);
+    expect((await request(httpServer).delete(`/api/v1/metrics/${mkC.body.id as string}`).set(hC)).status).toBe(204);
+
+    // ── Visión y misión: permiso fino + alcance ───────────────────────────────
+    const vm = (h: Record<string, string>, id: string, body: Record<string, unknown>) =>
+      request(httpServer).patch(`/api/v1/orgs/${orgId}/org-units/${id}/vision-mission`).set(h).send(body);
+    expect((await vm(hUA, a, { vision: 'v', mission: 'm' })).status).toBe(200); // org-user con alcance A
+    expect((await vm(hUA, a1, { mission: 'm1' })).status).toBe(200);
+    const vmB = await vm(hUA, b, { vision: 'vb' });
+    expect(vmB.status).toBe(403);
+    expect(vmB.body.message).toMatch(FORBIDDEN);
+    expect((await vm(hUA, m, { vision: 'vm' })).status).toBe(403);
+    expect((await vm(hUA, a, { name: 'Estructura' })).status).toBe(400); // la estructura no entra por acá
+    expect((await request(httpServer).patch(unitUrl(a)).set(hUA).send({ vision: 'v' })).status).toBe(403); // PATCH :id sigue pidiendo manage
+    expect((await vm(asUser(readerA, orgId), a, { vision: 'v' })).status).toBe(403); // org-reader sin permiso (RBAC)
+    expect((await vm(hC, b, { vision: 'vb' })).status).toBe(200);
+
+    // ── Cambiar rol / quitar miembros: administrar el alcance actual ──────────
+    const role = (h: Record<string, string>, userId: string, roleKey: string) =>
+      request(httpServer).patch(`/api/v1/orgs/${orgId}/members/${userId}/role`).set(h).send({ roleKey });
+    expect((await role(hA, adminCentral, 'org-reader')).status).toBe(403); // alcance null: solo central
+    expect((await request(httpServer).delete(`/api/v1/orgs/${orgId}/members/${adminCentral}`).set(hA)).status).toBe(403);
+    expect((await role(hA, readerA, 'org-user')).status).toBe(200); // miembro de su propia unidad
+    expect((await role(hC, adminCentral, 'org-admin')).status).toBe(200);
 
     // ── Superadmin: todo ─────────────────────────────────────────────────────
     expect((await patch(orgHeaders(orgId), objB)).status).toBe(200);
@@ -300,7 +348,7 @@ describe.skipIf(!process.env['DATABASE_URL'])('C19 — alcance por unidad', () =
     expect(await db.auditEvent.count({ where: { action: 'objective.updated', entityId: objA } })).toBeGreaterThan(0);
   });
 
-  it('invitar con orgUnitId: valida que la unidad exista en la org y respeta el default null', async () => {
+  it('invitar: orgUnitId obligatorio (unidad o null explícito), validado contra la org', async () => {
     const a = await bootstrapOrg('invite-a');
     const b = await bootstrapOrg('invite-b');
     const unitA = await createUnit(a.orgId, a.centralId, 'ministry', 'Ministerio A');
@@ -311,9 +359,11 @@ describe.skipIf(!process.env['DATABASE_URL'])('C19 — alcance por unidad', () =
     const withUnit = await inv(a.orgId, { email: `w-${stamp}@c19.test`, roleKey: 'org-user', orgUnitId: unitA });
     expect(withUnit.status).toBe(201);
     expect(withUnit.body.orgUnitId).toBe(unitA);
-    const withoutUnit = await inv(a.orgId, { email: `wo-${stamp}@c19.test`, roleKey: 'org-user' });
+    const withoutUnit = await inv(a.orgId, { email: `wo-${stamp}@c19.test`, roleKey: 'org-user', orgUnitId: null });
     expect(withoutUnit.status).toBe(201);
-    expect(withoutUnit.body.orgUnitId).toBeNull(); // comportamiento actual: toda la org
+    expect(withoutUnit.body.orgUnitId).toBeNull(); // null explícito = toda la org
+    // La propiedad es obligatoria: omitirla es un 400, no se asume null.
+    expect((await inv(a.orgId, { email: `om-${stamp}@c19.test`, roleKey: 'org-user' })).status).toBe(400);
     expect((await inv(a.orgId, { email: `x-${stamp}@c19.test`, roleKey: 'org-user', orgUnitId: unitB })).status).toBe(404); // unidad de otra org
     expect((await inv(a.orgId, { email: `y-${stamp}@c19.test`, roleKey: 'org-user', orgUnitId: 'no-existe' })).status).toBe(404);
     expect((await inv(a.orgId, { email: `z-${stamp}@c19.test`, roleKey: 'org-user', orgUnitId: '' })).status).toBe(400);
