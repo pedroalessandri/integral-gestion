@@ -35,6 +35,7 @@ Formato:
   - ✅ La meta queda en el inicio del último intervalo (para semestral en período anual, el 1/jul). Se deja así.
   - ✅ Nombres del semáforo: "En tiempo", "Atención", "Atrasado".
   - ✅ Un solo intervalo en el período: se permite; es una curva para ese período y listo. No se bloquea.
+- Smoke de Pedro (2026-10-08): OK, indicador `outcome` semestral con curva manual (curva en el gráfico, semáforo y carga pendiente). Fase 6 mergeada (PR #19).
 
 ## 2026-10-08 · C15 · backend-dev · feature/plan-f6-curvas
 - Hecho:
