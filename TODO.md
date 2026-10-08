@@ -106,6 +106,10 @@
 - Por qué: la migración de C04 inserta en `core.user` el usuario de sistema `system:migration` (actor de los eventos de backfill, ADR-0009 D6). Si no se filtra, aparece en los listados globales del superadmin.
 - Origen: C04 (2026-10-07), aprobado por Pedro.
 
+### [F] Editar el peso de un solo indicador desde su editor
+- Por qué: hoy el peso de los indicadores solo se edita en bloque ("Editar pesos"), por la regla todo-o-nada. Un campo "peso" en el editor exige definir cómo se compensan los hermanos para que la suma siga en 10000.
+- Origen: C12 (2026-10-08), Pedro lo dejó para el futuro.
+
 ## ✅ Recientemente completados (últimos 30 días)
 
 - [B] Validar `:orgId` del path contra el tenant del request (`OrgParamGuard` en org-units, members, modules, strategic-plan y metrics) — mergeado el 7 octubre 2026

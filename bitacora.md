@@ -37,9 +37,9 @@ Formato:
   - El peso del indicador no se edita en el form: solo por "Editar pesos" en bloque, como proyectos y tareas. Un indicador nuevo en un grupo ponderado entra con 0 %.
   - Editar tipo, fuente o descripción son dos llamadas (métrica, luego indicador), no atómicas, y piden `metrics:write`. Ítem en tech-debt.
   - Sin curva manual ni `from_projects` (F6), como indica el plan.
-- Preguntas abiertas:
-  - ¿La baja de un indicador tiene que advertir cuántas cargas tiene la métrica? Hoy el diálogo solo dice que la métrica y sus cargas se conservan.
-  - ¿El editor tiene que permitir cambiar el peso de un solo indicador? Se resolvió con el PUT en bloque por la regla todo-o-nada; si Pedro quiere un campo "peso" en el form, hay que decidir cómo se compensan los hermanos.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ Baja de un indicador: alcanza con el aviso actual (la métrica y sus cargas se conservan); no hace falta contar las cargas.
+  - ✅ Peso de un solo indicador en el editor: por ahora no; se sigue editando en bloque. Queda a futuro en TODO.md (prioridad baja).
 
 ## 2026-10-08 · C11 · backend-dev · feature/plan-f4-indicadores
 - Hecho:
