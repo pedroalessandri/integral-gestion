@@ -37,37 +37,78 @@ async function request<T>(
   }
 }
 
-export const getObjectiveAction = (orgId: string, objectiveId: string) =>
-  request<ObjectiveDetailDto>(orgId, `/objectives/${objectiveId}`);
+export async function getObjectiveAction(orgId: string, objectiveId: string) {
+  return request<ObjectiveDetailDto>(orgId, `/objectives/${objectiveId}`);
+}
 
-export const listProjectsAction = (orgId: string, objectiveId: string) =>
-  request<ProjectSummaryDto[]>(orgId, `/objectives/${objectiveId}/projects`);
+export async function listProjectsAction(orgId: string, objectiveId: string) {
+  return request<ProjectSummaryDto[]>(orgId, `/objectives/${objectiveId}/projects`);
+}
 
-export const getProjectAction = (orgId: string, projectId: string) =>
-  request<ProjectDetailDto>(orgId, `/projects/${projectId}`);
+export async function getProjectAction(orgId: string, projectId: string) {
+  return request<ProjectDetailDto>(orgId, `/projects/${projectId}`);
+}
 
-export const createProjectAction = (orgId: string, objectiveId: string, input: CreateProjectDto) =>
-  request<ProjectDetailDto>(orgId, `/objectives/${objectiveId}/projects`, { method: 'POST', body: input });
+export async function createProjectAction(
+  orgId: string,
+  objectiveId: string,
+  input: CreateProjectDto,
+) {
+  return request<ProjectDetailDto>(orgId, `/objectives/${objectiveId}/projects`, {
+    method: 'POST',
+    body: input,
+  });
+}
 
-export const updateProjectAction = (orgId: string, projectId: string, input: UpdateProjectDto) =>
-  request<ProjectDetailDto>(orgId, `/projects/${projectId}`, { method: 'PATCH', body: input });
+export async function updateProjectAction(
+  orgId: string,
+  projectId: string,
+  input: UpdateProjectDto,
+) {
+  return request<ProjectDetailDto>(orgId, `/projects/${projectId}`, {
+    method: 'PATCH',
+    body: input,
+  });
+}
 
-export const deleteProjectAction = (orgId: string, projectId: string) =>
-  request<DeleteProjectResultDto>(orgId, `/projects/${projectId}`, { method: 'DELETE' });
+export async function deleteProjectAction(orgId: string, projectId: string) {
+  return request<DeleteProjectResultDto>(orgId, `/projects/${projectId}`, { method: 'DELETE' });
+}
 
-export const setProjectWeightsAction = (orgId: string, objectiveId: string, input: SetSiblingWeightsDto) =>
-  request<ProjectSummaryDto[]>(orgId, `/objectives/${objectiveId}/projects/weights`, { method: 'PUT', body: input });
+export async function setProjectWeightsAction(
+  orgId: string,
+  objectiveId: string,
+  input: SetSiblingWeightsDto,
+) {
+  return request<ProjectSummaryDto[]>(orgId, `/objectives/${objectiveId}/projects/weights`, {
+    method: 'PUT',
+    body: input,
+  });
+}
 
-export const listProjectTasksAction = (orgId: string, projectId: string) =>
-  request<TaskSummaryDto[]>(orgId, `/projects/${projectId}/tasks`);
+export async function listProjectTasksAction(orgId: string, projectId: string) {
+  return request<TaskSummaryDto[]>(orgId, `/projects/${projectId}/tasks`);
+}
 
-export const createProjectTaskAction = (orgId: string, projectId: string, input: CreateProjectTaskDto) =>
-  request<TaskDetailDto>(orgId, `/projects/${projectId}/tasks`, { method: 'POST', body: input });
+export async function createProjectTaskAction(
+  orgId: string,
+  projectId: string,
+  input: CreateProjectTaskDto,
+) {
+  return request<TaskDetailDto>(orgId, `/projects/${projectId}/tasks`, {
+    method: 'POST',
+    body: input,
+  });
+}
 
-export const updateProjectTaskAction = (orgId: string, taskId: string, input: UpdateTaskDto) =>
-  request<TaskDetailDto>(orgId, `/tasks/${taskId}`, { method: 'PATCH', body: input });
+export async function updateProjectTaskAction(orgId: string, taskId: string, input: UpdateTaskDto) {
+  return request<TaskDetailDto>(orgId, `/tasks/${taskId}`, { method: 'PATCH', body: input });
+}
 
-export async function deleteProjectTaskAction(orgId: string, taskId: string): Promise<ActionResult<null>> {
+export async function deleteProjectTaskAction(
+  orgId: string,
+  taskId: string,
+): Promise<ActionResult<null>> {
   try {
     const res = await apiFetch(`${OKR}/tasks/${taskId}`, { method: 'DELETE', orgId });
     if (!res.ok) return failure(await readApiError(res));
@@ -77,5 +118,13 @@ export async function deleteProjectTaskAction(orgId: string, taskId: string): Pr
   }
 }
 
-export const setTaskWeightsAction = (orgId: string, projectId: string, input: SetSiblingWeightsDto) =>
-  request<TaskSummaryDto[]>(orgId, `/projects/${projectId}/tasks/weights`, { method: 'PUT', body: input });
+export async function setTaskWeightsAction(
+  orgId: string,
+  projectId: string,
+  input: SetSiblingWeightsDto,
+) {
+  return request<TaskSummaryDto[]>(orgId, `/projects/${projectId}/tasks/weights`, {
+    method: 'PUT',
+    body: input,
+  });
+}
