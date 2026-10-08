@@ -11,6 +11,7 @@ import {
   Post,
   Put,
   UseGuards,
+  ValidationPipe,
 } from '@nestjs/common';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
@@ -21,6 +22,9 @@ import { TaskService } from '../services/task.service.js';
 import { CreateTaskDto } from '../dto/create-task.dto.js';
 import { UpdateTaskDto } from '../dto/update-task.dto.js';
 import { SetTaskProgressDto } from '../dto/set-task-progress.dto.js';
+
+/** Validación de DTOs en el borde (class-validator). */
+const bodyPipe = new ValidationPipe({ transform: true, whitelist: true });
 
 /**
  * Narrows organizationId from string | null to string.
@@ -51,7 +55,7 @@ export class TaskController {
   create(
     @CurrentUser() user: AuthContext,
     @Param('keyResultId') keyResultId: string,
-    @Body() dto: CreateTaskDto,
+    @Body(bodyPipe) dto: CreateTaskDto,
   ) {
     return this.taskService.create(keyResultId, requireOrgId(user), dto, user);
   }
@@ -67,7 +71,7 @@ export class TaskController {
   update(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() dto: UpdateTaskDto,
+    @Body(bodyPipe) dto: UpdateTaskDto,
   ) {
     return this.taskService.update(id, requireOrgId(user), dto, user);
   }
@@ -84,7 +88,7 @@ export class TaskController {
   setProgress(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() dto: SetTaskProgressDto,
+    @Body(bodyPipe) dto: SetTaskProgressDto,
   ) {
     return this.taskService.setProgress(id, requireOrgId(user), dto.progressBp, user);
   }

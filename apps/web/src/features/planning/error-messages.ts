@@ -20,6 +20,21 @@ const MESSAGES: Record<string, string> = {
   StrategicPlanRequired: 'Primero tenés que crear el plan de gobierno para poder agregar ejes.',
   StrategicPlanNotFound: 'La organización todavía no tiene un plan de gobierno.',
   StrategicPlanConflict: 'Otra persona creó el plan al mismo tiempo. Recargá la página e intentá de nuevo.',
+  ObjectiveWithoutOrgUnit:
+    'El objetivo todavía no tiene unidad. Editalo y asignale un ministerio o un área para poder cargar proyectos.',
+  ProjectOrgUnitOutOfScope:
+    'La unidad del proyecto tiene que ser la del objetivo o una unidad dependiente de ella.',
+  ProjectProgressModeNotSupported:
+    'Por ahora el avance del proyecto solo se calcula desde sus tareas.',
+  ProjectDatesInvalid: 'La fecha de inicio del proyecto tiene que ser anterior o igual a la de fin.',
+  ProjectOutsidePeriod: 'Las fechas del proyecto tienen que estar dentro del período del objetivo.',
+  TaskDatesInvalid: 'La fecha de inicio de la tarea tiene que ser anterior o igual a la de fin.',
+  TaskOutsideProject: 'Las fechas de la tarea tienen que estar dentro de las fechas del proyecto.',
+  WeightSumInvalid:
+    'Los pesos del grupo tienen que sumar 100 %. Redistribuilos con "Editar pesos" y volvé a intentar.',
+  MixedWeightGroup:
+    'En un grupo, o todos los elementos tienen peso o ninguno. Usá "Ponderar" para asignarlos todos juntos.',
+  OwnerNotMember: 'La persona responsable tiene que ser miembro de la organización.',
   MandateRangeInvalid: 'El fin del mandato tiene que ser posterior al inicio.',
 };
 

@@ -25,6 +25,13 @@ export const LABELS = {
   planningModule: 'Módulo de planificación',
   member: { singular: 'Miembro', plural: 'Miembros' },
   scope: 'Alcance',
+  keyResultsShort: 'Resultados Clave',
+  weighting: {
+    toggle: 'Ponderar',
+    editWeights: 'Editar pesos',
+    weight: 'Peso',
+    unweighted: 'Sin pesos (promedio simple)',
+  },
 } as const;
 
 export const ORG_UNIT_KIND_LABELS: Record<OrgUnitKind, string> = {

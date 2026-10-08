@@ -103,4 +103,10 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
    */
   'StrategicPlan',
   'Axis',
+
+  /**
+   * `okr.project` — ADR-0009 D2 / SPEC §3.1 (N5).
+   * Proyecto de un objetivo; organizationId requerido e inmutable.
+   */
+  'Project',
 ]);

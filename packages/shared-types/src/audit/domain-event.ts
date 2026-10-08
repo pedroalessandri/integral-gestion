@@ -338,11 +338,15 @@ type TaskCreatedEvent = BaseEvent<
   {
     before: null;
     after: {
-      keyResultId: string;
+      /** Camino KR legacy. Exactamente uno entre keyResultId y projectId. */
+      keyResultId?: string | null;
+      /** Proyecto (N5). */
+      projectId?: string | null;
       title: string;
       description: string | null;
       ownerUserId: string | null;
-      weightBp: number;
+      /** `null` si el grupo no pondera (RN-P6). */
+      weightBp: number | null;
       progressBp: number;
       /** ISO-8601 UTC. */
       startsAt: string;
@@ -360,7 +364,7 @@ type TaskUpdatedEvent = BaseEvent<
       title: string;
       description: string | null;
       ownerUserId: string | null;
-      weightBp: number;
+      weightBp: number | null;
       /** ISO-8601 UTC. */
       startsAt: string;
       /** ISO-8601 UTC. */
@@ -370,7 +374,7 @@ type TaskUpdatedEvent = BaseEvent<
       title: string;
       description: string | null;
       ownerUserId: string | null;
-      weightBp: number;
+      weightBp: number | null;
       /** ISO-8601 UTC. */
       startsAt: string;
       /** ISO-8601 UTC. */
@@ -389,6 +393,35 @@ type TaskProgressUpdatedEvent = BaseEvent<
   'task.progress.updated',
   'okr.task',
   { before: { progressBp: number }; after: { progressBp: number } }
+>;
+
+type ProjectSnapshot = {
+  objectiveId: string;
+  orgUnitId: string;
+  title: string;
+  description: string | null;
+  ownerUserId: string | null;
+  /** `null` si el grupo de proyectos no pondera (RN-P6). */
+  weightBp: number | null;
+  /** ISO-8601 UTC. */
+  startsAt: string;
+  /** ISO-8601 UTC. */
+  endsAt: string;
+  progressMode: 'from_tasks' | 'from_indicator';
+};
+
+type ProjectCreatedEvent = BaseEvent<'project.created', 'okr.project', { before: null; after: ProjectSnapshot }>;
+
+type ProjectUpdatedEvent = BaseEvent<
+  'project.updated',
+  'okr.project',
+  { before: Partial<ProjectSnapshot>; after: Partial<ProjectSnapshot> }
+>;
+
+type ProjectDeletedEvent = BaseEvent<
+  'project.deleted',
+  'okr.project',
+  { before: { deletedAt: null }; after: { deletedAt: string; deletedTaskIds: string[] } }
 >;
 
 // ---------------------------------------------------------------------------
@@ -568,6 +601,10 @@ export type DomainEvent =
   | TaskUpdatedEvent
   | TaskDeletedEvent
   | TaskProgressUpdatedEvent
+  // OKR — project (3)
+  | ProjectCreatedEvent
+  | ProjectUpdatedEvent
+  | ProjectDeletedEvent
   // Metrics — metric (3)
   | MetricCreatedEvent
   | MetricUpdatedEvent
