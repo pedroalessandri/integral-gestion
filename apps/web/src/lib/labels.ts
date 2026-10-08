@@ -1,4 +1,5 @@
 import type { OrgUnitKind } from '@gestion-publica/shared-types/core';
+import type { MetricKind } from '@gestion-publica/shared-types/metrics';
 
 /**
  * Diccionario único de etiquetas de UI (ADR-0006 D2, SPEC §5).
@@ -45,3 +46,9 @@ export const SCOPE_WHOLE_ORG_LABEL = 'Toda la organización';
 
 /** Opción del selector de eje cuando el objetivo no tiene eje (RN-P2). */
 export const NO_AXIS_LABEL = 'Sin eje';
+
+/** Tipo de indicador (RN-P12): producto admite aportes de proyectos; resultado se carga a mano. */
+export const INDICATOR_KIND_LABELS: Record<MetricKind, { label: string; hint: string }> = {
+  output: { label: 'Producto', hint: 'lo que se entrega (km, obras, cantidad)' },
+  outcome: { label: 'Resultado', hint: 'el cambio que se busca (alfabetización, calidad)' },
+};

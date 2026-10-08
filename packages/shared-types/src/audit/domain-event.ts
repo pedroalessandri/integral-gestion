@@ -424,6 +424,43 @@ type ProjectDeletedEvent = BaseEvent<
   { before: { deletedAt: null }; after: { deletedAt: string; deletedTaskIds: string[] } }
 >;
 
+type ObjectiveResultProgressChangedEvent = BaseEvent<
+  'objective.result_progress_changed',
+  'okr.objective',
+  { before: { resultProgressCachedBp: number }; after: { resultProgressCachedBp: number } }
+>;
+
+type ObjectiveIndicatorSnapshot = {
+  objectiveId: string;
+  metricId: string;
+  /** Decimal string. */
+  baselineValue: string;
+  /** Decimal string. */
+  targetValue: string;
+  direction: 'increasing' | 'decreasing';
+  /** `null` si el grupo de indicadores no pondera (RN-P6). */
+  weightBp: number | null;
+  linkMode: 'independent' | 'execution_feeds_indicator' | 'indicator_feeds_execution';
+};
+
+type ObjectiveIndicatorCreatedEvent = BaseEvent<
+  'objective_indicator.created',
+  'metrics.objective_indicator',
+  { before: null; after: ObjectiveIndicatorSnapshot }
+>;
+
+type ObjectiveIndicatorUpdatedEvent = BaseEvent<
+  'objective_indicator.updated',
+  'metrics.objective_indicator',
+  { before: Partial<ObjectiveIndicatorSnapshot>; after: Partial<ObjectiveIndicatorSnapshot> }
+>;
+
+type ObjectiveIndicatorDeletedEvent = BaseEvent<
+  'objective_indicator.deleted',
+  'metrics.objective_indicator',
+  { before: { deletedAt: null }; after: { deletedAt: string } }
+>;
+
 // ---------------------------------------------------------------------------
 // Metrics events (Módulo 1 "Indicadores de gestión")
 // ---------------------------------------------------------------------------
@@ -438,6 +475,9 @@ type MetricCreatedEvent = BaseEvent<
       unit: string;
       direction: string;
       frequency: string;
+      kind: string;
+      source: string | null;
+      description: string | null;
       baselineValue: string;
       targetValue: string;
       periodId: string;
@@ -449,8 +489,22 @@ type MetricUpdatedEvent = BaseEvent<
   'metric.updated',
   'metrics.metric',
   {
-    before: Partial<{ name: string; baselineValue: string; targetValue: string }>;
-    after: Partial<{ name: string; baselineValue: string; targetValue: string }>;
+    before: Partial<{
+      name: string;
+      kind: string;
+      source: string | null;
+      description: string | null;
+      baselineValue: string;
+      targetValue: string;
+    }>;
+    after: Partial<{
+      name: string;
+      kind: string;
+      source: string | null;
+      description: string | null;
+      baselineValue: string;
+      targetValue: string;
+    }>;
   }
 >;
 
@@ -605,6 +659,10 @@ export type DomainEvent =
   | ProjectCreatedEvent
   | ProjectUpdatedEvent
   | ProjectDeletedEvent
+  | ObjectiveResultProgressChangedEvent
+  | ObjectiveIndicatorCreatedEvent
+  | ObjectiveIndicatorUpdatedEvent
+  | ObjectiveIndicatorDeletedEvent
   // Metrics — metric (3)
   | MetricCreatedEvent
   | MetricUpdatedEvent

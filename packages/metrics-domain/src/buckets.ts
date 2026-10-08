@@ -5,6 +5,9 @@ import type { MetricFrequency, PeriodRange } from './types';
  *  - weekly   → Monday of every week intersecting the period
  *  - biweekly → days 1 and 16 of every month
  *  - monthly  → day 1 of every month
+ *  - quarterly → day 1 of Jan/Apr/Jul/Oct
+ *  - semiannual → day 1 of Jan/Jul
+ *  - annual   → Jan 1
  * The FIRST bucket always starts at the period start, even when it does not
  * fall on a natural boundary. All dates are UTC midnights.
  */
@@ -29,6 +32,12 @@ function nextBoundary(after: Date, frequency: MetricFrequency): Date {
       return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 16));
     }
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+  }
+  if (frequency === 'quarterly' || frequency === 'semiannual' || frequency === 'annual') {
+    const step = frequency === 'quarterly' ? 3 : frequency === 'semiannual' ? 6 : 12;
+    const nextMonth = (Math.floor(d.getUTCMonth() / step) + 1) * step;
+    // Date.UTC rolls month >= 12 over to the next year.
+    return new Date(Date.UTC(d.getUTCFullYear(), nextMonth, 1));
   }
   // monthly
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));

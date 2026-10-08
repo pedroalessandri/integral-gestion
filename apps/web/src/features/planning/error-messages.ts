@@ -34,6 +34,20 @@ const MESSAGES: Record<string, string> = {
     'Los pesos del grupo tienen que sumar 100 %. Redistribuilos con "Editar pesos" y volvé a intentar.',
   MixedWeightGroup:
     'En un grupo, o todos los elementos tienen peso o ninguno. Usá "Ponderar" para asignarlos todos juntos.',
+  MetricKindChangeBlocked:
+    'No podés pasar el indicador de Producto a Resultado porque tiene proyectos que le aportan. Quitá primero esos aportes.',
+  LinkModeRequiresOutputMetric:
+    'Solo los indicadores de tipo Producto pueden recibir aportes de proyectos.',
+  IndicatorDirectionMismatch:
+    'La dirección no coincide con la meta: un indicador creciente necesita una meta mayor que la línea base y uno decreciente, una menor.',
+  IndicatorBaselineEqualsTarget: 'La línea base y la meta no pueden ser iguales.',
+  IndicatorTargetRequired: 'Con una métrica nueva tenés que indicar la meta y la dirección.',
+  IndicatorMetricSourceInvalid: 'Elegí una métrica existente o completá los datos de una nueva, pero no las dos cosas.',
+  IndicatorPeriodMismatch: 'La métrica tiene que ser del mismo período que el objetivo.',
+  IndicatorAlreadyLinked: 'Esa métrica ya es un indicador de este objetivo.',
+  MetricInUseByObjective:
+    'No se puede eliminar el indicador porque mide un objetivo. Quitalo primero de los objetivos.',
+  InvalidBucketDate: 'Esa fecha no es un inicio de intervalo válido para la frecuencia del indicador. Elegí otra.',
   OwnerNotMember: 'La persona responsable tiene que ser miembro de la organización.',
   MandateRangeInvalid: 'El fin del mandato tiene que ser posterior al inicio.',
 };

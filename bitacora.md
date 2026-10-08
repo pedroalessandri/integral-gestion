@@ -15,6 +15,80 @@ Formato:
 
 ---
 
+## 2026-10-08 · C12 · frontend-dev · feature/plan-f4-indicadores
+- Hecho:
+  - `features/indicators`: acciones de servidor (`okr/objectives/:id/indicators`, `okr/indicators/:id`, `PUT .../weights`, catálogo de métricas, serie y cargas), hook `useObjectiveIndicators` (reusa `useWeightedGroup`/`WeightsControl`/`WeightsDialog` de proyectos), helpers puros (`indicator-form.ts`: validación de base/meta/dirección con enteros escalados, DTOs; `chart-data.ts`).
+  - Pestaña "Indicadores" en la ficha de objetivo: tarjeta por indicador (tipo, frecuencia, base → meta, valor actual o "Sin datos", peso, avance en bp), gráfico real vs. esperado lineal (reusa `MetricChart`), carga de valores y historial (reusa `EntryFormPanel` y `EntryHistoryTable`). Editor de indicador (crear con métrica nueva o existente en un solo paso; editar tipo, fuente, descripción, base, meta y dirección), baja, y toggle "Ponderar" todo-o-nada.
+  - Encabezado del objetivo: barra "Avance de resultado" (`resultProgressCachedBp`) al lado de "Avance de gestión", cada una con su propia instancia de `ProgressReadingBar`; nunca se combinan.
+  - Pendientes de C10: `metric-form-dialog.tsx` manda `kind` (obligatorio) y suma fuente y descripción; las frecuencias `quarterly`/`semiannual`/`annual` entran en `parseFrequency` y en los filtros (`isMetricFrequency`); `MetricRowActions` pasa los campos nuevos al editar.
+  - Mensajes en español para `MetricKindChangeBlocked`, `LinkModeRequiresOutputMetric`, `IndicatorDirectionMismatch`, `IndicatorBaselineEqualsTarget`, `IndicatorTargetRequired`, `IndicatorMetricSourceInvalid`, `IndicatorPeriodMismatch`, `IndicatorAlreadyLinked`, `MetricInUseByObjective` e `InvalidBucketDate`; las acciones de métricas ahora usan `describeApiError` (antes mostraban el mensaje crudo). Etiquetas de tipo en `lib/labels.ts` (`INDICATOR_KIND_LABELS`).
+  - `apps/web` suma `typecheck` (`tsc --noEmit`) y Vitest (devDependency `vitest`, la misma versión que el resto del monorepo): 25 tests de `weights.ts`, `indicator-form.ts` y `chart-data.ts`.
+- Commit: este commit (`feat(web): pestaña Indicadores con gráfico, carga de valores, ponderación y avance de resultado`)
+- Verificación:
+  - `pnpm typecheck`: 6/6 OK (web incluido).
+  - `pnpm --filter web lint` y `pnpm lint`: 0 errores, 2 warnings preexistentes en web y 3 en api.
+  - `pnpm test`: 10/10 tareas OK (web 25 tests, api 371 tests).
+  - `pnpm --filter web build`: OK.
+  - No se probó contra la API levantada (lo cubre el smoke de Pedro: cargar 3 buckets y ver las dos barras moverse por separado).
+- Pendiente / desvíos:
+  - El gráfico redibuja la recta esperada en el front con la base y la meta del indicador, porque `GET metrics/:id/series` usa las de la métrica (D8). El resumen de esa serie (esperado a hoy, desvío) no se muestra: el desvío de resultado es de C14–C16. Ítem en TODO.md.
+  - El gráfico y las cargas usan endpoints del módulo "Indicadores de gestión" (`metrics:*`). Si la org no lo tiene habilitado, la pestaña lista los indicadores igual y avisa en cada uno; la creación solo ofrece "métrica nueva".
+  - `linkMode` no está en el editor (siempre `independent`) hasta C17. Ítem en TODO.md.
+  - El peso del indicador no se edita en el form: solo por "Editar pesos" en bloque, como proyectos y tareas. Un indicador nuevo en un grupo ponderado entra con 0 %.
+  - Editar tipo, fuente o descripción son dos llamadas (métrica, luego indicador), no atómicas, y piden `metrics:write`. Ítem en tech-debt.
+  - Sin curva manual ni `from_projects` (F6), como indica el plan.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ Baja de un indicador: alcanza con el aviso actual (la métrica y sus cargas se conservan); no hace falta contar las cargas.
+  - ✅ Peso de un solo indicador en el editor: por ahora no; se sigue editando en bloque. Queda a futuro en TODO.md (prioridad baja).
+
+## 2026-10-08 · C11 · backend-dev · feature/plan-f4-indicadores
+- Hecho:
+  - Migración `20261008000002_objective_indicator`, escrita a mano y aplicada con `migrate deploy`. Crea `metrics.objective_indicator`: base y meta NUMERIC(18,4), `direction`, `weight_bp` nullable, `expected_curve_mode`, `link_mode`, `progress_cached_bp`, `legacy_key_result_id` y `deleted_at`, con CHECKs, único parcial `(objective_id, metric_id)` entre vivos y FKs. También agrega la FK pendiente de C08 `okr.project.source_objective_indicator_id`.
+  - ABM en `metrics` bajo `okr/objectives/:id/indicators`, `okr/indicators/:id` y `PUT .../indicators/weights`. Se puede crear con `metricId` o con métrica inline, en la misma transacción y en el período del objetivo. Base, meta y dirección mandan desde el indicador (D8). Hay audit `objective_indicator.*`.
+  - Recálculo según ADR-0009 D5. En su transacción, `metrics` recalcula `progressCachedBp` de los indicadores y el agregado del objetivo (`computeResultProgress`). Después del commit emite `indicator.progress_changed` (`@nestjs/event-emitter`). En `okr`, `IndicatorProgressListener` setea `resultProgressCachedBp` de forma idempotente y audita `objective.result_progress_changed`. La gestión no se toca.
+  - Se dispara al crear, editar o borrar una `MetricEntry` o un indicador y al cambiar pesos.
+  - Pesos todo-o-nada con el helper movido a `common/weights`. Validaciones:
+    - RN-P12: `MetricKindChangeBlocked`.
+    - RN-P14b: `LinkModeRequiresOutputMetric`.
+    - Dirección contra (meta − base): `IndicatorDirectionMismatch`.
+  - Funciones puras: `objectiveIndicatorProgressBp` y `accumulatedValue` (`metrics-domain`), `computeResultProgress` (`okr-domain`).
+- Commit: este commit (`feat(metrics): ObjectiveIndicator con avance de resultado por evento post-commit, pesos opcionales y RN-P12`)
+- Verificación:
+  - `pnpm typecheck --force`: 5/5 OK.
+  - `pnpm --filter api test`: 37 archivos, 371 tests OK.
+  - `okr-domain`: 101 tests OK. `metrics-domain`: 46 tests OK.
+  - `pnpm --filter api lint`: 0 errores, 3 warnings preexistentes.
+  - `psql \d metrics.objective_indicator`: columnas, CHECKs, únicos parciales y FKs presentes, migración aplicada.
+  - Punta a punta en DB descartable `gp_c11` (ya borrada), con el oyente real por `@OnEvent`. El resultado pasó por 0 → 1250 → 3750 → 5000 → 3250 → 10000 y la gestión quedó fija en 4750. Hubo 7 audits `objective.result_progress_changed` con el actor del payload; los pasos sin cambio no auditaron.
+- Pendiente / desvíos:
+  - Dependencia nueva `@nestjs/event-emitter@^2.1.1` (la v3 pide Nest 11).
+  - El payload del evento suma `organizationId`, `actorId` y `requestId` a lo que pide el ADR. Con eso el oyente arma su contexto sin depender del ALS.
+  - El lock del grupo es un `pg_advisory_xact_lock` por objetivo en `metrics` y ya no bloquea la fila de `okr.objective`. Los mocks no detectaban que `$queryRaw` falla con una función `void`; se pasó a `$executeRaw`.
+  - El orden de eventos concurrentes no está garantizado. Quedó en tech-debt.
+  - Las rutas van bajo `okr/` sin `ModuleEnabledGuard`, como `ProjectController`.
+  - `expected_curve_mode` queda con default `linear` y sin DTO hasta F6.
+  - Borrar una métrica que mide un objetivo vivo da 409.
+  - No se corrieron los e2e.
+  - TODO.md suma 2 ítems: el 422 por proyectos vinculados (C17/F7) y que borrar un objetivo no da de baja sus indicadores. tech-debt suma 3 ítems.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08 y aplicadas en este mismo commit con amend):
+  - ✅ Respetar el ADR: el recálculo del objetivo va por evento post-commit, no por puerto síncrono. Se eliminó `OBJECTIVE_RESULT_RECOMPUTER`.
+  - ✅ Crear con métrica inline exige solo `okr:write`.
+  - ✅ Dirección que contradice el signo de (meta − base): 422, en create y en update.
+  - ✅ El valor actual es el acumulado de la métrica; la base del indicador solo entra en la interpolación.
+
+## 2026-10-08 · C10 · backend-dev · feature/plan-f4-indicadores
+- Hecho: migración `20261008000001_metric_kind_source_frequencies` (escrita a mano, aplicada con `migrate deploy` porque `migrate dev` es interactivo): `chk_metric_frequency` suma `quarterly`, `semiannual` y `annual` (RN-P15); columnas `kind VARCHAR(10) NOT NULL DEFAULT 'output'` con `chk_metric_kind` (`output`|`outcome`), `source VARCHAR(500)` y `description VARCHAR(2000)` nullable. `metrics-domain/buckets.ts`: buckets trimestrales (ene/abr/jul/oct), semestrales (ene/jul) y anuales; si el período arranca a mitad de bucket, el primer bucket empieza en la fecha de inicio. Tipo `MetricKind`. DTOs: `kind` obligatorio en el create; `source` y `description` opcionales; en el update los tres son opcionales y `source`/`description` aceptan `null`; `frequency` sigue fuera del update (RN-P16, lo rechaza `forbidNonWhitelisted`); el filtro del listado acepta las 6 frecuencias. `MetricSummaryDto` y los payloads de audit `metric.created`/`metric.updated` llevan los campos nuevos. En web, solo las 3 etiquetas nuevas de `FREQUENCY_LABELS` (`Record` exhaustivo).
+- Commit: este commit (`feat(metrics): frecuencias trimestral, semestral y anual, y tipo, fuente y descripción del indicador`)
+- Verificación: `pnpm --filter metrics-domain test` → 6 archivos, 41 tests OK (9 nuevos de buckets); `pnpm --filter api test` → 33 archivos, 314 tests OK; `pnpm typecheck --force` → 5/5 OK; `psql \d metrics.metric` → columnas y CHECKs presentes, migración registrada como aplicada.
+- Pendiente / desvíos:
+  - **El alta de indicadores desde la web da 400 hasta C12**: `kind` es obligatorio y `metric-form-dialog.tsx` no lo manda. C12 tiene que sumar tipo, fuente y descripción al form. El PR de la fase se abre en C12, así que esto no llega a `main` roto.
+  - Sin las frecuencias nuevas en web, aunque compila: `parseFrequency` en `app/(app)/metrics/page.tsx` y los filtros de `components/metrics/metric-filters.tsx` (para C12).
+  - Largos máximos de `source` (500) y `description` (2000): elegidos por el agente, la SPEC no los fija.
+  - No se corrieron los e2e de `apps/api/test` ni hay tests de web.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ `kind` por defecto `output` en las métricas existentes: las métricas previas son descartables, así que no hace falta clasificarlas en C13.
+  - ✅ Pasar `kind` de `output` a `outcome` se bloquea (422) si la métrica ya alimenta un indicador con aportes. Queda en RN-P12 de la SPEC y como paso de C11 (`execution_feeds_indicator`) y C17 (`ProjectContribution`), porque esas tablas todavía no existen.
+
 ## 2026-10-08 · Fix · Claude · fix/web-server-actions-async, chore/ci-workflow
 - Hecho: el deploy de producción en Vercel del merge de la Fase 3 (PR #12) falló con `Server Actions must be async functions`: `features/projects/project-actions.ts` es `'use server'` y exportaba arrow functions no `async`. Producción quedó en el deploy del PR #11 sin que se notara. Fix: las 11 acciones pasan a `export async function` (PR #13). Se agrega CI (`.github/workflows/ci.yml`, PR #14): install, `prisma:generate`, build de `packages/*`, `pnpm typecheck`, `pnpm lint`, `pnpm test` y `pnpm --filter web build`, en cada PR y en `main`. Para que `pnpm lint` pase se borró un mock sin usar en `task.service.spec.ts`.
 - Commit: `38dae55` (PR #13), `0a3a2ae` (PR #14)

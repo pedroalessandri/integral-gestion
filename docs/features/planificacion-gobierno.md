@@ -99,7 +99,7 @@ Convenciones vigentes que se mantienen: Decimal para valores, basis points para 
 - **RN-P11**: El flujo **indicador → avance automático** de la metodología anterior se elimina. El indicador ya no "alimenta" a un KR: es la medida del objetivo.
 
 ### Gestión que impacta en el indicador (solo indicadores lineales)
-- **RN-P12**: Un indicador `kind = output` (producto: km, cantidad de obras) puede recibir **aportes de proyectos** (`ProjectContribution`). Un indicador `kind = outcome` (resultado: alfabetización, calidad educativa) **no admite aportes** y se carga solo manualmente.
+- **RN-P12**: Un indicador `kind = output` (producto: km, cantidad de obras) puede recibir **aportes de proyectos** (`ProjectContribution`). Un indicador `kind = outcome` (resultado: alfabetización, calidad educativa) **no admite aportes** y se carga solo manualmente. Pasar un `Metric` de `output` a `outcome` se rechaza con 422 si alguno de sus `ObjectiveIndicator` es `execution_feeds_indicator` o tiene `ProjectContribution` (decisión de Pedro, 2026-10-08).
 - **RN-P13**: Cuando un proyecto llega al 100%, el sistema crea un `MetricEntry` con `incrementValue = contributionValue`. El entry se fecha en el bucket de la fecha de cierre, con el comentario "Aporte automático — Proyecto X" y queda auditado. Si el proyecto baja del 100%, se crea un entry compensatorio negativo; nunca se borra. Esto encaja con RN-C5 (incrementos) y RN-C6 (correcciones).
 - **RN-P14**: La carga manual sobre un indicador con aportes sigue permitida (convivencia). La UI distingue visualmente las cargas automáticas de las manuales.
 - **RN-P14b** (ADR-0009 D5): `ObjectiveIndicator.linkMode` define el vínculo con la gestión:

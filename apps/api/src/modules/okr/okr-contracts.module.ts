@@ -2,10 +2,13 @@ import { Global, Injectable, Module } from '@nestjs/common';
 import {
   AXIS_OBJECTIVE_COUNTER,
   AXIS_OBJECTIVE_UNASSIGNER,
+  OBJECTIVE_LOOKUP,
   ORG_UNIT_OBJECTIVE_COUNTER,
   type ObjectiveAxisCounter,
   type ObjectiveAxisUnassigner,
+  type ObjectiveLookup,
   type ObjectiveOrgUnitCounter,
+  type ObjectiveRef,
 } from '../../common/contracts/index.js';
 import { PrismaService } from '../auth/prisma/prisma.service.js';
 import {
@@ -70,6 +73,42 @@ export class PrismaObjectiveAxisUnassigner implements ObjectiveAxisUnassigner {
   }
 }
 
+/** Implementación de `OBJECTIVE_LOOKUP`: objetivo vivo de la org con su período (para validar indicadores). */
+@Injectable()
+export class PrismaObjectiveLookup implements ObjectiveLookup {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findLiveObjective(organizationId: string, objectiveId: string): Promise<ObjectiveRef | null> {
+    const objective = await this.prisma.raw.objective.findFirst({
+      where: { id: objectiveId, organizationId, deletedAt: null },
+      select: {
+        id: true,
+        periodId: true,
+        period: { select: { id: true, code: true, status: true } },
+      },
+    });
+    if (!objective) return null;
+    return {
+      id: objective.id,
+      periodId: objective.periodId,
+      period: {
+        id: objective.period.id,
+        code: objective.period.code,
+        status: objective.period.status as 'open' | 'closed' | 'future',
+      },
+    };
+  }
+
+  async filterLiveObjectiveIds(organizationId: string, objectiveIds: ReadonlyArray<string>): Promise<string[]> {
+    if (objectiveIds.length === 0) return [];
+    const rows = await this.prisma.raw.objective.findMany({
+      where: { id: { in: [...objectiveIds] }, organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  }
+}
+
 /**
  * Submódulo @Global de contratos de `okr`: solo lo importa AppModule. Si falta el provider,
  * Nest falla al arrancar (preferible a una validación que pasa en silencio).
@@ -81,7 +120,13 @@ export class PrismaObjectiveAxisUnassigner implements ObjectiveAxisUnassigner {
     { provide: ORG_UNIT_OBJECTIVE_COUNTER, useClass: PrismaObjectiveOrgUnitCounter },
     { provide: AXIS_OBJECTIVE_COUNTER, useClass: PrismaObjectiveAxisCounter },
     { provide: AXIS_OBJECTIVE_UNASSIGNER, useClass: PrismaObjectiveAxisUnassigner },
+    { provide: OBJECTIVE_LOOKUP, useClass: PrismaObjectiveLookup },
   ],
-  exports: [ORG_UNIT_OBJECTIVE_COUNTER, AXIS_OBJECTIVE_COUNTER, AXIS_OBJECTIVE_UNASSIGNER],
+  exports: [
+    ORG_UNIT_OBJECTIVE_COUNTER,
+    AXIS_OBJECTIVE_COUNTER,
+    AXIS_OBJECTIVE_UNASSIGNER,
+    OBJECTIVE_LOOKUP,
+    ],
 })
 export class OkrContractsModule {}

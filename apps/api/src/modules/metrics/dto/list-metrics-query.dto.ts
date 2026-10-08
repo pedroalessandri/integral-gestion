@@ -3,7 +3,7 @@ import type { MetricFrequency } from '@gestion-publica/shared-types/metrics';
 
 export class ListMetricsQueryDto {
   @IsOptional()
-  @IsIn(['weekly', 'biweekly', 'monthly'])
+  @IsIn(['weekly', 'biweekly', 'monthly', 'quarterly', 'semiannual', 'annual'])
   frequency?: MetricFrequency;
 
   /** Accepted for forward-compatibility; only meaningful once Módulo 2 adds KR links. */

@@ -7,6 +7,7 @@ export type {
   OptionalWeightInput,
   ProjectTaskInput,
   ProjectInput,
+  IndicatorInput,
   WeightMode,
   ScheduledTaskInput,
 } from './types';
@@ -16,6 +17,7 @@ export {
   computeObjectiveProgress,
   computeProjectProgress,
   computeExecutionProgress,
+  computeResultProgress,
   aggregateProgressBp,
   WeightSumInvariantError,
   MixedWeightGroupError,

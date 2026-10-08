@@ -1,7 +1,10 @@
 /** Metric load frequency. Fixed at metric creation (RN-C3). */
-export type MetricFrequency = 'weekly' | 'biweekly' | 'monthly';
+export type MetricFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semiannual' | 'annual';
 
 /** Metric direction. Presentation-only in Módulo 1 (RN-M9). */
+/** Metric kind: output (producto) | outcome (resultado). Informational for the domain. */
+export type MetricKind = 'output' | 'outcome';
+
 export type MetricDirection = 'increasing' | 'decreasing';
 
 /** Period date range. Dates are interpreted in UTC. */

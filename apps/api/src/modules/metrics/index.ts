@@ -4,3 +4,4 @@
 export { MetricsModule } from './metrics.module.js';
 export { MetricService } from './services/metric.service.js';
 export { MetricEntryService } from './services/metric-entry.service.js';
+export { ObjectiveIndicatorService } from './services/objective-indicator.service.js';

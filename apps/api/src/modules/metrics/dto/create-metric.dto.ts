@@ -2,6 +2,7 @@ import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class
 import type {
   MetricDirection,
   MetricFrequency,
+  MetricKind,
   MetricUnit,
 } from '@gestion-publica/shared-types/metrics';
 
@@ -22,8 +23,21 @@ export class CreateMetricDto {
   @IsIn(['increasing', 'decreasing'])
   direction!: MetricDirection;
 
-  @IsIn(['weekly', 'biweekly', 'monthly'])
+  @IsIn(['weekly', 'biweekly', 'monthly', 'quarterly', 'semiannual', 'annual'])
   frequency!: MetricFrequency;
+
+  @IsIn(['output', 'outcome'])
+  kind!: MetricKind;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
 
   @IsOptional()
   @Matches(DECIMAL_STRING_RE, { message: `baselineValue ${DECIMAL_STRING_MESSAGE}` })

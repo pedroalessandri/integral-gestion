@@ -34,3 +34,12 @@ export function cumulativeToDate(entries: EntryInput[], baselineValue: string, a
   }
   return formatDecimal4(total);
 }
+
+/** Accumulated value without date cutoff: baseline + Σ all increments (RN-C5). */
+export function accumulatedValue(baselineValue: string, increments: ReadonlyArray<string>): string {
+  let total = parseDecimal4(baselineValue);
+  for (const increment of increments) {
+    total += parseDecimal4(increment);
+  }
+  return formatDecimal4(total);
+}

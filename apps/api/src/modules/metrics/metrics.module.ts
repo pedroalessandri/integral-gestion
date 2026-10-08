@@ -7,9 +7,11 @@ import { ModuleEnabledGuard } from '../../common/guards/module-enabled.guard.js'
 import { MetricService } from './services/metric.service.js';
 import { MetricEntryService } from './services/metric-entry.service.js';
 import { MetricLinkService } from './services/metric-link.service.js';
+import { ObjectiveIndicatorService } from './services/objective-indicator.service.js';
 import { MetricController } from './controllers/metric.controller.js';
 import { MetricEntryController } from './controllers/metric-entry.controller.js';
 import { MetricLinkController } from './controllers/metric-link.controller.js';
+import { ObjectiveIndicatorController } from './controllers/objective-indicator.controller.js';
 
 /**
  * MetricsModule — Módulo 1 "Indicadores de gestión".
@@ -20,8 +22,8 @@ import { MetricLinkController } from './controllers/metric-link.controller.js';
  */
 @Module({
   imports: [CoreModule, AuditModule, AuthModule, OkrModule],
-  controllers: [MetricController, MetricEntryController, MetricLinkController],
-  providers: [MetricService, MetricEntryService, MetricLinkService, ModuleEnabledGuard],
-  exports: [MetricService, MetricEntryService, MetricLinkService],
+  controllers: [MetricController, MetricEntryController, MetricLinkController, ObjectiveIndicatorController],
+  providers: [MetricService, MetricEntryService, MetricLinkService, ObjectiveIndicatorService, ModuleEnabledGuard],
+  exports: [MetricService, MetricEntryService, MetricLinkService, ObjectiveIndicatorService],
 })
 export class MetricsModule {}

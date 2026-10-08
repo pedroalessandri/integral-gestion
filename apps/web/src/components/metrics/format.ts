@@ -37,6 +37,9 @@ export const FREQUENCY_LABELS: Record<MetricFrequency, string> = {
   weekly: 'Semanal',
   biweekly: 'Quincenal',
   monthly: 'Mensual',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  annual: 'Anual',
 };
 
 /** es-AR date label for a bucket / ISO date (day + short month). */
@@ -46,4 +49,9 @@ export function formatBucketLabel(iso: string): string {
     month: 'short',
     timeZone: 'UTC',
   });
+}
+
+/** Type guard de las 6 frecuencias soportadas (RN-P15). */
+export function isMetricFrequency(value: string | null | undefined): value is MetricFrequency {
+  return typeof value === 'string' && Object.hasOwn(FREQUENCY_LABELS, value);
 }

@@ -14,7 +14,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import type { MetricUnit, MetricDirection, MetricFrequency } from '@gestion-publica/shared-types/metrics';
+import type {
+  MetricUnit,
+  MetricDirection,
+  MetricFrequency,
+  MetricKind,
+} from '@gestion-publica/shared-types/metrics';
+import { Textarea } from '@/components/ui/textarea';
+import { INDICATOR_KIND_LABELS } from '@/lib/labels';
 import { UNIT_LABELS, FREQUENCY_LABELS } from './format';
 import { createMetricAction, updateMetricAction } from './actions';
 
@@ -24,6 +31,9 @@ interface MetricInitialValues {
   unit: MetricUnit;
   direction: MetricDirection;
   frequency: MetricFrequency;
+  kind: MetricKind;
+  source: string | null;
+  description: string | null;
   baselineValue: string;
   targetValue: string;
 }
@@ -68,6 +78,9 @@ export function MetricFormDialog(props: Props) {
   const [frequency, setFrequency] = useState<MetricFrequency>(
     props.initialValues?.frequency ?? 'monthly',
   );
+  const [kind, setKind] = useState<MetricKind>(props.initialValues?.kind ?? 'output');
+  const [source, setSource] = useState(props.initialValues?.source ?? '');
+  const [description, setDescription] = useState(props.initialValues?.description ?? '');
   const [baselineValue, setBaselineValue] = useState(props.initialValues?.baselineValue ?? '0');
   const [targetValue, setTargetValue] = useState(props.initialValues?.targetValue ?? '');
 
@@ -78,6 +91,9 @@ export function MetricFormDialog(props: Props) {
       setUnit(props.initialValues.unit);
       setDirection(props.initialValues.direction);
       setFrequency(props.initialValues.frequency);
+      setKind(props.initialValues.kind);
+      setSource(props.initialValues.source ?? '');
+      setDescription(props.initialValues.description ?? '');
       setBaselineValue(props.initialValues.baselineValue);
       setTargetValue(props.initialValues.targetValue);
     }
@@ -104,6 +120,9 @@ export function MetricFormDialog(props: Props) {
         orgId: props.orgId,
         metricId: props.initialValues.id,
         name,
+        kind,
+        source: source.trim() === '' ? null : source.trim(),
+        description: description.trim() === '' ? null : description.trim(),
         baselineValue,
         targetValue,
       });
@@ -114,6 +133,9 @@ export function MetricFormDialog(props: Props) {
         unit,
         direction,
         frequency,
+        kind,
+        ...(source.trim() !== '' && { source: source.trim() }),
+        ...(description.trim() !== '' && { description: description.trim() }),
         baselineValue,
         targetValue,
       });
@@ -131,6 +153,9 @@ export function MetricFormDialog(props: Props) {
       setUnit('number');
       setDirection('increasing');
       setFrequency('monthly');
+      setKind('output');
+      setSource('');
+      setDescription('');
       setBaselineValue('0');
       setTargetValue('');
     }
@@ -138,12 +163,12 @@ export function MetricFormDialog(props: Props) {
   }
 
   const dialogContent = (
-    <DialogContent className="sm:max-w-lg">
+    <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>{isEdit ? 'Editar indicador' : 'Nuevo indicador'}</DialogTitle>
         <DialogDescription>
           {isEdit
-            ? 'La unidad, la dirección y la frecuencia no se pueden cambiar una vez creado el indicador.'
+            ? 'La unidad, la dirección y la frecuencia no se pueden cambiar una vez creado el indicador. El tipo, la fuente y la descripción sí.'
             : 'Definí unidad, dirección y frecuencia. No se podrán cambiar después.'}
         </DialogDescription>
       </DialogHeader>
@@ -207,6 +232,45 @@ export function MetricFormDialog(props: Props) {
             <option value="increasing">Creciente — llegar a la meta subiendo</option>
             <option value="decreasing">Decreciente — bajar hasta la meta</option>
           </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="metric-kind">Tipo</Label>
+          <select
+            id="metric-kind"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as MetricKind)}
+            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          >
+            {(Object.keys(INDICATOR_KIND_LABELS) as MetricKind[]).map((k) => (
+              <option key={k} value={k}>
+                {INDICATOR_KIND_LABELS[k].label} — {INDICATOR_KIND_LABELS[k].hint}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="metric-source">Fuente del dato (opcional)</Label>
+          <Input
+            id="metric-source"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            maxLength={500}
+            placeholder="Ej: Registro de obras de la Secretaría"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="metric-description">Descripción o fórmula (opcional)</Label>
+          <Textarea
+            id="metric-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={2000}
+            rows={2}
+            placeholder="Cómo se mide este indicador"
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-4">

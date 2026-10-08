@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cumulativeSeries, cumulativeToDate } from './accumulate';
+import { accumulatedValue, cumulativeSeries, cumulativeToDate } from './accumulate';
 import type { EntryInput } from './types';
 
 const entries: EntryInput[] = [
@@ -46,5 +46,12 @@ describe('cumulativeToDate', () => {
   it('returns the baseline when no entries qualify', () => {
     expect(cumulativeToDate(entries, '12', new Date('2026-03-01T00:00:00Z'))).toBe('12');
     expect(cumulativeToDate([], '12', new Date('2026-06-30T00:00:00Z'))).toBe('12');
+  });
+});
+
+describe('accumulatedValue', () => {
+  it('base + Σ incrementos, exacto con hasta 4 decimales', () => {
+    expect(accumulatedValue('10', ['0.1', '0.2', '-1'])).toBe('9.3');
+    expect(accumulatedValue('5', [])).toBe('5');
   });
 });

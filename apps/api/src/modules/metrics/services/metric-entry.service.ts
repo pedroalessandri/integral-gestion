@@ -16,6 +16,7 @@ import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 import { MetricLinkService } from './metric-link.service.js';
+import { ObjectiveIndicatorService } from './objective-indicator.service.js';
 
 type PeriodInclude = {
   id: string;
@@ -60,6 +61,7 @@ export class MetricEntryService {
     private readonly prisma: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
     private readonly metricLinkService: MetricLinkService,
+    private readonly objectiveIndicatorService: ObjectiveIndicatorService,
   ) {}
 
   async list(metricId: string, orgId: string): Promise<MetricEntryDto[]> {
@@ -80,7 +82,7 @@ export class MetricEntryService {
     const bucketDate = toUTCMidnight(new Date(dto.bucketDate));
     this.assertValidBucket(bucketDate, metric);
 
-    const created = await tenantContextStorage.run(authContext, () =>
+    const { entry: created, events } = await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         const entry = (await tx.metricEntry.create({
           data: {
@@ -108,9 +110,15 @@ export class MetricEntryService {
           },
         });
 
-        return entry;
+        // F4 hook (RN-P8): en la misma transacción, avance de cada indicador de objetivo y resultado del objetivo.
+        const events = await this.objectiveIndicatorService.recomputeForMetric(tx, metricId, orgId, authContext);
+
+        return { entry, events };
       }),
     );
+
+    // F4 (ADR-0009 D5): después del commit, aviso a `okr` del nuevo avance de resultado.
+    await this.objectiveIndicatorService.publishProgressChanged(events);
 
     // M2 hook: after commit, recompute any automatic KR linked to this metric.
     await this.metricLinkService.recalcLinkedKrs(metricId, orgId, authContext);
@@ -129,7 +137,7 @@ export class MetricEntryService {
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
     const existing = await this.findEntryOrThrow(metricId, entryId, orgId);
 
-    const updated = await tenantContextStorage.run(authContext, () =>
+    const { entry: updated, events } = await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         const entry = (await tx.metricEntry.update({
           where: { id: entryId },
@@ -161,9 +169,15 @@ export class MetricEntryService {
           });
         }
 
-        return entry;
+        // F4 hook (RN-P8): misma transacción que la edición de la carga.
+        const events = await this.objectiveIndicatorService.recomputeForMetric(tx, metricId, orgId, authContext);
+
+        return { entry, events };
       }),
     );
+
+    // F4 (ADR-0009 D5): después del commit, aviso a `okr` del nuevo avance de resultado.
+    await this.objectiveIndicatorService.publishProgressChanged(events);
 
     // M2 hook: after commit, recompute any automatic KR linked to this metric.
     await this.metricLinkService.recalcLinkedKrs(metricId, orgId, authContext);
@@ -181,7 +195,7 @@ export class MetricEntryService {
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
     await this.findEntryOrThrow(metricId, entryId, orgId);
 
-    await tenantContextStorage.run(authContext, () =>
+    const events = await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         await tx.metricEntry.update({
           where: { id: entryId },
@@ -197,8 +211,13 @@ export class MetricEntryService {
             after: { deletedAt: new Date().toISOString() },
           },
         });
+
+        // F4 hook (RN-P8): misma transacción que el borrado de la carga.
+        return this.objectiveIndicatorService.recomputeForMetric(tx, metricId, orgId, authContext);
       }),
     );
+    // F4 (ADR-0009 D5): después del commit, aviso a `okr` del nuevo avance de resultado.
+    await this.objectiveIndicatorService.publishProgressChanged(events);
 
     // M2 hook: deleting an entry changes the accumulated value → recompute KRs.
     await this.metricLinkService.recalcLinkedKrs(metricId, orgId, authContext);

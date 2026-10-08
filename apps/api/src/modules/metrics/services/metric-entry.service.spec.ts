@@ -25,6 +25,10 @@ const mockPrismaService = {
 };
 const mockAuditEmitter = { emit: vi.fn().mockResolvedValue(undefined) };
 const mockMetricLinkService = { recalcLinkedKrs: vi.fn().mockResolvedValue(undefined) };
+const mockObjectiveIndicatorService = {
+  recomputeForMetric: vi.fn().mockResolvedValue([{ objectiveId: 'obj-1' }]),
+  publishProgressChanged: vi.fn().mockResolvedValue(undefined),
+};
 
 const authContext: AuthContext = {
   userId: 'user-1',
@@ -84,6 +88,8 @@ describe('MetricEntryService', () => {
       mockAuditEmitter as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockMetricLinkService as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockObjectiveIndicatorService as any,
     );
   });
 
@@ -153,6 +159,22 @@ describe('MetricEntryService', () => {
         expect.objectContaining({ action: 'metric.entry.created', entityType: 'metrics.metric_entry' }),
       );
       expect(dto.cumulativeAfter).toBe('100');
+      // Hook F4: dentro de la misma transacción (recibe el tx), con la org.
+      expect(mockObjectiveIndicatorService.recomputeForMetric).toHaveBeenCalledWith(mockTx, 'metric-1', 'org-1', authContext);
+      // El evento se publica DESPUÉS del commit, con lo que devolvió el hook.
+      expect(mockObjectiveIndicatorService.publishProgressChanged).toHaveBeenCalledWith([{ objectiveId: 'obj-1' }]);
+    });
+
+    it('si el recálculo falla, la carga no se confirma (misma transacción)', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue(metricWithPeriod);
+      mockTx.metricEntry.create.mockResolvedValue(entryRow());
+      mockObjectiveIndicatorService.recomputeForMetric.mockRejectedValueOnce(new Error('boom'));
+
+      await expect(
+        service.create('metric-1', 'org-1', { bucketDate: '2026-04-01', incrementValue: '100' }, authContext),
+      ).rejects.toThrow('boom');
+      expect(mockMetricLinkService.recalcLinkedKrs).not.toHaveBeenCalled();
+      expect(mockObjectiveIndicatorService.publishProgressChanged).not.toHaveBeenCalled();
     });
   });
 
@@ -175,6 +197,7 @@ describe('MetricEntryService', () => {
           },
         }),
       );
+      expect(mockObjectiveIndicatorService.recomputeForMetric).toHaveBeenCalledWith(mockTx, 'metric-1', 'org-1', authContext);
     });
 
     it('throws 404 for an entry of another metric', async () => {
@@ -200,6 +223,7 @@ describe('MetricEntryService', () => {
       expect(mockAuditEmitter.emit).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'metric.entry.deleted' }),
       );
+      expect(mockObjectiveIndicatorService.recomputeForMetric).toHaveBeenCalledWith(mockTx, 'metric-1', 'org-1', authContext);
     });
 
     it('throws 403 when the period is closed', async () => {

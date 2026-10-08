@@ -73,6 +73,9 @@ export type ProjectTaskInput = OptionalWeightInput;
 /** A Project of an Objective (RN-P8: execution progress). Weight is all-or-nothing within the objective (RN-P6). */
 export type ProjectInput = OptionalWeightInput;
 
+/** An ObjectiveIndicator of an Objective (RN-P8: result progress). Weight is all-or-nothing within the objective (RN-P6). */
+export type IndicatorInput = OptionalWeightInput;
+
 /** Weight classification of a sibling group (RN-P6). */
 export type WeightMode = 'weighted' | 'unweighted' | 'mixed';
 

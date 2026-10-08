@@ -109,4 +109,10 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
    * Proyecto de un objetivo; organizationId requerido e inmutable.
    */
   'Project',
+
+  /**
+   * `metrics.objective_indicator` — ADR-0009 D2 / SPEC §3.1 (N4).
+   * Vínculo objetivo <-> métrica; organizationId requerido e inmutable.
+   */
+  'ObjectiveIndicator',
 ]);

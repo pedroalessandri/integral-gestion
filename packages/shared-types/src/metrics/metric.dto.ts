@@ -6,7 +6,15 @@
 
 export type MetricUnit = 'number' | 'percent' | 'currency';
 export type MetricDirection = 'increasing' | 'decreasing';
-export type MetricFrequency = 'weekly' | 'biweekly' | 'monthly';
+export type MetricFrequency =
+  | 'weekly'
+  | 'biweekly'
+  | 'monthly'
+  | 'quarterly'
+  | 'semiannual'
+  | 'annual';
+/** output = producto (admite aportes de proyectos); outcome = resultado. */
+export type MetricKind = 'output' | 'outcome';
 
 export interface MetricPeriodDto {
   id: string;
@@ -24,6 +32,11 @@ export interface MetricSummaryDto {
   unit: MetricUnit;
   direction: MetricDirection;
   frequency: MetricFrequency;
+  kind: MetricKind;
+  /** Fuente del dato. */
+  source: string | null;
+  /** Fórmula / definición del indicador. */
+  description: string | null;
   /** Decimal string. */
   baselineValue: string;
   /** Decimal string. */

@@ -60,10 +60,30 @@
 - Posible solución: 422 `ProjectDatesExcludeTasks` con la lista de tareas afectadas, como pide D7 para los períodos.
 - Origen: pregunta abierta de C08.
 
+### [F] Cambiar el `linkMode` o borrar un indicador con proyectos vinculados: 422 con la lista (ADR-0009 D5, regla 3)
+- Por qué: C11 valida `execution_feeds_indicator` solo para métricas `output` (RN-P14b) pero todavía no puede validar vínculos vigentes: `ProjectContribution` llega en C17 y `from_indicator` en F7. Hoy se puede cambiar el `linkMode` o borrar un indicador sin chequear proyectos que lo usan (`okr.project.source_objective_indicator_id` ya tiene FK, pero nadie lo setea todavía).
+- Posible solución: puerto `INDICATOR_LINK_READER` / `PROJECT_LINK_READER` (ADR-0009 D5) con la lista de proyectos vinculados; 422 en `update` (cambio de `linkMode`) y en `softDelete` de `ObjectiveIndicatorService`. Va con C17 / F7.
+- Origen: C11 (2026-10-08).
+
+### [F] Borrar un objetivo no da de baja sus ObjectiveIndicator
+- Por qué: `ObjectiveService.softDelete` no toca `metrics.objective_indicator`. C11 lo resuelve de lectura (los puertos filtran objetivos vivos, así que un indicador de un objetivo borrado no bloquea borrar la métrica ni cambiar su `kind`), pero las filas quedan vivas.
+- Posible solución: puerto en `common/contracts` (implementa `metrics`, inyecta `okr`) que da de baja los indicadores del objetivo en la misma transacción, con su `objective_indicator.deleted`.
+- Origen: C11 (2026-10-08).
+
 ### [B] `PeriodController` sin `TenantGuard` ni permisos: cualquier usuario autenticado lista o crea períodos de cualquier org
 - Por qué: `GET`/`POST orgs/:orgId/periods` y `GET periods/:id` solo tienen un TODO(ADR-0004): sin `TenantGuard`, sin `PermissionsGuard` y sin tenant scoping. `OrgParamGuard` (fix de `:orgId`) no alcanza ahí porque sin `TenantGuard` no hay org en el contexto. Lo mismo vale para los guards de `OrganizationController` (`orgs/:id`, operaciones de superadmin).
 - Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.
 - Origen: fix de `:orgId` (2026-10-07).
+
+### [F] Serie del indicador con base y meta del indicador (`GET okr/indicators/:id/series`)
+- Por qué: `GET metrics/:id/series` arma la curva esperada con la base y la meta de la `Metric`, pero para el objetivo mandan las del `ObjectiveIndicator` (ADR-0009 D8). C12 redibuja la recta esperada en el front (`features/indicators/chart-data.ts`) sobre las fechas que devuelve la API. Además el resumen (`expectedToDate`, `deviationPct`) sale con la base/meta de la métrica, así que la pestaña no lo muestra. El desvío de resultado (RN-P9) y la curva `manual`/`from_projects` (F6) necesitan el cálculo en el backend.
+- Posible solución: endpoint de serie por indicador en `metrics` que devuelva `expected`, `actual` y el desvío con los valores del indicador; el front deja de recalcular la recta.
+- Origen: C12 (2026-10-08).
+
+### [F] Exponer `linkMode` del indicador en la UI
+- Por qué: C12 crea indicadores siempre `independent`: los modos `execution_feeds_indicator` e `indicator_feeds_execution` no tienen efecto visible hasta que existan los aportes de proyecto (C17) y el modo `from_indicator` en el form de proyecto. El tipo `Producto`/`Resultado` ya se puede cargar.
+- Posible solución: selector de vínculo en el editor de indicador junto con C17, deshabilitando `execution_feeds_indicator` para `outcome` y mostrando el 422 con la lista de proyectos al cambiarlo.
+- Origen: C12 (2026-10-08).
 
 ## 🔵 Prioridad baja / cuando haya tiempo
 
@@ -85,6 +105,10 @@
 ### [B] Excluir usuarios de sistema (auth0_sub LIKE 'system:%') de los listados globales de usuarios del superadmin
 - Por qué: la migración de C04 inserta en `core.user` el usuario de sistema `system:migration` (actor de los eventos de backfill, ADR-0009 D6). Si no se filtra, aparece en los listados globales del superadmin.
 - Origen: C04 (2026-10-07), aprobado por Pedro.
+
+### [F] Editar el peso de un solo indicador desde su editor
+- Por qué: hoy el peso de los indicadores solo se edita en bloque ("Editar pesos"), por la regla todo-o-nada. Un campo "peso" en el editor exige definir cómo se compensan los hermanos para que la suma siga en 10000.
+- Origen: C12 (2026-10-08), Pedro lo dejó para el futuro.
 
 ## ✅ Recientemente completados (últimos 30 días)
 

@@ -12,7 +12,9 @@ const mockScoped = {
   metric: { findMany: vi.fn(), findFirst: vi.fn() },
   metricEntry: { findMany: vi.fn() },
   metricKrLink: { count: vi.fn().mockResolvedValue(0) },
+  objectiveIndicator: { findMany: vi.fn().mockResolvedValue([]) },
 };
+const mockObjectiveLookup = { filterLiveObjectiveIds: vi.fn().mockResolvedValue([]) };
 const mockTx = {
   metric: { create: vi.fn(), update: vi.fn() },
 };
@@ -65,6 +67,8 @@ describe('MetricService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockScoped.objectiveIndicator.findMany.mockResolvedValue([]);
+    mockObjectiveLookup.filterLiveObjectiveIds.mockResolvedValue([]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockPrismaService.runInTransaction.mockImplementation((fn: (tx: any) => Promise<any>) => fn(mockTx));
     service = new MetricService(
@@ -74,6 +78,8 @@ describe('MetricService', () => {
       mockPeriodService as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockAuditEmitter as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockObjectiveLookup as any,
     );
   });
 
@@ -221,6 +227,81 @@ describe('MetricService', () => {
         ConflictException,
       );
       expect(mockTx.metric.update).not.toHaveBeenCalled();
+    });
+
+    it('409 MetricInUseByObjective cuando mide un objetivo vivo; ignora indicadores de objetivos borrados', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue(metricRow);
+      mockScoped.objectiveIndicator.findMany.mockResolvedValue([
+        { id: 'oi-1', objectiveId: 'obj-live', linkMode: 'independent' },
+        { id: 'oi-2', objectiveId: 'obj-dead', linkMode: 'independent' },
+      ]);
+      mockObjectiveLookup.filterLiveObjectiveIds.mockResolvedValue(['obj-live']);
+
+      await expect(service.softDelete('metric-1', 'org-1', authContext)).rejects.toThrow(/MetricInUseByObjective/);
+      expect(mockScoped.objectiveIndicator.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ organizationId: 'org-1', deletedAt: null }) }),
+      );
+
+      mockObjectiveLookup.filterLiveObjectiveIds.mockResolvedValue([]);
+      mockTx.metric.update.mockResolvedValue({ ...metricRow, deletedAt: new Date() });
+      await expect(service.softDelete('metric-1', 'org-1', authContext)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('update — RN-P12 (kind output -> outcome)', () => {
+    const outputMetric = { ...metricRow, kind: 'output' };
+
+    it('422 si algún indicador de objetivo de la métrica es execution_feeds_indicator', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue(outputMetric);
+      mockScoped.objectiveIndicator.findMany.mockResolvedValue([
+        { id: 'oi-1', objectiveId: 'obj-1', linkMode: 'independent' },
+        { id: 'oi-2', objectiveId: 'obj-1', linkMode: 'execution_feeds_indicator' },
+      ]);
+      mockObjectiveLookup.filterLiveObjectiveIds.mockResolvedValue(['obj-1']);
+
+      await expect(service.update('metric-1', 'org-1', { kind: 'outcome' }, authContext)).rejects.toThrow(
+        UnprocessableEntityException,
+      );
+      await expect(service.update('metric-1', 'org-1', { kind: 'outcome' }, authContext)).rejects.toThrow(
+        /MetricKindChangeBlocked/,
+      );
+      expect(mockTx.metric.update).not.toHaveBeenCalled();
+    });
+
+    it('permite el cambio si los indicadores son independent o indicator_feeds_execution', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue(outputMetric);
+      mockScoped.objectiveIndicator.findMany.mockResolvedValue([
+        { id: 'oi-1', objectiveId: 'obj-1', linkMode: 'independent' },
+        { id: 'oi-2', objectiveId: 'obj-1', linkMode: 'indicator_feeds_execution' },
+      ]);
+      mockObjectiveLookup.filterLiveObjectiveIds.mockResolvedValue(['obj-1']);
+      mockScoped.metricEntry.findMany.mockResolvedValue([]);
+      mockTx.metric.update.mockResolvedValue({ ...outputMetric, kind: 'outcome' });
+
+      await service.update('metric-1', 'org-1', { kind: 'outcome' }, authContext);
+      expect(mockTx.metric.update).toHaveBeenCalled();
+    });
+
+    it('ignora execution_feeds_indicator de un objetivo borrado', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue(outputMetric);
+      mockScoped.objectiveIndicator.findMany.mockResolvedValue([
+        { id: 'oi-2', objectiveId: 'obj-dead', linkMode: 'execution_feeds_indicator' },
+      ]);
+      mockObjectiveLookup.filterLiveObjectiveIds.mockResolvedValue([]);
+      mockScoped.metricEntry.findMany.mockResolvedValue([]);
+      mockTx.metric.update.mockResolvedValue({ ...outputMetric, kind: 'outcome' });
+
+      await service.update('metric-1', 'org-1', { kind: 'outcome' }, authContext);
+      expect(mockTx.metric.update).toHaveBeenCalled();
+    });
+
+    it('no consulta indicadores si el kind no cambia de output a outcome', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue({ ...metricRow, kind: 'outcome' });
+      mockScoped.metricEntry.findMany.mockResolvedValue([]);
+      mockTx.metric.update.mockResolvedValue({ ...metricRow, kind: 'outcome' });
+
+      await service.update('metric-1', 'org-1', { kind: 'outcome' }, authContext);
+      expect(mockScoped.objectiveIndicator.findMany).not.toHaveBeenCalled();
     });
   });
 
