@@ -32,7 +32,10 @@ import {
   LINK_MODE_FIELD_LABELS,
   LINK_MODE_LABELS,
 } from '@/lib/labels';
-import { fromProjectsAvailability, type FromProjectsAvailability } from '@/features/contributions/contributions';
+import {
+  fromProjectsAvailability,
+  type FromProjectsAvailability,
+} from '@/features/contributions/contributions';
 import { formatBpPercent } from '@/features/projects/weights';
 import {
   curveBuckets,
@@ -43,6 +46,7 @@ import {
 } from '../curve-form';
 import {
   applyExistingMetric,
+  reconcileLinkAndCurve,
   emptyIndicatorForm,
   inferDirection,
   indicatorToFormValues,
@@ -94,9 +98,10 @@ export function IndicatorFormDialog({
   );
   const [localError, setLocalError] = useState<string | null>(null);
   const set = <K extends keyof IndicatorFormValues>(key: K, value: IndicatorFormValues[K]) =>
-    setValues((v) => ({ ...v, [key]: value }));
+    setValues((v) => reconcileLinkAndCurve({ ...v, [key]: value }));
 
-  const pointsUnavailable = editing && targetPoints === null && indicator.expectedCurveMode === 'manual';
+  const pointsUnavailable =
+    editing && targetPoints === null && indicator.expectedCurveMode === 'manual';
   const buckets = useMemo(() => curveBuckets(period, values.frequency), [period, values.frequency]);
   const metricIsExisting = values.sourceMode === 'existing';
   const metricFieldsLocked = editing || metricIsExisting;
@@ -132,15 +137,20 @@ export function IndicatorFormDialog({
         <DialogHeader>
           <DialogTitle>{editing ? `Editar ${noun}` : `Nuevo ${noun}`}</DialogTitle>
           <DialogDescription>
-            La línea base, la meta y la dirección de este {noun} mandan sobre las de la métrica para el avance del
-            objetivo. La unidad y la frecuencia no se pueden cambiar una vez creada la métrica.
+            La línea base, la meta y la dirección de este {noun} mandan sobre las de la métrica para
+            el avance del objetivo. La unidad y la frecuencia no se pueden cambiar una vez creada la
+            métrica.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {!editing && (
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium text-neutral-800">Métrica</legend>
-              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Origen de la métrica">
+              <div
+                className="flex flex-wrap gap-2"
+                role="radiogroup"
+                aria-label="Origen de la métrica"
+              >
                 <Button
                   type="button"
                   size="sm"
@@ -338,7 +348,9 @@ export function IndicatorFormDialog({
             targetValue={values.targetValue}
             unavailable={pointsUnavailable}
             onModeChange={(curveMode) => set('curveMode', curveMode)}
-            onPointChange={(bucket, value) => set('pointValues', { ...values.pointValues, [bucket]: value })}
+            onPointChange={(bucket, value) =>
+              set('pointValues', { ...values.pointValues, [bucket]: value })
+            }
           />
 
           {editing && indicator && (
@@ -349,12 +361,14 @@ export function IndicatorFormDialog({
               ) : (
                 <span className="font-mono">{formatBpPercent(indicator.weightBp, 2)}</span>
               )}
-              . Los pesos se cambian de a todos juntos con &quot;{LABELS.weighting.editWeights}&quot;.
+              . Los pesos se cambian de a todos juntos con &quot;{LABELS.weighting.editWeights}
+              &quot;.
             </p>
           )}
           {!editing && groupWeighted && (
             <p className="text-xs text-amber-800">
-              Los indicadores de este objetivo están ponderados: el nuevo entra con peso 0 %. Usá &quot;
+              Los indicadores de este objetivo están ponderados: el nuevo entra con peso 0 %. Usá
+              &quot;
               {LABELS.weighting.editWeights}&quot; para repartir los pesos.
             </p>
           )}
@@ -450,9 +464,12 @@ function CurveEditor({
       )}
 
       {unavailable && (
-        <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-          No pudimos cargar los puntos guardados de la curva manual. Cerrá este diálogo y recargá la página antes de
-          editar el indicador, así no se pisan.
+        <p
+          role="alert"
+          className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+        >
+          No pudimos cargar los puntos guardados de la curva manual. Cerrá este diálogo y recargá la
+          página antes de editar el indicador, así no se pisan.
         </p>
       )}
 
@@ -466,8 +483,8 @@ function CurveEditor({
             </p>
           )}
           <p className="text-xs text-neutral-600">
-            Indicá cuánto esperás tener acumulado al inicio de cada intervalo. Si dejás uno vacío, se interpola entre
-            los vecinos. El último intervalo es siempre la meta.
+            Indicá cuánto esperás tener acumulado al inicio de cada intervalo. Si dejás uno vacío,
+            se interpola entre los vecinos. El último intervalo es siempre la meta.
           </p>
           <ul className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
             {buckets.map((bucket) => {
@@ -529,7 +546,10 @@ function LinkModeField({ value, kind, onChange }: LinkModeFieldProps) {
           <option
             key={m}
             value={m}
-            disabled={m === 'indicator_feeds_execution' || (m === 'execution_feeds_indicator' && kind !== 'output')}
+            disabled={
+              m === 'indicator_feeds_execution' ||
+              (m === 'execution_feeds_indicator' && kind !== 'output')
+            }
           >
             {LINK_MODE_LABELS[m].label}
           </option>

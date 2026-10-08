@@ -28,8 +28,9 @@ Formato:
   - **Campo de vínculo con la gestión (`linkMode`) en el diálogo del indicador**, fuera del alcance de C18 pero necesario: sin él ningún indicador podía ser `execution_feeds_indicator`. Ofrece "Independiente" y "Los proyectos aportan al indicador" (deshabilitada si no es Producto); `indicator_feeds_execution` solo se muestra, deshabilitada, si ya la tiene. En edición `linkMode` viaja solo si cambió.
   - El título del proyecto de una carga automática sale de los aportes vivos del indicador; si el aporte ya no existe o en `/metrics/[id]` dice "Aporte de un proyecto". TODO.md: sumar `sourceProjectTitle` a `MetricEntryDto` (media).
   - Sin Testing Library en web (igual que C16): helpers cubiertos con vitest y componentes con `renderToStaticMarkup`.
-- Preguntas abiertas:
-  - Si en el diálogo se pasa el tipo de Producto a Resultado con vínculo `execution_feeds_indicator` o curva `from_projects` ya elegidos, la UI muestra un error de validación y no resetea esos campos. ¿Se prefiere el reset automático?
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ Al pasar el tipo de Producto a Resultado, el vínculo `execution_feeds_indicator` vuelve a `independent` y la curva `from_projects` vuelve a `linear` (también si se quita el vínculo). Aplicado en un commit aparte (`reconcileLinkAndCurve` en `indicator-form.ts`, 3 tests; web 80 tests).
+  - ✅ OK a `sourceProjectTitle` en `MetricEntryDto` como ítem de TODO.md.
 
 ## 2026-10-08 · C17 · backend-dev · feature/plan-f7-aportes
 - Hecho:
