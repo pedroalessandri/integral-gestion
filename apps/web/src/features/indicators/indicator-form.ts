@@ -94,8 +94,11 @@ export function indicatorToFormValues(
 }
 
 /** Al elegir una métrica existente, base, meta y dirección arrancan con los de la métrica (editables). */
-export function applyExistingMetric(values: IndicatorFormValues, metric: MetricSummaryDto): IndicatorFormValues {
-  return {
+export function applyExistingMetric(
+  values: IndicatorFormValues,
+  metric: MetricSummaryDto,
+): IndicatorFormValues {
+  return reconcileLinkAndCurve({
     ...values,
     metricId: metric.id,
     unit: metric.unit,
@@ -104,18 +107,44 @@ export function applyExistingMetric(values: IndicatorFormValues, metric: MetricS
     direction: metric.direction,
     baselineValue: metric.baselineValue,
     targetValue: metric.targetValue,
-  };
+  });
+}
+
+/**
+ * Mantiene vínculo y curva coherentes con el tipo: si el indicador deja de ser Producto, el vínculo
+ * `execution_feeds_indicator` vuelve a `independent`; si deja de cumplir los requisitos de `from_projects`
+ * (`output` + `execution_feeds_indicator`), la curva vuelve a `linear`. Decisión de Pedro (C18): resetear.
+ */
+export function reconcileLinkAndCurve(values: IndicatorFormValues): IndicatorFormValues {
+  const linkMode =
+    values.kind !== 'output' && values.linkMode === 'execution_feeds_indicator'
+      ? 'independent'
+      : values.linkMode;
+  const curveMode =
+    values.curveMode === 'from_projects' &&
+    (values.kind !== 'output' || linkMode !== 'execution_feeds_indicator')
+      ? 'linear'
+      : values.curveMode;
+  return linkMode === values.linkMode && curveMode === values.curveMode
+    ? values
+    : { ...values, linkMode, curveMode };
 }
 
 /** Valida base, meta y dirección con las mismas reglas que la API (422). `null` si está todo bien. */
-export function validateBaselineTarget(baseline: string, target: string, direction: MetricDirection): string | null {
+export function validateBaselineTarget(
+  baseline: string,
+  target: string,
+  direction: MetricDirection,
+): string | null {
   const b = scaleDecimal(baseline);
   if (b === null) return 'La línea base debe ser un número (hasta 4 decimales).';
   const t = scaleDecimal(target);
   if (t === null) return 'La meta debe ser un número (hasta 4 decimales).';
   if (b === t) return 'La línea base y la meta no pueden ser iguales.';
-  if (direction === 'increasing' && t < b) return 'Un indicador creciente necesita una meta mayor que la línea base.';
-  if (direction === 'decreasing' && t > b) return 'Un indicador decreciente necesita una meta menor que la línea base.';
+  if (direction === 'increasing' && t < b)
+    return 'Un indicador creciente necesita una meta mayor que la línea base.';
+  if (direction === 'decreasing' && t > b)
+    return 'Un indicador decreciente necesita una meta menor que la línea base.';
   return null;
 }
 
@@ -133,10 +162,16 @@ export function validateIndicatorForm(
   period: CurvePeriod,
 ): string | null {
   if (!editing) {
-    if (values.sourceMode === 'existing' && values.metricId === '') return 'Elegí una métrica existente.';
-    if (values.sourceMode === 'new' && values.name.trim() === '') return 'Ingresá un nombre para el indicador.';
+    if (values.sourceMode === 'existing' && values.metricId === '')
+      return 'Elegí una métrica existente.';
+    if (values.sourceMode === 'new' && values.name.trim() === '')
+      return 'Ingresá un nombre para el indicador.';
   }
-  const baseTarget = validateBaselineTarget(values.baselineValue, values.targetValue, values.direction);
+  const baseTarget = validateBaselineTarget(
+    values.baselineValue,
+    values.targetValue,
+    values.direction,
+  );
   if (baseTarget) return baseTarget;
   if (values.linkMode === 'execution_feeds_indicator' && values.kind !== 'output') {
     return 'Solo los indicadores de tipo Producto pueden recibir aportes de proyectos.';
@@ -150,7 +185,11 @@ export function validateIndicatorForm(
     }
   }
   if (values.curveMode === 'manual') {
-    return validateCurvePoints(values.pointValues, curveBuckets(period, values.frequency), values.targetValue);
+    return validateCurvePoints(
+      values.pointValues,
+      curveBuckets(period, values.frequency),
+      values.targetValue,
+    );
   }
   return null;
 }

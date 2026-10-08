@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   emptyIndicatorForm,
+  reconcileLinkAndCurve,
   inferDirection,
   scaleDecimal,
   toCreateIndicatorDto,
@@ -51,17 +52,28 @@ describe('inferDirection', () => {
 const period = { startsAt: '2027-01-01T00:00:00.000Z', endsAt: '2027-12-31T00:00:00.000Z' };
 
 describe('validateIndicatorForm: aportes y curva desde proyectos', () => {
-  const output = { ...emptyIndicatorForm(), name: 'Km', targetValue: '10', kind: 'output' as const };
+  const output = {
+    ...emptyIndicatorForm(),
+    name: 'Km',
+    targetValue: '10',
+    kind: 'output' as const,
+  };
   it('execution_feeds_indicator exige tipo Producto', () => {
     expect(
-      validateIndicatorForm({ ...output, kind: 'outcome', linkMode: 'execution_feeds_indicator' }, false, period),
+      validateIndicatorForm(
+        { ...output, kind: 'outcome', linkMode: 'execution_feeds_indicator' },
+        false,
+        period,
+      ),
     ).toMatch(/Producto/);
   });
   it('from_projects exige output + execution_feeds_indicator', () => {
     const fp = { ...output, curveMode: 'from_projects' as const };
     expect(validateIndicatorForm(fp, false, period)).toMatch(/vínculo/);
     expect(validateIndicatorForm({ ...fp, kind: 'outcome' }, false, period)).toMatch(/Producto/);
-    expect(validateIndicatorForm({ ...fp, linkMode: 'execution_feeds_indicator' }, false, period)).toBeNull();
+    expect(
+      validateIndicatorForm({ ...fp, linkMode: 'execution_feeds_indicator' }, false, period),
+    ).toBeNull();
   });
   it('el DTO manda linkMode y la curva from_projects sin puntos', () => {
     const dto = toCreateIndicatorDto(
@@ -80,22 +92,50 @@ describe('validateIndicatorForm', () => {
   it('exige nombre con métrica nueva y métrica elegida con existente', () => {
     const base = { ...emptyIndicatorForm(), targetValue: '10' };
     expect(validateIndicatorForm(base, false, period)).toMatch(/nombre/);
-    expect(validateIndicatorForm({ ...base, sourceMode: 'existing' }, false, period)).toMatch(/Elegí una métrica/);
+    expect(validateIndicatorForm({ ...base, sourceMode: 'existing' }, false, period)).toMatch(
+      /Elegí una métrica/,
+    );
     expect(validateIndicatorForm({ ...base, name: 'Km' }, false, period)).toBeNull();
   });
   it('en curva manual valida los valores de los intervalos', () => {
-    const manual = { ...emptyIndicatorForm(), name: 'Km', targetValue: '10', frequency: 'quarterly' as const, curveMode: 'manual' as const };
-    expect(validateIndicatorForm({ ...manual, pointValues: { '2027-04-01': '3,5' } }, false, period)).toMatch(/01\/04\/2027/);
-    expect(validateIndicatorForm({ ...manual, pointValues: { '2027-04-01': '3.5' } }, false, period)).toBeNull();
-    expect(validateIndicatorForm({ ...manual, frequency: 'monthly', pointValues: {} }, false, { startsAt: 'x', endsAt: 'y' })).toMatch(/intervalos/);
+    const manual = {
+      ...emptyIndicatorForm(),
+      name: 'Km',
+      targetValue: '10',
+      frequency: 'quarterly' as const,
+      curveMode: 'manual' as const,
+    };
+    expect(
+      validateIndicatorForm({ ...manual, pointValues: { '2027-04-01': '3,5' } }, false, period),
+    ).toMatch(/01\/04\/2027/);
+    expect(
+      validateIndicatorForm({ ...manual, pointValues: { '2027-04-01': '3.5' } }, false, period),
+    ).toBeNull();
+    expect(
+      validateIndicatorForm({ ...manual, frequency: 'monthly', pointValues: {} }, false, {
+        startsAt: 'x',
+        endsAt: 'y',
+      }),
+    ).toMatch(/intervalos/);
   });
 });
 
 describe('toCreateIndicatorDto', () => {
-  const values = { ...emptyIndicatorForm(), name: ' Km de ciclovía ', source: ' Obras ', targetValue: '120' };
+  const values = {
+    ...emptyIndicatorForm(),
+    name: ' Km de ciclovía ',
+    source: ' Obras ',
+    targetValue: '120',
+  };
   it('arma la métrica inline en un solo paso, sin campos vacíos', () => {
     expect(toCreateIndicatorDto(values, false, period)).toEqual({
-      metric: { name: 'Km de ciclovía', unit: 'number', frequency: 'monthly', kind: 'output', source: 'Obras' },
+      metric: {
+        name: 'Km de ciclovía',
+        unit: 'number',
+        frequency: 'monthly',
+        kind: 'output',
+        source: 'Obras',
+      },
       baselineValue: '0',
       targetValue: '120',
       direction: 'increasing',
@@ -103,7 +143,11 @@ describe('toCreateIndicatorDto', () => {
     });
   });
   it('con métrica existente manda solo metricId y los valores del indicador', () => {
-    const dto = toCreateIndicatorDto({ ...values, sourceMode: 'existing', metricId: 'm-1' }, false, period);
+    const dto = toCreateIndicatorDto(
+      { ...values, sourceMode: 'existing', metricId: 'm-1' },
+      false,
+      period,
+    );
     expect(dto.metricId).toBe('m-1');
     expect(dto.metric).toBeUndefined();
   });
@@ -131,7 +175,13 @@ describe('toCreateIndicatorDto', () => {
 });
 
 describe('toUpdateIndicatorDto / toMetricAttributesPatch', () => {
-  const values = { ...emptyIndicatorForm(), kind: 'outcome' as const, source: '', description: 'Fórmula', targetValue: '9' };
+  const values = {
+    ...emptyIndicatorForm(),
+    kind: 'outcome' as const,
+    source: '',
+    description: 'Fórmula',
+    targetValue: '9',
+  };
   it('el update del indicador lleva base, meta, dirección y modo de curva', () => {
     expect(toUpdateIndicatorDto(values, period, 'independent')).toEqual({
       baselineValue: '0',
@@ -141,22 +191,71 @@ describe('toUpdateIndicatorDto / toMetricAttributesPatch', () => {
     });
   });
   it('pasar a lineal no manda puntos', () => {
-    expect(toUpdateIndicatorDto({ ...values, pointValues: { '2027-01-01': '1' } }, period, 'independent')).not.toHaveProperty(
-      'targetPoints',
-    );
+    expect(
+      toUpdateIndicatorDto(
+        { ...values, pointValues: { '2027-01-01': '1' } },
+        period,
+        'independent',
+      ),
+    ).not.toHaveProperty('targetPoints');
   });
   it('linkMode solo viaja si cambió', () => {
-    const feeds = { ...values, kind: 'output' as const, linkMode: 'execution_feeds_indicator' as const };
-    expect(toUpdateIndicatorDto(feeds, period, 'independent').linkMode).toBe('execution_feeds_indicator');
-    expect(toUpdateIndicatorDto(feeds, period, 'execution_feeds_indicator')).not.toHaveProperty('linkMode');
+    const feeds = {
+      ...values,
+      kind: 'output' as const,
+      linkMode: 'execution_feeds_indicator' as const,
+    };
+    expect(toUpdateIndicatorDto(feeds, period, 'independent').linkMode).toBe(
+      'execution_feeds_indicator',
+    );
+    expect(toUpdateIndicatorDto(feeds, period, 'execution_feeds_indicator')).not.toHaveProperty(
+      'linkMode',
+    );
   });
   it('el patch de la métrica solo incluye lo que cambió', () => {
-    expect(toMetricAttributesPatch(values, { kind: 'output', source: null, description: 'Fórmula' })).toEqual({
+    expect(
+      toMetricAttributesPatch(values, { kind: 'output', source: null, description: 'Fórmula' }),
+    ).toEqual({
       kind: 'outcome',
     });
-    expect(toMetricAttributesPatch(values, { kind: 'outcome', source: 'X', description: 'Fórmula' })).toEqual({
+    expect(
+      toMetricAttributesPatch(values, { kind: 'outcome', source: 'X', description: 'Fórmula' }),
+    ).toEqual({
       source: null,
     });
-    expect(toMetricAttributesPatch(values, { kind: 'outcome', source: null, description: 'Fórmula' })).toBeNull();
+    expect(
+      toMetricAttributesPatch(values, { kind: 'outcome', source: null, description: 'Fórmula' }),
+    ).toBeNull();
+  });
+});
+
+describe('reconcileLinkAndCurve', () => {
+  const linked = {
+    ...emptyIndicatorForm(),
+    kind: 'output' as const,
+    linkMode: 'execution_feeds_indicator' as const,
+    curveMode: 'from_projects' as const,
+  };
+
+  it('pasar de Producto a Resultado resetea vínculo y curva', () => {
+    const next = reconcileLinkAndCurve({ ...linked, kind: 'outcome' });
+    expect(next.linkMode).toBe('independent');
+    expect(next.curveMode).toBe('linear');
+  });
+
+  it('quitar el vínculo resetea la curva desde proyectos', () => {
+    const next = reconcileLinkAndCurve({ ...linked, linkMode: 'independent' });
+    expect(next.curveMode).toBe('linear');
+  });
+
+  it('no toca una combinación válida ni la curva manual', () => {
+    expect(reconcileLinkAndCurve(linked)).toBe(linked);
+    const manual = {
+      ...linked,
+      kind: 'outcome' as const,
+      linkMode: 'independent' as const,
+      curveMode: 'manual' as const,
+    };
+    expect(reconcileLinkAndCurve(manual)).toBe(manual);
   });
 });
