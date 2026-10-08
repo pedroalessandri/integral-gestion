@@ -1,9 +1,12 @@
-import { IsIn, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsIn, IsInt, IsOptional, Matches, Max, Min, ValidateNested } from 'class-validator';
 import type {
   MetricDirection,
+  ExpectedCurveMode,
   ObjectiveIndicatorLinkMode,
   UpdateObjectiveIndicatorDto as UpdateObjectiveIndicatorContract,
 } from '@gestion-publica/shared-types/metrics';
+import { IndicatorTargetPointInputDto, MAX_TARGET_POINTS } from './indicator-target-point.dto.js';
 import { DECIMAL_STRING_MESSAGE, DECIMAL_STRING_RE } from './create-metric.dto.js';
 
 /** La métrica del indicador no se cambia: se borra el indicador y se crea otro. */
@@ -30,4 +33,17 @@ export class UpdateObjectiveIndicatorDto implements UpdateObjectiveIndicatorCont
   @IsOptional()
   @IsIn(['independent', 'execution_feeds_indicator', 'indicator_feeds_execution'])
   linkMode?: ObjectiveIndicatorLinkMode;
+
+  /** `from_projects` pasa la validación de forma pero el service lo rechaza con 422 hasta F7. */
+  @IsOptional()
+  @IsIn(['linear', 'manual', 'from_projects'])
+  expectedCurveMode?: ExpectedCurveMode;
+
+  /** Puntos de la curva manual (RN-P17). Ver `SetIndicatorTargetPointsDto`. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_TARGET_POINTS)
+  @ValidateNested({ each: true })
+  @Type(() => IndicatorTargetPointInputDto)
+  targetPoints?: IndicatorTargetPointInputDto[];
 }

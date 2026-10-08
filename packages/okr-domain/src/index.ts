@@ -22,7 +22,8 @@ export {
   WeightSumInvariantError,
   MixedWeightGroupError,
 } from './cascade';
-export { plannedProgress, plannedTaskProgressBp } from './planned';
+export { plannedProgress, plannedTaskProgressBp, plannedExecutionProgress } from './planned';
+export type { ScheduledProjectInput } from './planned';
 export { validateWeightSumInvariant, projectSumAfterDelete, weightMode } from './invariants';
 export { computeTaskStatus, computeProgressStatus } from './status';
 export type { TaskStatus, ProgressStatus } from './status';

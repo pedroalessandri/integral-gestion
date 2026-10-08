@@ -1,11 +1,11 @@
 import { parseDecimal4, formatDecimal4 } from './decimal';
-import { deviationBp } from './progress';
 import { expectedAt } from './expected';
 import { toUTCMidnight } from './buckets';
 import type { EntryInput, PeriodRange } from './types';
 
 /**
- * Curvas esperadas, desvío, semáforo y cargas vencidas (RN-P9, RN-P15, RN-P17).
+ * Curvas esperadas y cargas vencidas (RN-P15, RN-P17). El desvío y el semáforo (RN-P9) viven en
+ * `@gestion-publica/deviation-domain`.
  * Todo exacto: valores como strings decimales (bigint escalado por dentro) y
  * desvíos / umbrales en puntos básicos enteros. Nunca floats (CLAUDE.md regla 7).
  */
@@ -86,56 +86,6 @@ export function expectedCurve(input: ExpectedCurveInput): string {
     }
   }
   return formatDecimal4(last.value);
-}
-
-/**
- * Desvío firmado de resultado (RN-P9) en bp del tramo base → meta: positivo =
- * adelantado en la dirección de la meta, negativo = atrasado; sin acotar. La
- * dirección queda implícita en el signo de (meta − base), así que sirve igual
- * para indicadores crecientes y decrecientes. Es {@link deviationBp}; se
- * expone con este nombre como parte de la API de curvas.
- */
-export function deviation(input: {
-  actual: string;
-  expected: string;
-  baseline: string;
-  target: string;
-}): number {
-  return deviationBp(input);
-}
-
-export type SemaphoreColor = 'green' | 'yellow' | 'red';
-
-/** Umbrales en bp (100 bp = 1 punto). Ambos son magnitudes de atraso, `yellowBp <= redBp`. */
-export interface SemaphoreThresholds {
-  yellowBp: number;
-  redBp: number;
-}
-
-/** RN-P9 / PA-4: 10 y 25 puntos por defecto. */
-export const DEFAULT_SEMAPHORE_THRESHOLDS: SemaphoreThresholds = { yellowBp: 1_000, redBp: 2_500 };
-
-/**
- * Semáforo por desvío (RN-P9). Solo el atraso penaliza: adelantado es verde.
- *  - verde:    dev >= −yellowBp
- *  - amarillo: −redBp <= dev < −yellowBp
- *  - rojo:     dev < −redBp
- * Los bordes caen del lado benigno (exactamente −10 puntos es verde).
- *
- * @throws RangeError si el desvío no es entero o los umbrales no cumplen 0 <= yellowBp <= redBp.
- */
-export function semaphore(
-  deviationBpValue: number,
-  thresholds: SemaphoreThresholds = DEFAULT_SEMAPHORE_THRESHOLDS,
-): SemaphoreColor {
-  const { yellowBp, redBp } = thresholds;
-  if (!Number.isInteger(deviationBpValue)) throw new RangeError('deviation must be an integer (bp)');
-  if (!Number.isInteger(yellowBp) || !Number.isInteger(redBp) || yellowBp < 0 || yellowBp > redBp) {
-    throw new RangeError('thresholds must be integers with 0 <= yellowBp <= redBp');
-  }
-  if (deviationBpValue >= -yellowBp) return 'green';
-  if (deviationBpValue >= -redBp) return 'yellow';
-  return 'red';
 }
 
 /** RN-P15: días de gracia por defecto (constante en esta fase). */

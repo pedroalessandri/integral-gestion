@@ -15,6 +15,33 @@ Formato:
 
 ---
 
+## 2026-10-08 · C15 · backend-dev · feature/plan-f6-curvas
+- Hecho:
+  - **Lugar común del desvío** (decisión de Pedro en C14): paquete puro nuevo `packages/deviation-domain` (`@gestion-publica/deviation-domain`, misma config que los otros: tsconfig, tsup, vitest, exports; sin dependencias). Tiene `deviationBp` (sobre enteros `bigint` en la misma escala), `progressDeviationBp` (gestión: real − planificado, bp), `aggregateDeviationBp` (media simple o ponderada de los hermanos medibles), `semaphore` y `DEFAULT_SEMAPHORE_THRESHOLDS` (10/25 puntos; -10 exacto verde, -25 exacto amarillo; adelantado siempre verde). Se movieron ahí las funciones y sus tests. `metrics-domain` ya no exporta `deviation` ni `semaphore`; conserva `deviationBp(strings)` solo como adaptador que parsea decimales y delega (lo usa `MetricService`). `okr-domain` suma `plannedExecutionProgress(projects, at)` (RN-P9: planificado de gestión del objetivo, con los mismos pesos todo-o-nada).
+  - **Persistencia** (migración `20261008000003_indicator_target_point`, escrita a mano + `migrate deploy`): `metrics.indicator_target_point` (`bucket_date` DATE, `expected_value` NUMERIC(18,4), único `(objective_indicator_id, bucket_date)`, FKs RESTRICT, `organization_id`). Modelo Prisma `IndicatorTargetPoint` agregado a los modelos con scoping de tenant. Los puntos se reemplazan en bloque y se borran físicamente (el before/after completo queda en audit).
+  - **API** (`okr/...`, `TenantGuard` + `PermissionsGuard`, `okr:read` / `okr:write`, `ValidationPipe` con whitelist): `expectedCurveMode` y `targetPoints` opcionales en create/PATCH de `ObjectiveIndicator`; `GET|PUT indicators/:id/target-points`; `GET indicators/:id/status`; `GET objectives/:objectiveId/status`. Validaciones 422 tipadas: `IndicatorTargetPointsInvalid` (fecha que no es inicio de bucket de la frecuencia dentro del período, fecha repetida, el último punto debe ser igual a la meta vigente, `manual` sin puntos) y `ExpectedCurveModeNotAvailable`. Si la meta cambia con la curva en `manual`, hay que mandar los puntos en el mismo PATCH. Audit: `indicator_target_points.replaced` (before/after con la lista) y `expectedCurveMode` en `objective_indicator.created/updated`.
+  - **`from_projects`**: rechazado con 422 `ExpectedCurveModeNotAvailable`. La SPEC (RN-P17) lo limita a `output` con aportes y los aportes (`ProjectContribution`) son C17: hoy sería una curva plana en la base. `IndicatorStatusService` ya tiene la rama (pasos vacíos). TODO.md suma el ítem para C17.
+  - **Estado del indicador**: valor acumulado, `asOf` (último bucket cargado), esperado en `asOf` y esperado hoy, desvío (bp) y semáforo, y buckets pendientes (gracia 10 días, constante). Sin cargas: desvío y semáforo `null`. **Estado del objetivo**: `{ objectiveId, asOf, result, execution }` con cada lectura con su desvío y semáforo; nunca un número único. Resultado: media simple/ponderada de los desvíos medibles de sus indicadores; gestión: `executionProgressCachedBp` contra `plannedExecutionProgress`. `metrics` lee el objetivo por un puerto nuevo `OBJECTIVE_PROGRESS_READER` (`common/contracts`, lo implementa `okr`), sin importar `okr`.
+  - Contratos en `shared-types/metrics`: `IndicatorTargetPointInput/Dto`, `SetIndicatorTargetPointsDto`, `IndicatorStatusDto`, `ObjectiveStatusDto` (+ `ObjectiveResultStatusDto`, `ObjectiveExecutionStatusDto`), `SemaphoreColor`, y `expectedCurveMode`/`targetPoints` en los DTOs de create/update. `apps/api/Dockerfile` y `tsconfig.json` conocen el paquete nuevo.
+  - Seed: el `outcome` semestral "Viajes diarios en bicicleta" usa curva manual (1/ene → 18, 1/jul → 30 = meta); TODO.md actualizado.
+- Commit: este commit (`feat(metrics): curvas esperadas manuales, estado de indicador y objetivo, y paquete deviation-domain`)
+- Verificación:
+  - `pnpm typecheck` 7/7; `pnpm lint` 0 errores (1 warning preexistente en api, 2 en web); `pnpm test` 12/12 (api 419, deviation-domain 19, metrics-domain 65, okr-domain 106); `pnpm --filter web build` OK.
+  - `psql` en la DB local: `\d metrics.indicator_target_point` (columnas, único, FKs) y `\d metrics.objective_indicator`; migración `20261008000003` registrada como aplicada.
+  - Punta a punta en DB descartable `gp_c15` (ya borrada), nuevo `test/indicator-curves.e2e-spec.ts` por HTTP real: 3/3 (curva manual con todas las validaciones, estado del indicador -2000 bp amarillo, estado del objetivo con gestión 0 vs planificado 10000 = rojo y resultado intacto, aislamiento entre orgs y default deny). El seed corrió dos veces sin errores y dejó los 2 puntos de la curva.
+- Pendiente / desvíos:
+  - El desvío se mide en el **inicio** del último bucket cargado (misma x que el gráfico y que los puntos manuales). Con la curva lineal, un bucket recién cargado se compara con el esperado al inicio de ese bucket: el desvío es algo optimista (ver preguntas).
+  - En el harness e2e el `requestId` es `'unknown'` y el audit del oyente de resultado falla por la columna `uuid` (solo en el harness; en runtime lo pone el middleware). Los otros e2e del repo están desactualizados. Va a `docs/tech-debt.md`, junto con el adaptador `deviationBp`.
+  - TODO.md suma: habilitar `from_projects` (C17) y umbrales del semáforo por org. El ítem de la serie del indicador queda anotado para C16.
+  - Se tocó `apps/api/Dockerfile` (copiar y construir el paquete nuevo) para que el deploy no se rompa; no es infra de CI.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ El desvío de resultado se mide contra lo esperado al inicio del último bucket cargado, por ahora.
+  - ✅ Desvío del objetivo (resultado): media simple o ponderada de los desvíos de los indicadores con datos; los que no tienen cargas no cuentan y los pesos se renormalizan.
+  - ✅ Proyectos `from_indicator`: el planificado sale de las fechas de sus tareas y el real del indicador ("una proporción lineal del avance vs. la realidad").
+  - ✅ Los puntos manuales no se obligan a ser monótonos ni a quedar entre base y meta.
+
+---
+
 ## 2026-10-08 · C14 · backend-dev · feature/plan-f6-curvas
 - Hecho:
   - `metrics-domain/src/curves.ts` (puro, sin DB, valores como strings decimales / bp enteros):

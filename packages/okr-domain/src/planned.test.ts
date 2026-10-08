@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { plannedProgress, plannedTaskProgressBp } from './planned';
+import { plannedProgress, plannedTaskProgressBp, plannedExecutionProgress } from './planned';
 import { MixedWeightGroupError, computeProjectProgress, computeExecutionProgress } from './cascade';
 import { validateWeightSumInvariant, projectSumAfterDelete, weightMode } from './invariants';
 
@@ -92,5 +92,37 @@ describe('weight invariants (RN-P6/RN-P7)', () => {
   });
   it('projectSumAfterDelete throws on mixed', () => {
     expect(() => projectSumAfterDelete([{ id: 'a', weightBp: 1 }, { id: 'b' }], 'a')).toThrow();
+  });
+});
+
+describe('plannedExecutionProgress (RN-P9)', () => {
+  const at = d('2026-01-06T00:00:00Z');
+  const half = [{ startsAt: d('2026-01-01T00:00:00Z'), endsAt: d('2026-01-11T00:00:00Z') }]; // 5000
+  const done = [{ startsAt: d('2025-01-01T00:00:00Z'), endsAt: d('2025-02-01T00:00:00Z') }]; // 10000
+
+  it('empty -> 0', () => {
+    expect(plannedExecutionProgress([], at)).toBe(0);
+  });
+  it('simple mean of the projects when none has weight', () => {
+    expect(plannedExecutionProgress([{ tasks: half }, { tasks: done }], at)).toBe(7500);
+  });
+  it('weighted mean when all projects have weight', () => {
+    expect(
+      plannedExecutionProgress(
+        [
+          { weightBp: 8000, tasks: half },
+          { weightBp: 2000, tasks: done },
+        ],
+        at,
+      ),
+    ).toBe(6000);
+  });
+  it('a project without tasks plans 0', () => {
+    expect(plannedExecutionProgress([{ tasks: [] }, { tasks: done }], at)).toBe(5000);
+  });
+  it('mixed weights -> MixedWeightGroupError', () => {
+    expect(() => plannedExecutionProgress([{ weightBp: 10000, tasks: half }, { tasks: done }], at)).toThrow(
+      MixedWeightGroupError,
+    );
   });
 });

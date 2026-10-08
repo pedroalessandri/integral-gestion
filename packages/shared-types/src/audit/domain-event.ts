@@ -441,6 +441,15 @@ type ObjectiveIndicatorSnapshot = {
   /** `null` si el grupo de indicadores no pondera (RN-P6). */
   weightBp: number | null;
   linkMode: 'independent' | 'execution_feeds_indicator' | 'indicator_feeds_execution';
+  expectedCurveMode: 'linear' | 'manual' | 'from_projects';
+};
+
+/** Punto de la curva esperada manual (RN-P17). */
+type IndicatorTargetPointSnapshot = {
+  /** YYYY-MM-DD (UTC). */
+  bucketDate: string;
+  /** Decimal string. */
+  expectedValue: string;
 };
 
 type ObjectiveIndicatorCreatedEvent = BaseEvent<
@@ -453,6 +462,13 @@ type ObjectiveIndicatorUpdatedEvent = BaseEvent<
   'objective_indicator.updated',
   'metrics.objective_indicator',
   { before: Partial<ObjectiveIndicatorSnapshot>; after: Partial<ObjectiveIndicatorSnapshot> }
+>;
+
+/** Reemplazo en bloque de los puntos de la curva manual: before/after con la lista completa. */
+type IndicatorTargetPointsReplacedEvent = BaseEvent<
+  'indicator_target_points.replaced',
+  'metrics.objective_indicator',
+  { before: { points: IndicatorTargetPointSnapshot[] }; after: { points: IndicatorTargetPointSnapshot[] } }
 >;
 
 type ObjectiveIndicatorDeletedEvent = BaseEvent<
@@ -663,6 +679,7 @@ export type DomainEvent =
   | ObjectiveIndicatorCreatedEvent
   | ObjectiveIndicatorUpdatedEvent
   | ObjectiveIndicatorDeletedEvent
+  | IndicatorTargetPointsReplacedEvent
   // Metrics — metric (3)
   | MetricCreatedEvent
   | MetricUpdatedEvent

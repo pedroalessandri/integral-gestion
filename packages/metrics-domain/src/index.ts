@@ -18,10 +18,7 @@ export {
 } from './progress';
 export {
   expectedCurve,
-  deviation,
-  semaphore,
   pendingBuckets,
-  DEFAULT_SEMAPHORE_THRESHOLDS,
   DEFAULT_GRACE_DAYS,
 } from './curves';
 export type {
@@ -29,6 +26,4 @@ export type {
   ExpectedCurveInput,
   TargetPointInput,
   ProjectStepInput,
-  SemaphoreColor,
-  SemaphoreThresholds,
 } from './curves';

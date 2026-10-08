@@ -8,10 +8,20 @@
 
 ## 🟡 Prioridad media — próximas semanas
 
-### [F] Seed demo: sumar curva manual, `from_projects`, aportes de proyecto y vínculos de gestión cuando existan (F6/F7)
-- Por qué: el seed de C13 solo usa lo que existe hoy (curva lineal, `linkMode = independent`). La SPEC §6 punto 4 pide un indicador `outcome` semestral con curva manual y uno `output` con aportes de proyectos y curva `from_projects`. El semestral `outcome` ya está; falta la curva manual (`IndicatorTargetPoint`, C15), `ProjectContribution` y `from_projects` (C17), y un proyecto `from_indicator`.
-- Posible solución: extender `apps/api/src/database/seed-demo.ts` en las corridas C15 y C17.
-- Origen: C13 (2026-10-08).
+### [F] Seed demo: sumar `from_projects`, aportes de proyecto y vínculos de gestión cuando existan (F7)
+- Por qué: el seed de C13 solo usa lo que existe hoy. La SPEC §6 punto 4 pide un indicador `output` con aportes de proyectos y curva `from_projects`. La curva manual ya está (C15: el `outcome` semestral "Viajes diarios en bicicleta" usa `IndicatorTargetPoint`); falta `ProjectContribution` y `from_projects` (C17), y un proyecto `from_indicator`.
+- Posible solución: extender `apps/api/src/database/seed-demo.ts` en la corrida C17.
+- Origen: C13 (2026-10-08). Actualizado en C15 (2026-10-08): la curva manual quedó hecha.
+
+### [F] Habilitar la curva `from_projects` (RN-P17) cuando existan los aportes
+- Por qué: C15 rechaza `expectedCurveMode = 'from_projects'` con 422 `ExpectedCurveModeNotAvailable`, porque la curva escalonada necesita `ProjectContribution` (C17) y sin pasos queda plana en la base. `IndicatorStatusService` ya tiene la rama (`steps: []`).
+- Posible solución: en C17, cargar los pasos (`endsAt` del proyecto y `contributionValue`) en `IndicatorStatusService`, validar que sea `kind = output` con `linkMode = execution_feeds_indicator` y quitar el 422 de `assertCurveModeAvailable`.
+- Origen: C15 (2026-10-08).
+
+### [F] Umbrales del semáforo configurables por organización
+- Por qué: RN-P9 fija 10 y 25 puntos por defecto y dice que serán configurables por org en una fase posterior. Hoy son la constante `DEFAULT_SEMAPHORE_THRESHOLDS` de `deviation-domain`.
+- Posible solución: columnas o tabla de settings por org y pasar `SemaphoreThresholds` a `semaphore()` desde `IndicatorStatusService`.
+- Origen: C15 (2026-10-08).
 
 ### [F] Edición completa de tareas de proyecto: falta `GET okr/tasks/:id` o ampliar `TaskSummaryDto`
 - Por qué: la lista `GET okr/projects/:id/tasks` devuelve `TaskSummaryDto` (sin `description` ni `ownerUserId`) y no existe `GET tasks/:id`. La ficha de proyecto (C09) solo permite editar título y fechas de una tarea; descripción y responsable se fijan al crearla.
@@ -82,6 +92,7 @@
 
 ### [F] Serie del indicador con base y meta del indicador (`GET okr/indicators/:id/series`)
 - Por qué: `GET metrics/:id/series` arma la curva esperada con la base y la meta de la `Metric`, pero para el objetivo mandan las del `ObjectiveIndicator` (ADR-0009 D8). C12 redibuja la recta esperada en el front (`features/indicators/chart-data.ts`) sobre las fechas que devuelve la API. Además el resumen (`expectedToDate`, `deviationPct`) sale con la base/meta de la métrica, así que la pestaña no lo muestra. El desvío de resultado (RN-P9) y la curva `manual`/`from_projects` (F6) necesitan el cálculo en el backend.
+- Actualización (C15, 2026-10-08): `GET okr/indicators/:id/status` ya devuelve esperado a la fecha, desvío, semáforo y buckets vencidos con la base/meta del indicador y su curva; falta la serie completa (puntos esperados por bucket) para graficarla sin recalcular en el front (C16).
 - Posible solución: endpoint de serie por indicador en `metrics` que devuelva `expected`, `actual` y el desvío con los valores del indicador; el front deja de recalcular la recta.
 - Origen: C12 (2026-10-08).
 

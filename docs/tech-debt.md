@@ -124,3 +124,15 @@
 - **Por qué importa**: con PA-1 respondida (no hay datos reales) no debería pasar; queda como red de seguridad.
 - **Posible solución**: ninguna hasta que aparezca un caso real. Se elimina junto con el script en el contract (F10).
 - **Prioridad**: baja.
+
+### `deviationBp` de `metrics-domain` es solo un adaptador (C15)
+- **Qué**: el desvío y el semáforo viven en `packages/deviation-domain` (decisión de Pedro en C14). `metrics-domain` conserva `deviationBp(strings)` como adaptador que parsea decimales y delega, porque lo usa `MetricService` (resumen de la serie) y `metrics-domain` ya depende del paquete nuevo.
+- **Por qué importa**: dos nombres para la misma función; si alguien edita el adaptador con lógica propia, reaparece la duplicación.
+- **Posible solución**: cuando el módulo `metrics` standalone se retire o se refactorice, que el llamador use `parseDecimal4` + `deviationBp` de `deviation-domain` y borrar el adaptador.
+- **Prioridad**: baja.
+
+### Los e2e de `apps/api/test` están desactualizados y corren sin `requestId` real (C15)
+- **Qué**: `metrics-okr-link.e2e-spec.ts` y otros crean la org sin `firstPeriod` (hoy obligatorio) y objetivos sin unidad ni responsable miembro, así que fallan antes de probar nada. Además, en el harness de `Test.createTestingModule` no corre el middleware de request-id: `AuthContext.requestId` queda `'unknown'` y los audits que lo usan (p. ej. `objective.result_progress_changed` del oyente) fallan por la columna `uuid`. `indicator-curves.e2e-spec.ts` (C15) sí está al día, pero convive con ese límite.
+- **Por qué importa**: el CI no corre e2e, así que nadie lo nota; no hay red de integración real para el resto del módulo.
+- **Posible solución**: helper compartido de bootstrap de org/objetivo para los e2e, registrar el middleware de request-id en el harness y reparar o borrar los specs viejos.
+- **Prioridad**: media.

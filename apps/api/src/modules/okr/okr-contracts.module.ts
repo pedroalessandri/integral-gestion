@@ -3,13 +3,17 @@ import {
   AXIS_OBJECTIVE_COUNTER,
   AXIS_OBJECTIVE_UNASSIGNER,
   OBJECTIVE_LOOKUP,
+  OBJECTIVE_PROGRESS_READER,
   ORG_UNIT_OBJECTIVE_COUNTER,
   type ObjectiveAxisCounter,
   type ObjectiveAxisUnassigner,
   type ObjectiveLookup,
+  type ObjectiveProgressReader,
+  type ObjectiveProgressReading,
   type ObjectiveOrgUnitCounter,
   type ObjectiveRef,
 } from '../../common/contracts/index.js';
+import { plannedExecutionProgress } from '@gestion-publica/okr-domain';
 import { PrismaService } from '../auth/prisma/prisma.service.js';
 import {
   AuditEventEmitterService,
@@ -110,6 +114,42 @@ export class PrismaObjectiveLookup implements ObjectiveLookup {
 }
 
 /**
+ * Implementación de `OBJECTIVE_PROGRESS_READER`: cachés de las dos lecturas del objetivo y el avance de gestión
+ * planificado por fechas (RN-P9). La matemática es de `okr-domain` (`plannedExecutionProgress`); acá solo se cargan
+ * los datos. Filtra siempre por organizationId.
+ */
+@Injectable()
+export class PrismaObjectiveProgressReader implements ObjectiveProgressReader {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async readObjectiveProgress(
+    organizationId: string,
+    objectiveId: string,
+    at: Date,
+  ): Promise<ObjectiveProgressReading | null> {
+    const objective = await this.prisma.raw.objective.findFirst({
+      where: { id: objectiveId, organizationId, deletedAt: null },
+      select: { resultProgressCachedBp: true, executionProgressCachedBp: true },
+    });
+    if (!objective) return null;
+
+    const projects = await this.prisma.raw.project.findMany({
+      where: { objectiveId, organizationId, deletedAt: null },
+      select: {
+        weightBp: true,
+        tasks: { where: { organizationId, deletedAt: null }, select: { startsAt: true, endsAt: true, weightBp: true } },
+      },
+    });
+
+    return {
+      resultProgressBp: objective.resultProgressCachedBp,
+      executionProgressBp: objective.executionProgressCachedBp,
+      plannedExecutionProgressBp: plannedExecutionProgress(projects, at),
+    };
+  }
+}
+
+/**
  * Submódulo @Global de contratos de `okr`: solo lo importa AppModule. Si falta el provider,
  * Nest falla al arrancar (preferible a una validación que pasa en silencio).
  */
@@ -121,12 +161,14 @@ export class PrismaObjectiveLookup implements ObjectiveLookup {
     { provide: AXIS_OBJECTIVE_COUNTER, useClass: PrismaObjectiveAxisCounter },
     { provide: AXIS_OBJECTIVE_UNASSIGNER, useClass: PrismaObjectiveAxisUnassigner },
     { provide: OBJECTIVE_LOOKUP, useClass: PrismaObjectiveLookup },
+    { provide: OBJECTIVE_PROGRESS_READER, useClass: PrismaObjectiveProgressReader },
   ],
   exports: [
     ORG_UNIT_OBJECTIVE_COUNTER,
     AXIS_OBJECTIVE_COUNTER,
     AXIS_OBJECTIVE_UNASSIGNER,
     OBJECTIVE_LOOKUP,
-    ],
+    OBJECTIVE_PROGRESS_READER,
+  ],
 })
 export class OkrContractsModule {}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { progressBp, computeAutomaticKrProgressBp, objectiveIndicatorProgressBp } from './progress';
+import { progressBp, computeAutomaticKrProgressBp, objectiveIndicatorProgressBp, deviationBp } from './progress';
 
 describe('progressBp — interpolation edge cases', () => {
   it('increasing metric: linear midpoint → 5000bp', () => {
@@ -70,5 +70,13 @@ describe('objectiveIndicatorProgressBp', () => {
     expect(
       objectiveIndicatorProgressBp({ metricBaseline: '0', increments: ['50', '-80'], baseline: '0', target: '100' }),
     ).toBe(0);
+  });
+});
+
+describe('deviationBp (adaptador de decimales sobre deviation-domain)', () => {
+  it('parsea los strings y delega el cálculo', () => {
+    expect(deviationBp({ actual: '60', expected: '50', baseline: '0', target: '100' })).toBe(1000);
+    expect(deviationBp({ actual: '40', expected: '50', baseline: '100', target: '0' })).toBe(1000);
+    expect(deviationBp({ actual: '3.5', expected: '2', baseline: '5', target: '5' })).toBe(0);
   });
 });

@@ -53,3 +53,29 @@ export function plannedProgress(
   }));
   return aggregateProgressBp(items, 'task');
 }
+
+/** A project with its scheduled tasks, used for the planned execution of an objective (RN-P9). */
+export interface ScheduledProjectInput {
+  weightBp?: number | null | undefined;
+  tasks: ReadonlyArray<ScheduledTaskInput>;
+}
+
+/**
+ * RN-P9: planned EXECUTION (gestion) progress of an objective at `at`: each project is planned
+ * with {@link plannedProgress} over its tasks and the projects are aggregated with the same helper
+ * as actual execution progress (weighted or simple mean; RN-P6). Empty -> 0. It is the "expected"
+ * side of the gestion deviation; never combined with the result reading.
+ *
+ * @throws RangeError on invalid dates or endsAt < startsAt.
+ */
+export function plannedExecutionProgress(
+  projects: ReadonlyArray<ScheduledProjectInput>,
+  at: Date,
+): number {
+  assertValidDate(at, 'at');
+  const items = projects.map((project) => ({
+    weightBp: project.weightBp,
+    progressBp: plannedProgress(project.tasks, at),
+  }));
+  return aggregateProgressBp(items, 'project');
+}

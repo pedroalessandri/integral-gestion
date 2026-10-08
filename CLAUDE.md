@@ -60,6 +60,7 @@ gestion-publica/
 ├── packages/
 │   ├── shared-types/                 # DTOs, enums, contratos api↔web
 │   ├── okr-domain/                   # lógica pura de cascada (reutilizable, testeable sin DB)
+│   ├── deviation-domain/             # desvío contra lo esperado y semáforo (RN-P9), común a resultado y gestión
 │   ├── ui/                           # componentes shadcn/ui compartidos
 │   ├── config-eslint/
 │   └── config-tsconfig/

@@ -28,10 +28,12 @@
  *  - "3 unidades" se interpreta como 3 unidades operativas bajo la central (los objetivos solo cuelgan
  *    de `ministry` o `area`, RN-P3).
  *
- * Fuera del seed (todavía no existe en el código; se suma en F6/F7): curva esperada manual
- * (`IndicatorTargetPoint`), curva `from_projects`, `ProjectContribution`, `linkMode` distinto de
- * `independent` y proyectos `from_indicator`. Por eso hoy todos los indicadores usan curva lineal y el
- * vínculo `independent`.
+ * El `outcome` semestral ("Viajes diarios en bicicleta") usa curva esperada MANUAL con `IndicatorTargetPoint`
+ * (C15); el resto, curva lineal.
+ *
+ * Fuera del seed (todavía no existe en el código; se suma en F7): curva `from_projects`,
+ * `ProjectContribution`, `linkMode` distinto de `independent` y proyectos `from_indicator`. Por eso todos los
+ * indicadores usan el vínculo `independent`.
  */
 import { PrismaClient } from '@prisma/client';
 import {
@@ -74,6 +76,11 @@ interface SeedMetric {
   description: string;
   /** Un incremento por bucket usado (índice de bucket). Los buckets futuros se omiten. */
   entries: Array<{ bucketIndex: number; increment: string; comment?: string }>;
+  /**
+   * Curva esperada MANUAL (RN-P17): acumulado esperado por índice de bucket. El último punto debe ser igual a
+   * la meta (lo exige la API; el seed lo respeta). Sin esto, el indicador usa la curva lineal.
+   */
+  curvePoints?: Array<{ bucketIndex: number; expected: string }>;
 }
 
 const METRICS: SeedMetric[] = [
@@ -109,6 +116,11 @@ const METRICS: SeedMetric[] = [
     entries: [
       { bucketIndex: 0, increment: '4', comment: 'Relevamiento de verano' },
       { bucketIndex: 1, increment: '3' },
+    ],
+    // Metas intermedias por semestre (acumulado esperado); el último punto es la meta (30).
+    curvePoints: [
+      { bucketIndex: 0, expected: '18' },
+      { bucketIndex: 1, expected: '30' },
     ],
   },
   {
@@ -379,6 +391,7 @@ async function wipeDemoBusinessData(organizationId: string): Promise<void> {
   await prisma.project.updateMany({ where, data: { sourceObjectiveIndicatorId: null } });
   await prisma.task.deleteMany({ where });
   await prisma.project.deleteMany({ where });
+  await prisma.indicatorTargetPoint.deleteMany({ where });
   await prisma.objectiveIndicator.deleteMany({ where });
   await prisma.keyResult.deleteMany({ where });
   await prisma.objective.deleteMany({ where });
@@ -604,11 +617,27 @@ async function main(): Promise<void> {
           targetValue: m.target,
           direction: m.direction,
           weightBp: ind.weightBp ?? null,
-          expectedCurveMode: 'linear',
+          expectedCurveMode: m.curvePoints ? 'manual' : 'linear',
           linkMode: 'independent',
           progressCachedBp: progressBp,
         },
       });
+      if (m.curvePoints) {
+        const metricBuckets = buildBuckets(range, m.frequency);
+        for (const point of m.curvePoints) {
+          const bucketDate = metricBuckets[point.bucketIndex];
+          if (!bucketDate) throw new Error(`bucket inexistente en la curva de ${m.key}: ${point.bucketIndex}`);
+          await prisma.indicatorTargetPoint.create({
+            data: {
+              id: `seed-tp-${o.key}-${m.key}-${point.bucketIndex}`,
+              organizationId: orgId,
+              objectiveIndicatorId: `seed-oi-${o.key}-${m.key}`,
+              bucketDate,
+              expectedValue: point.expected,
+            },
+          });
+        }
+      }
       indicatorBp.push({ weightBp: ind.weightBp ?? null, progressBp });
     }
 

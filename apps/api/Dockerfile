@@ -8,6 +8,7 @@ WORKDIR /app
 FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json ./apps/api/
+COPY packages/deviation-domain/package.json ./packages/deviation-domain/
 COPY packages/metrics-domain/package.json ./packages/metrics-domain/
 COPY packages/okr-domain/package.json ./packages/okr-domain/
 COPY packages/shared-types/package.json ./packages/shared-types/
@@ -21,6 +22,7 @@ COPY --from=deps /app/packages ./packages
 COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter shared-types build
+RUN pnpm --filter deviation-domain build
 RUN pnpm --filter metrics-domain build
 RUN pnpm --filter okr-domain build
 RUN pnpm --filter prisma-tenant-extension build
