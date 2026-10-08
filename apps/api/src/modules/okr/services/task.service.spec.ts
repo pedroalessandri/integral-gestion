@@ -58,7 +58,6 @@ const mockTaskFindMany = vi.fn().mockResolvedValue([]);
 const mockTaskFindFirst = vi.fn();
 const mockTaskUpdate = vi.fn();
 const mockKrFindFirst = vi.fn();
-const mockKeyResultFindFirst = vi.fn();
 const mockKeyResultUpdate = vi.fn();
 const mockObjectiveUpdate = vi.fn();
 
