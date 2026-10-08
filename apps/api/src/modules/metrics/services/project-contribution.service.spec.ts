@@ -2,6 +2,7 @@
  * ProjectContributionService: ABM y validaciones 422 tipadas de los aportes de proyectos (RN-P12/P14b, ADR-0009 D5).
  * Los puertos de `okr` (objetivo y proyecto) son fakes; el aplicador se mockea (su lógica se prueba aparte).
  */
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -84,7 +85,7 @@ const projectLinks = {
 
 function build(): ProjectContributionService {
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  return new ProjectContributionService(prisma as any, audit as any, applier as any, objectiveLookup as any, projectLinks as any);
+  return new ProjectContributionService(prisma as any, audit as any, applier as any, objectiveLookup as any, projectLinks as any, allowAllScope());
   /* eslint-enable @typescript-eslint/no-explicit-any */
 }
 

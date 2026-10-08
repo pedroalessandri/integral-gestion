@@ -14,7 +14,9 @@ import { AuditEventEmitterService } from '../../audit/audit-event-emitter.servic
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import {
   ORG_UNIT_OBJECTIVE_COUNTER,
+  ORG_UNIT_SCOPE,
   type ObjectiveOrgUnitCounter,
+  type OrgUnitScope,
 } from '../../../common/contracts/index.js';
 import {
   MAX_ORG_UNIT_DEPTH,
@@ -74,6 +76,7 @@ export class OrgUnitService {
     private readonly auditEmitter: AuditEventEmitterService,
     @Inject(ORG_UNIT_OBJECTIVE_COUNTER)
     private readonly objectiveCounter: ObjectiveOrgUnitCounter,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   async list(organizationId: string): Promise<OrgUnitDto[]> {
@@ -109,6 +112,7 @@ export class OrgUnitService {
     input: CreateOrgUnitInput,
     authContext: AuthContext,
   ): Promise<OrgUnitDto> {
+    await this.orgUnitScope.assertCentralScope(authContext); // RN-P19
     return tenantContextStorage.run(authContext, () =>
       this.prismaService.runInTransaction(async (tx) => {
         const units = await this.liveUnits(tx, organizationId);
@@ -156,6 +160,11 @@ export class OrgUnitService {
     input: UpdateOrgUnitInput,
     authContext: AuthContext,
   ): Promise<OrgUnitDto> {
+    // RN-P19/P20: el árbol (nombre, tipo, padre, orden) es solo de alcance central; la visión y misión de
+    // la unidad (N3) también las edita quien tiene alcance en esa unidad o en un ancestro.
+    const structural = (['name', 'kind', 'parentId', 'order'] as const).some((k) => input[k] !== undefined);
+    if (structural) await this.orgUnitScope.assertCentralScope(authContext);
+    else await this.orgUnitScope.assertCanWriteInUnit(authContext, id);
     return tenantContextStorage.run(authContext, () =>
       this.prismaService.runInTransaction(async (tx) => {
         const units = await this.liveUnits(tx, organizationId);
@@ -229,6 +238,7 @@ export class OrgUnitService {
   }
 
   async softDelete(organizationId: string, id: string, authContext: AuthContext): Promise<void> {
+    await this.orgUnitScope.assertCentralScope(authContext); // RN-P19
     await tenantContextStorage.run(authContext, () =>
       this.prismaService.runInTransaction(async (tx) => {
         const existing = await tx.orgUnit.findFirst({ where: { id, organizationId, deletedAt: null } });

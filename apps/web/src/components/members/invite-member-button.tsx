@@ -14,6 +14,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { INVITE_SCOPE_LABELS } from '@/lib/labels';
+import {
+  INVITE_SCOPE_UNSET,
+  resolveInviteOrgUnitId,
+  validateInviteScope,
+} from '@/features/org-structure/invite-scope';
+import { useInviteScope } from '@/features/org-structure/useInviteScope';
 import { inviteMemberAction } from './actions';
 
 const ROLES = [
@@ -31,13 +38,21 @@ export function InviteMemberButton({ orgId }: { orgId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [roleKey, setRoleKey] = useState<RoleKey>('org-user');
+  const [scope, setScope] = useState(INVITE_SCOPE_UNSET);
+  const scopeData = useInviteScope(orgId, open);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const scopeError = validateInviteScope(scope);
+    const orgUnitId = resolveInviteOrgUnitId(scope);
+    if (scopeError || orgUnitId === undefined) {
+      setError(scopeError);
+      return;
+    }
     setLoading(true);
     setError(null);
 
-    const result = await inviteMemberAction({ orgId, email, roleKey });
+    const result = await inviteMemberAction({ orgId, email, roleKey, orgUnitId });
     setLoading(false);
 
     if (result.error) {
@@ -48,6 +63,7 @@ export function InviteMemberButton({ orgId }: { orgId: string }) {
     setOpen(false);
     setEmail('');
     setRoleKey('org-user');
+    setScope(INVITE_SCOPE_UNSET);
     router.refresh();
   }
 
@@ -99,6 +115,28 @@ export function InviteMemberButton({ orgId }: { orgId: string }) {
                 </label>
               ))}
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="invite-scope">{INVITE_SCOPE_LABELS.field}</Label>
+            <select
+              id="invite-scope"
+              value={scope}
+              onChange={(e) => setScope(e.target.value)}
+              required
+              disabled={scopeData.loading}
+              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm disabled:opacity-50"
+            >
+              <option value={INVITE_SCOPE_UNSET} disabled>
+                {INVITE_SCOPE_LABELS.placeholder}
+              </option>
+              {scopeData.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-neutral-500">{INVITE_SCOPE_LABELS.hint}</p>
+            {scopeData.error && <p className="text-xs text-red-600">{scopeData.error}</p>}
           </div>
           {error && (
             <div className="bg-red-50 border border-red-200 rounded p-3">

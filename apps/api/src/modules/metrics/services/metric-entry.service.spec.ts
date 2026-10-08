@@ -25,6 +25,7 @@ const mockPrismaService = {
 };
 const mockAuditEmitter = { emit: vi.fn().mockResolvedValue(undefined) };
 const mockMetricLinkService = { recalcLinkedKrs: vi.fn().mockResolvedValue(undefined) };
+const mockMetricService = { assertCanWriteMetric: vi.fn().mockResolvedValue(undefined) };
 const mockObjectiveIndicatorService = {
   recomputeForMetric: vi.fn().mockResolvedValue([{ objectiveId: 'obj-1' }]),
   publishProgressChanged: vi.fn().mockResolvedValue(undefined),
@@ -92,6 +93,8 @@ describe('MetricEntryService', () => {
       mockMetricLinkService as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockObjectiveIndicatorService as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockMetricService as any,
     );
   });
 

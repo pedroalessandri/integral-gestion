@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import { UnprocessableEntityException, NotFoundException } from '@nestjs/common';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { MetricLinkService } from './metric-link.service.js';
@@ -70,6 +71,7 @@ beforeEach(() => {
     mockKrService as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockAudit as any,
+    allowAllScope(),
   );
 });
 

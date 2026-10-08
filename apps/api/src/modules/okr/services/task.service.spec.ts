@@ -2,6 +2,7 @@
  * Unit tests for TaskService — focused on date validation logic.
  * Prisma is mocked; cascade math is not exercised here (see okr-domain tests).
  */
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -122,7 +123,7 @@ describe('TaskService — date validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new TaskService(mockPrismaService as any, mockAuditEmitter as any, { publishTransitions: vi.fn() } as any);
+    service = new TaskService(mockPrismaService as any, mockAuditEmitter as any, { publishTransitions: vi.fn() } as any, allowAllScope());
   });
 
   it('creates a task when dates are within period bounds', async () => {
@@ -239,7 +240,7 @@ describe('TaskService — KR+Objective cache recomputation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new TaskService(mockPrismaService as any, mockAuditEmitter as any, { publishTransitions: vi.fn() } as any);
+    service = new TaskService(mockPrismaService as any, mockAuditEmitter as any, { publishTransitions: vi.fn() } as any, allowAllScope());
     vi.spyOn(tenantContextStorage, 'run').mockImplementation((_ctx, fn) => fn());
   });
 

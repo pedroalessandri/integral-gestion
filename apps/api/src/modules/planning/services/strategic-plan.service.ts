@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -7,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { StrategicPlanDto, UpsertStrategicPlanDto } from '@gestion-publica/shared-types/planning';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
+import { ORG_UNIT_SCOPE, type OrgUnitScope } from '../../../common/contracts/index.js';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
@@ -35,6 +37,7 @@ export class StrategicPlanService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   async getActive(organizationId: string): Promise<StrategicPlanDto> {
@@ -50,6 +53,7 @@ export class StrategicPlanService {
     input: UpsertStrategicPlanDto,
     authContext: AuthContext,
   ): Promise<StrategicPlanDto> {
+    await this.orgUnitScope.assertCentralScope(authContext); // RN-P19: N1 solo con alcance central
     const startsAt = new Date(input.mandateStartsAt);
     const endsAt = new Date(input.mandateEndsAt);
     if (!(endsAt.getTime() > startsAt.getTime())) {

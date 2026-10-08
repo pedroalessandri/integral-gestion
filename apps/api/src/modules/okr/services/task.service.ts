@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -22,6 +23,7 @@ import type { CreateTaskDto } from '../dto/create-task.dto.js';
 import type { UpdateTaskDto } from '../dto/update-task.dto.js';
 import type { CreateProjectTaskDto } from '../dto/create-project-task.dto.js';
 import type { SetSiblingWeightsDto } from '../dto/set-sibling-weights.dto.js';
+import { ORG_UNIT_SCOPE, type OrgUnitScope } from '../../../common/contracts/index.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 import { recomputeKrAndObjectiveProgress } from './recompute.js';
 import { lockProject, recomputeProjectAndObjectiveExecution } from './project-recompute.js';
@@ -58,14 +60,15 @@ type TaskRow = {
 type ProjectParentRow = {
   id: string;
   objectiveId: string;
+  orgUnitId: string | null;
   progressMode: string;
   startsAt: Date;
   endsAt: Date;
-  objective: { period: PeriodRow };
+  objective: { period: PeriodRow; orgUnitId: string | null };
 };
 
 type TaskWithParent = TaskRow & {
-  keyResult: { objective: { period: PeriodRow } } | null;
+  keyResult: { objective: { period: PeriodRow; orgUnitId: string | null } } | null;
   project: ProjectParentRow | null;
 };
 
@@ -124,6 +127,7 @@ export class TaskService {
     private readonly prisma: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
     private readonly lifecycle: ProjectLifecyclePublisher,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   async list(keyResultId: string, orgId: string): Promise<TaskSummaryDto[]> {
@@ -176,6 +180,10 @@ export class TaskService {
     if (!kr) {
       throw new NotFoundException(`Key result ${keyResultId} not found`);
     }
+    await this.orgUnitScope.assertCanWriteInUnit(
+      authContext,
+      (kr as { objective: { orgUnitId: string | null } }).objective.orgUnitId,
+    );
 
     const period = (kr as { objective: { period: PeriodRow } }).objective.period;
     assertPeriodOpen(period as PeriodRef);
@@ -245,6 +253,7 @@ export class TaskService {
     authContext: AuthContext,
   ): Promise<TaskDetailDto> {
     const project = await this.findProjectOrThrow(projectId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, project.orgUnitId);
     assertPeriodOpen(project.objective.period as PeriodRef);
 
     const startsAt = new Date(dto.startsAt);
@@ -304,6 +313,7 @@ export class TaskService {
     authContext: AuthContext,
   ): Promise<TaskDetailDto> {
     const existing = await this.findTaskWithParentOrThrow(id, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, this.taskUnitId(existing));
     const existingRow = existing as TaskRow;
     const project = existing.project;
     const period = (project ? project.objective.period : existing.keyResult?.objective.period) as PeriodRow;
@@ -425,6 +435,7 @@ export class TaskService {
     authContext: AuthContext,
   ): Promise<TaskSummaryDto[]> {
     const project = await this.findProjectOrThrow(projectId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, project.orgUnitId);
     assertPeriodOpen(project.objective.period as PeriodRef);
 
     return this.runWithTransitions(orgId, authContext, async (tx, transitions) => {
@@ -463,6 +474,7 @@ export class TaskService {
 
   async softDelete(id: string, orgId: string, authContext: AuthContext): Promise<void> {
     const existing = await this.findTaskWithParentOrThrow(id, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, this.taskUnitId(existing));
     const project = existing.project;
     assertPeriodOpen(
       (project ? project.objective.period : existing.keyResult?.objective.period) as PeriodRef,
@@ -531,6 +543,7 @@ export class TaskService {
     }
 
     const existing = await this.findTaskWithParentOrThrow(id, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, this.taskUnitId(existing));
     const project = existing.project;
     assertPeriodOpen(
       (project ? project.objective.period : existing.keyResult?.objective.period) as PeriodRef,
@@ -573,6 +586,14 @@ export class TaskService {
 
       return this.toDetailDto(updatedTask as TaskRow);
     });
+  }
+
+  /**
+   * RN-P20: la unidad efectiva de una tarea es la de su proyecto (`Project.orgUnitId`); en el camino KR legacy,
+   * la de su objetivo.
+   */
+  private taskUnitId(existing: TaskWithParent): string | null {
+    return existing.project ? existing.project.orgUnitId : (existing.keyResult?.objective.orgUnitId ?? null);
   }
 
   /** Tarea viva de la org con su padre (KR o proyecto) y el período del objetivo. */

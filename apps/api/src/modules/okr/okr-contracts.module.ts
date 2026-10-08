@@ -80,6 +80,24 @@ export class PrismaObjectiveAxisUnassigner implements ObjectiveAxisUnassigner {
   }
 }
 
+function toObjectiveRef(objective: {
+  id: string;
+  periodId: string;
+  orgUnitId: string | null;
+  period: { id: string; code: string; status: string };
+}): ObjectiveRef {
+  return {
+    id: objective.id,
+    periodId: objective.periodId,
+    orgUnitId: objective.orgUnitId,
+    period: {
+      id: objective.period.id,
+      code: objective.period.code,
+      status: objective.period.status as 'open' | 'closed' | 'future',
+    },
+  };
+}
+
 /** Implementación de `OBJECTIVE_LOOKUP`: objetivo vivo de la org con su período (para validar indicadores). */
 @Injectable()
 export class PrismaObjectiveLookup implements ObjectiveLookup {
@@ -91,19 +109,26 @@ export class PrismaObjectiveLookup implements ObjectiveLookup {
       select: {
         id: true,
         periodId: true,
+        orgUnitId: true,
         period: { select: { id: true, code: true, status: true } },
       },
     });
     if (!objective) return null;
-    return {
-      id: objective.id,
-      periodId: objective.periodId,
-      period: {
-        id: objective.period.id,
-        code: objective.period.code,
-        status: objective.period.status as 'open' | 'closed' | 'future',
+    return toObjectiveRef(objective);
+  }
+
+  async findLiveObjectives(organizationId: string, objectiveIds: ReadonlyArray<string>): Promise<ObjectiveRef[]> {
+    if (objectiveIds.length === 0) return [];
+    const rows = await this.prisma.raw.objective.findMany({
+      where: { id: { in: [...objectiveIds] }, organizationId, deletedAt: null },
+      select: {
+        id: true,
+        periodId: true,
+        orgUnitId: true,
+        period: { select: { id: true, code: true, status: true } },
       },
-    };
+    });
+    return rows.map(toObjectiveRef);
   }
 
   async filterLiveObjectiveIds(organizationId: string, objectiveIds: ReadonlyArray<string>): Promise<string[]> {
@@ -155,6 +180,7 @@ export class PrismaObjectiveProgressReader implements ObjectiveProgressReader {
 const PROJECT_LINK_SELECT = {
   id: true,
   objectiveId: true,
+  orgUnitId: true,
   title: true,
   endsAt: true,
   progressCachedBp: true,
@@ -165,6 +191,7 @@ const PROJECT_LINK_SELECT = {
 function toProjectLinkRef(row: {
   id: string;
   objectiveId: string;
+  orgUnitId: string | null;
   title: string;
   endsAt: Date;
   progressCachedBp: number;
@@ -174,6 +201,7 @@ function toProjectLinkRef(row: {
   return {
     id: row.id,
     objectiveId: row.objectiveId,
+    orgUnitId: row.orgUnitId,
     title: row.title,
     endsAt: row.endsAt,
     progressBp: row.progressCachedBp,

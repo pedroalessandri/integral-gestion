@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { AxisService } from './axis.service.js';
@@ -53,7 +54,7 @@ describe('AxisService', () => {
     mockCounter.countLiveObjectivesByAxis.mockResolvedValue(0);
     mockUnassigner.unassignAxisFromObjectives.mockResolvedValue([]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new AxisService(mockPrismaService as any, mockAudit as any, mockCounter, mockUnassigner);
+    service = new AxisService(mockPrismaService as any, mockAudit as any, mockCounter, mockUnassigner, allowAllScope());
   });
 
   describe('list / getById', () => {

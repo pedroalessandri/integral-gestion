@@ -8,6 +8,8 @@
 export interface ObjectiveRef {
   id: string;
   periodId: string;
+  /** Unidad del objetivo (RN-P20): `null` si todavía no tiene unidad asignada. */
+  orgUnitId: string | null;
   period: { id: string; code: string; status: 'open' | 'closed' | 'future' };
 }
 
@@ -15,6 +17,8 @@ export interface ObjectiveRef {
 export interface ObjectiveLookup {
   /** Objetivo vivo de la organización, o `null` si no existe, está borrado o es de otra org. */
   findLiveObjective(organizationId: string, objectiveId: string): Promise<ObjectiveRef | null>;
+  /** Objetivos vivos de la organización entre los ids dados (los inexistentes, borrados o de otra org se omiten). */
+  findLiveObjectives(organizationId: string, objectiveIds: ReadonlyArray<string>): Promise<ObjectiveRef[]>;
   /** De los ids dados, los que son objetivos vivos de la organización. */
   filterLiveObjectiveIds(organizationId: string, objectiveIds: ReadonlyArray<string>): Promise<string[]>;
 }

@@ -28,6 +28,12 @@ export interface AuthContext {
    * Superadmin carries the sentinel ['*'] (see ALL_PERMISSIONS). See hasPermission helper.
    */
   permissions: readonly string[];
+  /**
+   * Alcance de escritura del miembro en la org (RN-P19/P20), resuelto por TenantGuard desde
+   * `user_organization_role.org_unit_id`. `null` = toda la org (unidad central) y también el superadmin.
+   * `undefined` = no resuelto: el servicio de alcance lo consulta a la DB (default deny, nunca asume central).
+   */
+  orgUnitId?: string | null;
   /** Copied from RequestContextStorage for convenience; that storage remains the source of truth. */
   requestId: string;
 }

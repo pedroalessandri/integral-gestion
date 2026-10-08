@@ -33,8 +33,10 @@ import { AuditEventEmitterService, requestContextStorage, type PrismaTransaction
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import {
   OBJECTIVE_LOOKUP,
+  ORG_UNIT_SCOPE,
   PROJECT_LINK_READER,
   type ObjectiveLookup,
+  type OrgUnitScope,
   type ObjectiveRef,
   type ProjectLinkReader,
 } from '../../../common/contracts/index.js';
@@ -114,6 +116,7 @@ export class ObjectiveIndicatorService {
     @Inject(OBJECTIVE_LOOKUP) private readonly objectiveLookup: ObjectiveLookup,
     private readonly eventEmitter: EventEmitter2,
     @Inject(PROJECT_LINK_READER) private readonly projectLinks: ProjectLinkReader,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   async listByObjective(objectiveId: string, orgId: string): Promise<ObjectiveIndicatorDto[]> {
@@ -138,6 +141,7 @@ export class ObjectiveIndicatorService {
     authContext: AuthContext,
   ): Promise<ObjectiveIndicatorDto> {
     const objective = await this.findObjectiveOrThrow(objectiveId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
     assertPeriodOpen(objective.period);
 
     if ((dto.metricId === undefined) === (dto.metric === undefined)) {
@@ -281,6 +285,7 @@ export class ObjectiveIndicatorService {
   ): Promise<ObjectiveIndicatorDto> {
     const existing = await this.findIndicatorOrThrow(id, orgId);
     const objective = await this.findObjectiveOrThrow(existing.objectiveId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
     assertPeriodOpen(objective.period);
     const metric = await this.findMetricOrThrow(existing.metricId, orgId);
 
@@ -405,6 +410,7 @@ export class ObjectiveIndicatorService {
   ): Promise<IndicatorTargetPointDto[]> {
     const existing = await this.findIndicatorOrThrow(id, orgId);
     const objective = await this.findObjectiveOrThrow(existing.objectiveId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
     assertPeriodOpen(objective.period);
     const metric = await this.findMetricOrThrow(existing.metricId, orgId);
 
@@ -437,6 +443,7 @@ export class ObjectiveIndicatorService {
     authContext: AuthContext,
   ): Promise<ObjectiveIndicatorDto[]> {
     const objective = await this.findObjectiveOrThrow(objectiveId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
     assertPeriodOpen(objective.period);
 
     const { items, events } = await tenantContextStorage.run(authContext, () =>
@@ -488,6 +495,7 @@ export class ObjectiveIndicatorService {
   async softDelete(id: string, orgId: string, authContext: AuthContext): Promise<void> {
     const existing = await this.findIndicatorOrThrow(id, orgId);
     const objective = await this.findObjectiveOrThrow(existing.objectiveId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
     assertPeriodOpen(objective.period);
 
     const events = await tenantContextStorage.run(authContext, () =>

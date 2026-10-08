@@ -4,6 +4,8 @@ import { CONTRIBUTION_ERROR_MESSAGES, LINKED_PROJECT_LINK_LABELS } from '@/lib/l
 
 /** Mensajes en español para los 409/422 tipados de Estructura, Plan y asignación de objetivos. */
 const MESSAGES: Record<string, string> = {
+  OrgUnitScopeForbidden:
+    'Tu alcance no incluye esta unidad: podés ver toda la organización, pero solo editar en tu unidad y las que dependen de ella.',
   OrgUnitMaxDepthExceeded:
     'El árbol no puede tener más de 4 niveles. Elegí una unidad padre de un nivel más alto.',
   OrgUnitInvalidParentKind:

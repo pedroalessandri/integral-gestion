@@ -15,6 +15,58 @@ Formato:
 
 ---
 
+## 2026-10-08 · C20 · security-reviewer · feature/plan-f8-alcance
+- Hecho: revisión de seguridad de solo lectura de `git diff 2085245..HEAD` (Fases 2–8, 304 archivos): controllers, guards, services de core/okr/metrics/planning, DTOs, listeners, puertos, migraciones SQL, `$queryRaw`/`$executeRaw`, `prisma-tenant-extension` y server actions de web. Veredicto: **el diff de las Fases 2–8 no tiene bloqueantes propios**; hay 1 crítico preexistente fuera del rango y 1 alto dentro del rango → **C20b**.
+- Hallazgos:
+
+  | # | Sev. | Archivo | Resumen |
+  |---|---|---|---|
+  | 1 | **Crítica** (preexistente) | `core/controllers/period.controller.ts`, `organization.controller.ts` | Sin `TenantGuard`/`PermissionsGuard`/superadmin (solo el `AuthGuard` global). `POST periods/<id de otra org>/close` cierra su período y traba todas sus escrituras; `POST orgs/:id/deactivate` deja afuera a toda la org; `GET/POST orgs` enumera y crea orgs. `closePeriod` busca con `prisma.raw` por id sin org (verificado). |
+  | 2 | Alta | `metrics/services/objective-indicator.service.ts:144-165` | Vincular una métrica existente no exige poder escribirla: un usuario de la unidad B captura una métrica central, o traba la carga de una métrica de la unidad A. |
+  | 3 | Media | `objective-indicator.controller.ts`, `project-contribution.controller.ts` | Sin `ModuleEnabledGuard`; métrica inline creada con solo `okr:write`. |
+  | 4 | Media | `okr/services/objective.service.ts:385-425` | Borrar un objetivo deja vivos proyectos, indicadores y aportes. |
+  | 5 | Media (preexistente) | `key-result.controller.ts`, `objective.controller.ts:109` | `@Body()` sin `ValidationPipe`; no hay pipe global. |
+  | 6–10 | Baja | varios | `PermissionsGuard` fail-open; `ownerUserId` de tarea/KR sin validar; mover objetivo deja proyectos fuera del subárbol; URLs sin `encodeURIComponent` en web; advisory lock sin prefijo de org. |
+
+- Checklist: tenant scoping PASS (modelos nuevos en `TENANT_SCOPED_MODELS`, SQL crudo con tagged templates y org en el WHERE, ids ajenos → 404); endpoints PASS salvo #1/#3/#6; alcance por unidad PASS salvo #2/#4/#8 (anti-escalada en invitar, rol, quitar y `setScope` OK; AuthContext desde `request.authContext`); eventos post-commit PASS (el applier reconcilia contra el estado real, idempotente, sin camino HTTP); validación PASS con matices (#5; `organizationId`, `origin`, `appliedEntryId` no asignables); audit PASS (solo INSERT, también en migraciones); fuga en errores PASS (`details` solo en `IndicatorHasLinkedProjects`, misma org); secretos PASS.
+- Observaciones: `DevAuthMiddleware` activo si falta `NODE_ENV`; `core:org-unit:vision:write` en `org-user` con alcance `null` permite editar la visión de cualquier unidad (coherente con RN-P19); `seed-demo.ts` no debe correr en producción.
+- Commit: este commit (`docs: revisión de seguridad de las Fases 2–8 (C20)`)
+- Verificación: revisión estática (el subagente no ejecutó código). Hallazgo #1 verificado a mano: `period.controller.ts` sin `@UseGuards` (solo TODO(ADR-0004)) y `PeriodService.closePeriod` con `prisma.raw.period.findUnique({ where: { id } })`. Sin cambios de código ni de DB en esta corrida.
+- Pendiente / desvíos:
+  - **C20b** (crítico + alto): guards y scoping de `PeriodController` y `OrganizationController` (+ e2e "usuario sin membresía → 403") y exigir poder escribir la métrica al vincularla. Recomendación: hacerla en esta misma rama antes del merge de la Fase 8.
+  - #3–#10 y observaciones quedan en TODO.md.
+  - El PR #22 (seed y reset del diálogo de la Fase 7) no estaba en main y quedó fuera de la revisión (bajo riesgo).
+- Preguntas abiertas:
+  - `PeriodController` con `TenantGuard` cambia la política de acceso (el front tiene que mandar el header de org): ya estaba anotado en TODO.md como decisión de Pedro.
+  - ¿C20b en esta rama antes del merge, o mergear la Fase 8 y hacer C20b aparte?
+- Fase 8 mergeada por Pedro (PR #23, 2026-10-08) en `ac93d2e`, antes del push de C20b: el fix de seguridad va en el PR #24. El smoke de la Fase 8 (usuario de área sin permiso de editar otra área) queda pendiente.
+
+## 2026-10-08 · C19 · backend-dev · feature/plan-f8-alcance
+- Hecho:
+  - **Puerto `ORG_UNIT_SCOPE`** (`common/contracts/org-unit-scope.port.ts`), implementado por `core` (`OrgUnitScopeService`, en el `CoreContractsModule` global): `assertCanWriteInUnit`, `assertCentralScope` y `assertCanWriteInAllUnits`, con 403 `OrgUnitScopeForbidden`. Superadmin y alcance `null` pasan sin consultar; con alcance en una unidad se resuelven sus descendientes con CTE recursiva sobre `core.org_unit` (org + `deleted_at IS NULL`), cacheada por request (`WeakMap` sobre el `AuthContext`). Default deny sin membresía. RN-P21: RBAC ∧ alcance, en un servicio reutilizable, nunca en controllers.
+  - **Contexto**: `TenantGuard` carga `orgUnitId` en el `AuthContext` (campo opcional nuevo en shared-types); los services reciben el contexto de `request.authContext` vía `@CurrentUser` (ALS solo como fallback). Si `orgUnitId` viene `undefined`, se consulta a la DB y nunca se asume central.
+  - **Dónde se aplica** (mutaciones; las lecturas no se restringen, RN-P20): `Objective` (unidad destino y actual si se mueve; sin unidad, solo central), `Project` y `Task` (unidad del proyecto; los pesos del grupo, la del objetivo), `ObjectiveIndicator`, `IndicatorTargetPoint`, `ProjectContribution` y vínculos métrica-objetivo (unidad del objetivo), `MetricEntry` (ver preguntas), `OrgUnit` (estructura solo central; visión y misión, la unidad o un ancestro), `Axis` y `StrategicPlan` (solo central). Endpoints legacy de KR, contra la unidad del objetivo. Los efectos automáticos (carga por aporte, recálculos) heredan el chequeo de la acción que los dispara.
+  - **Invitar con unidad**: `inviteByEmail` acepta `orgUnitId` opcional (validado en la org). Sin unidad sigue quedando `null`. Anti-escalada: invitar sin unidad o cambiar el alcance (`setScope`) exige poder otorgar el alcance nuevo y administrar el actual; un usuario de unidad no puede darse ni dar `null`. El audit `user_organization_role.assigned` incluye `orgUnitId`.
+- Commit: este commit (`feat(core): alcance de escritura por unidad (RN-P19–P21) e invitación con unidad`)
+- Verificación:
+  - `turbo run typecheck --force` 7/7; `turbo run lint --force` 0 errores (1 warning api, 2 web, preexistentes); `turbo run test --force` 12/12 (api 490, web 77).
+  - E2E `test/org-unit-scope.e2e-spec.ts` en DB descartable `gp_c19_e2e` (ya borrada), corrido por el subagente: 3/3. Matriz rol × alcance (org-admin y org-user con alcance A, admin central, superadmin) sobre unidad propia, hija, hermana y ancestro; lecturas de toda la org; N1/N2/árbol; escalada de alcance; invitar con unidad; aislamiento entre orgs y audit. No lo volví a correr.
+  - Sin cambios de esquema (no hay migración ni psql).
+- Pendiente / desvíos:
+  - `Metric` (alta, edición, borrado) y cambiar rol o quitar miembros quedan solo con RBAC (no estaban en la lista de C19): ítem en TODO.md.
+  - El front necesita el selector de unidad al invitar (`orgUnitId` en `POST members/invite`).
+  - No hay guard nuevo: el chequeo vive en un servicio detrás del puerto (RN-P21 lo permite).
+  - Los e2e viejos (`core-*`, `metrics-okr-link`) siguen fallando igual que en main (ya en `docs/tech-debt.md`).
+  - Esta rama sale de main sin el PR #22 (cierre de Fase 7): web tiene 77 tests acá y 80 allá.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08 y aplicadas en un segundo commit):
+  - ✅ (b) Al invitar, `orgUnitId` es obligatorio (`string | null`; `null` es la elección explícita de "Toda la organización"; si falta, 400). El front suma el selector obligatorio, sin valor preseleccionado (excluye la central, que equivale a "Toda la organización").
+  - ✅ `MetricEntry`: la regla conservadora queda como está.
+  - ✅ Permiso nuevo `core:org-unit:vision:write` (migración `20261008000005_org_unit_vision_permission`) en un endpoint aparte `PATCH org-units/:id/vision-mission` (solo `vision` y `mission`; otro campo da 400), con alcance sobre la unidad o un ancestro. La estructura sigue con `core:org-unit:manage` + central. Se otorgó a `org-admin` y `org-user` (hoy `org-user` no tiene `okr:write`; se priorizó que el usuario de unidad pueda editar su visión).
+  - ✅ `ProjectContribution`: alcance sobre la unidad del proyecto (si el proyecto ya no está vivo, la del objetivo).
+  - ✅ Métricas sin objetivos: de la org completa, asociadas a la unidad central → solo alcance central. El ABM de `Metric` usa la misma regla que las cargas (`MetricService.assertCanWriteMetric`). Cambiar rol y quitar miembros exigen administrar el alcance actual del miembro (anti-escalada, como `setScope`).
+  - Además: `OrgUnitScopeForbidden` tiene mensaje propio en el mapa central de errores del front.
+  - Verificación del ajuste: `turbo run typecheck/lint/test --force` verde (api 491, web 82); `pnpm --filter web build` OK; psql: migración `20261008000005` aplicada y `role_permission` con `core:org-unit:vision:write` para `org-admin` y `org-user`. E2E `org-unit-scope` 3/3 + `project-contribution`/`indicator-curves` 6/6 en DB descartable (subagente).
+
 ## 2026-10-08 · C18 · frontend-dev · feature/plan-f7-aportes
 - Hecho:
   - **"Aporta a indicador"** en la ficha de proyecto (`features/contributions`: server actions, hook `useProjectContributions`, helpers puros y componentes). Lista los aportes con indicador, valor y estado Aplicado/Pendiente (ícono + texto). Permite agregar, editar y quitar; el selector ofrece solo indicadores del mismo objetivo `output` + `execution_feeds_indicator` a los que el proyecto todavía no aporta. Un aporte aplicado tiene editar y quitar deshabilitados con la explicación (se libera cuando el proyecto baja del 100 %). Valor decimal ≠ 0 sin validar el signo, sin `number`.

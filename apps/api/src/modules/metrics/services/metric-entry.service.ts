@@ -15,6 +15,7 @@ import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
+import { MetricService } from './metric.service.js';
 import { MetricLinkService } from './metric-link.service.js';
 import { ObjectiveIndicatorService } from './objective-indicator.service.js';
 
@@ -64,6 +65,7 @@ export class MetricEntryService {
     private readonly auditEmitter: AuditEventEmitterService,
     private readonly metricLinkService: MetricLinkService,
     private readonly objectiveIndicatorService: ObjectiveIndicatorService,
+    private readonly metricService: MetricService,
   ) {}
 
   async list(metricId: string, orgId: string): Promise<MetricEntryDto[]> {
@@ -79,6 +81,8 @@ export class MetricEntryService {
     authContext: AuthContext,
   ): Promise<MetricEntryDto> {
     const metric = await this.findMetricOrThrow(metricId, orgId);
+    // RN-P20: carga permitida solo si el alcance cubre todos los objetivos vinculados (standalone: central).
+    await this.metricService.assertCanWriteMetric(metricId, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
 
     const bucketDate = toUTCMidnight(new Date(dto.bucketDate));
@@ -136,6 +140,8 @@ export class MetricEntryService {
     authContext: AuthContext,
   ): Promise<MetricEntryDto> {
     const metric = await this.findMetricOrThrow(metricId, orgId);
+    // RN-P20: carga permitida solo si el alcance cubre todos los objetivos vinculados (standalone: central).
+    await this.metricService.assertCanWriteMetric(metricId, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
     const existing = await this.findEntryOrThrow(metricId, entryId, orgId);
     this.assertManual(existing);
@@ -195,6 +201,8 @@ export class MetricEntryService {
     authContext: AuthContext,
   ): Promise<void> {
     const metric = await this.findMetricOrThrow(metricId, orgId);
+    // RN-P20: carga permitida solo si el alcance cubre todos los objetivos vinculados (standalone: central).
+    await this.metricService.assertCanWriteMetric(metricId, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(metric.period));
     this.assertManual(await this.findEntryOrThrow(metricId, entryId, orgId));
 

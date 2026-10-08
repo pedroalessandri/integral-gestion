@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -12,6 +13,7 @@ import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import type { CreateKeyResultDto } from '../dto/create-key-result.dto.js';
 import type { UpdateKeyResultDto } from '../dto/update-key-result.dto.js';
+import { ORG_UNIT_SCOPE, type OrgUnitScope } from '../../../common/contracts/index.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 import { recomputeObjectiveFromKrs } from './recompute.js';
 
@@ -56,6 +58,7 @@ export class KeyResultService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   async list(objectiveId: string, orgId: string): Promise<KeyResultSummaryDto[]> {
@@ -104,6 +107,7 @@ export class KeyResultService {
     if (!objective) {
       throw new NotFoundException(`Objective ${objectiveId} not found`);
     }
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, (objective as { orgUnitId: string | null }).orgUnitId);
     assertPeriodOpen((objective as { period: PeriodRow }).period as { id: string; status: 'open' | 'closed' | 'future'; code: string });
 
     return tenantContextStorage.run(authContext, () =>
@@ -165,6 +169,7 @@ export class KeyResultService {
     if (!existing) {
       throw new NotFoundException(`Key result ${id} not found`);
     }
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { objective: { orgUnitId: string | null } }).objective.orgUnitId);
     assertPeriodOpen((existing as { objective: { period: PeriodRow } }).objective.period as { id: string; status: 'open' | 'closed' | 'future'; code: string });
 
     const existingRow = existing as KeyResultRow;
@@ -242,6 +247,7 @@ export class KeyResultService {
     if (!existing) {
       throw new NotFoundException(`Key result ${id} not found`);
     }
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { objective: { orgUnitId: string | null } }).objective.orgUnitId);
     assertPeriodOpen((existing as { objective: { period: PeriodRow } }).objective.period as { id: string; status: 'open' | 'closed' | 'future'; code: string });
 
     const count = (existing as { _count: { tasks: number } })._count.tasks;

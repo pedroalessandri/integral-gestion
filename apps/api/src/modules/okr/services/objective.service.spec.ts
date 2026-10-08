@@ -168,6 +168,8 @@ const mockMemberService = {
   isMemberOf: mockIsMemberOf,
 };
 
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
+
 const mockFindLiveOrgUnit = vi.fn();
 const mockOrgUnitLookup = { findLiveOrgUnit: mockFindLiveOrgUnit };
 
@@ -182,6 +184,7 @@ function buildService(): ObjectiveService {
     mockMemberService as never,
     mockOrgUnitLookup,
     mockAxisLookup,
+    allowAllScope(),
   );
 }
 

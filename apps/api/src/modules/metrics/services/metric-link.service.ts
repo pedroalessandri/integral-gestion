@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -20,6 +21,7 @@ import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { KeyResultService } from '../../okr/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
+import { ORG_UNIT_SCOPE, type OrgUnitScope } from '../../../common/contracts/index.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 
 type Decimalish = { toString(): string };
@@ -45,6 +47,7 @@ type MetricRow = {
 type KrWithPeriod = {
   id: string;
   periodId: string;
+  orgUnitId: string | null;
   period: { id: string; code: string; status: 'open' | 'closed' | 'future' };
 };
 
@@ -62,6 +65,7 @@ export class MetricLinkService {
     private readonly prisma: PrismaService,
     private readonly keyResultService: KeyResultService,
     private readonly auditEmitter: AuditEventEmitterService,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   // ── Recompute hook (PASO 4) ──────────────────────────────────────────────
@@ -117,6 +121,7 @@ export class MetricLinkService {
     authContext: AuthContext,
   ): Promise<MetricKrLinkDto> {
     const kr = await this.loadKrWithPeriod(keyResultId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, kr.orgUnitId); // RN-P20
     assertPeriodOpen(kr.period); // RN-O8
     const metric = await this.loadMetric(dto.metricId, orgId);
     if (metric.periodId !== kr.periodId) {
@@ -208,6 +213,7 @@ export class MetricLinkService {
     }
 
     const kr = await this.loadKrWithPeriod(keyResultId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, kr.orgUnitId); // RN-P20
     assertPeriodOpen(kr.period); // RN-O8
 
     const existing = (await this.prisma.scoped.metricKrLink.findFirst({
@@ -267,6 +273,7 @@ export class MetricLinkService {
    */
   async remove(keyResultId: string, orgId: string, authContext: AuthContext): Promise<void> {
     const kr = await this.loadKrWithPeriod(keyResultId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, kr.orgUnitId); // RN-P20
     assertPeriodOpen(kr.period); // RN-O8
 
     const existing = (await this.prisma.scoped.metricKrLink.findFirst({
@@ -328,7 +335,8 @@ export class MetricLinkService {
     orgId: string,
     authContext: AuthContext,
   ): Promise<void> {
-    await this.loadObjective(objectiveId, orgId);
+    const objective = await this.loadObjective(objectiveId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId); // RN-P20
     await this.loadMetric(metricId, orgId);
 
     const existing = await this.prisma.scoped.metricObjectiveContext.findFirst({
@@ -367,6 +375,9 @@ export class MetricLinkService {
       where: { metricId, objectiveId, organizationId: orgId },
     });
     if (!existing) return; // idempotent
+
+    const objective = await this.loadObjective(objectiveId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId); // RN-P20
 
     await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
@@ -482,6 +493,7 @@ export class MetricLinkService {
         objective: {
           select: {
             periodId: true,
+            orgUnitId: true,
             period: { select: { id: true, code: true, status: true } },
           },
         },
@@ -490,6 +502,7 @@ export class MetricLinkService {
       id: string;
       objective: {
         periodId: string;
+        orgUnitId: string | null;
         period: { id: string; code: string; status: string };
       };
     } | null;
@@ -499,6 +512,7 @@ export class MetricLinkService {
     return {
       id: kr.id,
       periodId: kr.objective.periodId,
+      orgUnitId: kr.objective.orgUnitId,
       period: {
         id: kr.objective.period.id,
         code: kr.objective.period.code,
@@ -518,13 +532,14 @@ export class MetricLinkService {
     return metric;
   }
 
-  private async loadObjective(objectiveId: string, orgId: string): Promise<void> {
-    const objective = await this.prisma.scoped.objective.findFirst({
+  private async loadObjective(objectiveId: string, orgId: string): Promise<{ orgUnitId: string | null }> {
+    const objective = (await this.prisma.scoped.objective.findFirst({
       where: { id: objectiveId, organizationId: orgId, deletedAt: null },
-      select: { id: true },
-    });
+      select: { id: true, orgUnitId: true },
+    })) as { id: string; orgUnitId: string | null } | null;
     if (!objective) {
       throw new NotFoundException(`Objective ${objectiveId} not found`);
     }
+    return { orgUnitId: objective.orgUnitId };
   }
 }
