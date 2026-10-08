@@ -16,8 +16,10 @@ import {
 } from '../../audit/index.js';
 import {
   OBJECTIVE_LOOKUP,
+  ORG_UNIT_SCOPE,
   PROJECT_LINK_READER,
   type ObjectiveLookup,
+  type OrgUnitScope,
   type ProjectLinkReader,
   type ProjectLinkRef,
 } from '../../../common/contracts/index.js';
@@ -63,7 +65,24 @@ export class ProjectContributionService {
     private readonly applier: ProjectContributionApplier,
     @Inject(OBJECTIVE_LOOKUP) private readonly objectiveLookup: ObjectiveLookup,
     @Inject(PROJECT_LINK_READER) private readonly projectLinks: ProjectLinkReader,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
+
+  /**
+   * RN-P20: un aporte modifica el valor del indicador del objetivo, así que se exige poder escribir en la unidad del
+   * OBJETIVO (que además incluye a la del proyecto, descendiente suya por RN-P4). Regla conservadora.
+   */
+  private async assertCanWriteIndicator(
+    authContext: AuthContext,
+    indicator: IndicatorRef,
+    orgId: string,
+  ): Promise<void> {
+    const objective = await this.objectiveLookup.findLiveObjective(orgId, indicator.objectiveId);
+    if (!objective) {
+      throw new NotFoundException(`Objective ${indicator.objectiveId} not found`);
+    }
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
+  }
 
   async listByIndicator(indicatorId: string, orgId: string): Promise<ProjectContributionDto[]> {
     await this.findIndicatorOrThrow(indicatorId, orgId);
@@ -97,6 +116,7 @@ export class ProjectContributionService {
     if (!objective) {
       throw new NotFoundException(`Objective ${indicator.objectiveId} not found`);
     }
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
     assertPeriodOpen(objective.period);
     await this.assertIndicatorAcceptsContributions(indicator, orgId);
 
@@ -177,6 +197,7 @@ export class ProjectContributionService {
   ): Promise<ProjectContributionDto> {
     const existing = await this.findContributionOrThrow(id, orgId);
     const indicator = await this.findIndicatorOrThrow(existing.objectiveIndicatorId, orgId);
+    await this.assertCanWriteIndicator(authContext, indicator, orgId);
     await this.assertPeriodOpenFor(indicator, orgId);
 
     await tenantContextStorage.run(authContext, () =>
@@ -206,6 +227,7 @@ export class ProjectContributionService {
   async remove(id: string, orgId: string, authContext: AuthContext): Promise<void> {
     const existing = await this.findContributionOrThrow(id, orgId);
     const indicator = await this.findIndicatorOrThrow(existing.objectiveIndicatorId, orgId);
+    await this.assertCanWriteIndicator(authContext, indicator, orgId);
     await this.assertPeriodOpenFor(indicator, orgId);
 
     await tenantContextStorage.run(authContext, () =>

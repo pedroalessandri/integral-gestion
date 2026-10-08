@@ -15,6 +15,30 @@ Formato:
 
 ---
 
+## 2026-10-08 · C19 · backend-dev · feature/plan-f8-alcance
+- Hecho:
+  - **Puerto `ORG_UNIT_SCOPE`** (`common/contracts/org-unit-scope.port.ts`), implementado por `core` (`OrgUnitScopeService`, en el `CoreContractsModule` global): `assertCanWriteInUnit`, `assertCentralScope` y `assertCanWriteInAllUnits`, con 403 `OrgUnitScopeForbidden`. Superadmin y alcance `null` pasan sin consultar; con alcance en una unidad se resuelven sus descendientes con CTE recursiva sobre `core.org_unit` (org + `deleted_at IS NULL`), cacheada por request (`WeakMap` sobre el `AuthContext`). Default deny sin membresía. RN-P21: RBAC ∧ alcance, en un servicio reutilizable, nunca en controllers.
+  - **Contexto**: `TenantGuard` carga `orgUnitId` en el `AuthContext` (campo opcional nuevo en shared-types); los services reciben el contexto de `request.authContext` vía `@CurrentUser` (ALS solo como fallback). Si `orgUnitId` viene `undefined`, se consulta a la DB y nunca se asume central.
+  - **Dónde se aplica** (mutaciones; las lecturas no se restringen, RN-P20): `Objective` (unidad destino y actual si se mueve; sin unidad, solo central), `Project` y `Task` (unidad del proyecto; los pesos del grupo, la del objetivo), `ObjectiveIndicator`, `IndicatorTargetPoint`, `ProjectContribution` y vínculos métrica-objetivo (unidad del objetivo), `MetricEntry` (ver preguntas), `OrgUnit` (estructura solo central; visión y misión, la unidad o un ancestro), `Axis` y `StrategicPlan` (solo central). Endpoints legacy de KR, contra la unidad del objetivo. Los efectos automáticos (carga por aporte, recálculos) heredan el chequeo de la acción que los dispara.
+  - **Invitar con unidad**: `inviteByEmail` acepta `orgUnitId` opcional (validado en la org). Sin unidad sigue quedando `null`. Anti-escalada: invitar sin unidad o cambiar el alcance (`setScope`) exige poder otorgar el alcance nuevo y administrar el actual; un usuario de unidad no puede darse ni dar `null`. El audit `user_organization_role.assigned` incluye `orgUnitId`.
+- Commit: este commit (`feat(core): alcance de escritura por unidad (RN-P19–P21) e invitación con unidad`)
+- Verificación:
+  - `turbo run typecheck --force` 7/7; `turbo run lint --force` 0 errores (1 warning api, 2 web, preexistentes); `turbo run test --force` 12/12 (api 490, web 77).
+  - E2E `test/org-unit-scope.e2e-spec.ts` en DB descartable `gp_c19_e2e` (ya borrada), corrido por el subagente: 3/3. Matriz rol × alcance (org-admin y org-user con alcance A, admin central, superadmin) sobre unidad propia, hija, hermana y ancestro; lecturas de toda la org; N1/N2/árbol; escalada de alcance; invitar con unidad; aislamiento entre orgs y audit. No lo volví a correr.
+  - Sin cambios de esquema (no hay migración ni psql).
+- Pendiente / desvíos:
+  - `Metric` (alta, edición, borrado) y cambiar rol o quitar miembros quedan solo con RBAC (no estaban en la lista de C19): ítem en TODO.md.
+  - El front necesita el selector de unidad al invitar (`orgUnitId` en `POST members/invite`).
+  - No hay guard nuevo: el chequeo vive en un servicio detrás del puerto (RN-P21 lo permite).
+  - Los e2e viejos (`core-*`, `metrics-okr-link`) siguen fallando igual que en main (ya en `docs/tech-debt.md`).
+  - Esta rama sale de main sin el PR #22 (cierre de Fase 7): web tiene 77 tests acá y 80 allá.
+- Preguntas abiertas:
+  - **Alcance por defecto de un miembro nuevo** (C04, TODO.md): hoy sin `orgUnitId` queda `null` (toda la org). Opciones: (a) dejar `null`; (b) `orgUnitId` obligatorio al invitar, con "toda la org" como elección explícita; (c) heredar el alcance de quien invita. El subagente recomienda (b) o (c).
+  - **`MetricEntry`**: se tomó la regla más conservadora: el actor tiene que poder escribir en la unidad de **todos** los objetivos vivos vinculados a la métrica; si alguno no tiene unidad o la métrica es standalone, solo central. Un usuario de área no puede cargar una métrica compartida con otra unidad. ¿Está bien?
+  - **Visión y misión por el usuario de unidad**: el alcance lo permite, pero `PATCH org-units/:id` sigue exigiendo `core:org-unit:manage` (solo org-admin). ¿Permiso más fino?
+  - **`ProjectContribution`**: se exige la unidad del objetivo, no la del proyecto. ¿Relajarlo para que el dueño del proyecto declare sus aportes?
+  - **`Metric` standalone**: ¿de quién es? Hoy solo la carga el alcance central.
+
 ## 2026-10-08 · C18 · frontend-dev · feature/plan-f7-aportes
 - Hecho:
   - **"Aporta a indicador"** en la ficha de proyecto (`features/contributions`: server actions, hook `useProjectContributions`, helpers puros y componentes). Lista los aportes con indicador, valor y estado Aplicado/Pendiente (ícono + texto). Permite agregar, editar y quitar; el selector ofrece solo indicadores del mismo objetivo `output` + `execution_feeds_indicator` a los que el proyecto todavía no aporta. Un aporte aplicado tiene editar y quitar deshabilitados con la explicación (se libera cuando el proyecto baja del 100 %). Valor decimal ≠ 0 sin validar el signo, sin `number`.

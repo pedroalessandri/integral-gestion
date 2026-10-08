@@ -13,8 +13,10 @@ import { tenantContextStorage } from '../../auth/context/tenant-context-storage.
 import {
   ORG_UNIT_HIERARCHY,
   ORG_UNIT_LOOKUP,
+  ORG_UNIT_SCOPE,
   type OrgUnitHierarchy,
   type OrgUnitLookup,
+  type OrgUnitScope,
 } from '../../../common/contracts/index.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 import type { CreateProjectDto } from '../dto/create-project.dto.js';
@@ -70,6 +72,7 @@ export class ProjectService {
     @Inject(ORG_UNIT_LOOKUP) private readonly orgUnitLookup: OrgUnitLookup,
     @Inject(ORG_UNIT_HIERARCHY) private readonly orgUnitHierarchy: OrgUnitHierarchy,
     private readonly lifecycle: ProjectLifecyclePublisher,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   async listByObjective(objectiveId: string, orgId: string): Promise<ProjectSummaryDto[]> {
@@ -102,6 +105,8 @@ export class ProjectService {
       );
     }
     const orgUnitId = dto.orgUnitId ?? objective.orgUnitId;
+    // RN-P20: la unidad efectiva del proyecto es la suya (no la del objetivo, salvo que herede).
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, orgUnitId);
     await this.assertOrgUnitInScope(orgId, objective.orgUnitId, orgUnitId);
 
     const startsAt = new Date(dto.startsAt);
@@ -168,6 +173,15 @@ export class ProjectService {
   ): Promise<ProjectDetailDto> {
     const existing = await this.findProjectOrThrow(id, orgId);
     const objective = await this.findObjectiveOrThrow(existing.objectiveId, orgId);
+    // RN-P20: unidad actual del proyecto, la destino si se mueve y, si cambia el peso (reparte el grupo
+    // de hermanos del objetivo), la unidad del objetivo.
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, existing.orgUnitId);
+    if (dto.orgUnitId !== undefined && dto.orgUnitId !== existing.orgUnitId) {
+      await this.orgUnitScope.assertCanWriteInUnit(authContext, dto.orgUnitId);
+    }
+    if (dto.weightBp !== undefined && dto.weightBp !== existing.weightBp) {
+      await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
+    }
     assertPeriodOpen(objective.period as PeriodRef);
     this.assertProgressModeOperable(dto.progressMode);
 
@@ -275,6 +289,8 @@ export class ProjectService {
     authContext: AuthContext,
   ): Promise<ProjectSummaryDto[]> {
     const objective = await this.findObjectiveOrThrow(objectiveId, orgId);
+    // Los pesos reparten el grupo de hermanos de todo el objetivo: se exige la unidad del objetivo.
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, objective.orgUnitId);
     assertPeriodOpen(objective.period as PeriodRef);
 
     return tenantContextStorage.run(authContext, () =>
@@ -324,6 +340,7 @@ export class ProjectService {
   async softDelete(id: string, orgId: string, authContext: AuthContext): Promise<DeleteProjectResultDto> {
     const existing = await this.findProjectOrThrow(id, orgId);
     const objective = await this.findObjectiveOrThrow(existing.objectiveId, orgId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, existing.orgUnitId);
     assertPeriodOpen(objective.period as PeriodRef);
 
     const result = await tenantContextStorage.run(authContext, () =>

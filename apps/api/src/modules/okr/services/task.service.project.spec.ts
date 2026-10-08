@@ -2,6 +2,7 @@
  * TaskService, rama proyecto (RN-P5, RN-P6, RN-P8). El recálculo usa la matemática real de `okr-domain`
  * sobre una base en memoria. El camino KR legacy está cubierto en task.service.spec.ts.
  */
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -57,7 +58,7 @@ const eventEmitter = {
 
 function build(): TaskService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new TaskService(prisma as any, audit as any, new ProjectLifecyclePublisher(eventEmitter as any));
+  return new TaskService(prisma as any, audit as any, new ProjectLifecyclePublisher(eventEmitter as any), allowAllScope());
 }
 
 const taskDto = { title: 'Asfaltar', startsAt: '2027-03-01T00:00:00.000Z', endsAt: '2027-04-01T00:00:00.000Z' };

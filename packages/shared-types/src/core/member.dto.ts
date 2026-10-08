@@ -29,6 +29,11 @@ export interface InviteMemberDto {
   email: string;
   /** One of: org-admin, org-user, org-reader */
   roleKey: string;
+  /**
+   * Alcance de escritura inicial (RN-P19/P20). Opcional: sin él, el miembro queda con alcance null (toda la org).
+   * Debe ser una unidad viva de la org.
+   */
+  orgUnitId?: string | null;
 }
 
 /** Request body for PATCH /api/v1/orgs/:orgId/members/:userId — change role. */

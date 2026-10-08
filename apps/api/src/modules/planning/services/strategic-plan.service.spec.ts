@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import { ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -56,7 +57,7 @@ describe('StrategicPlanService', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockPrismaService.runInTransaction.mockImplementation((fn: (tx: any) => Promise<any>) => fn(mockTx));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new StrategicPlanService(mockPrismaService as any, mockAudit as any);
+    service = new StrategicPlanService(mockPrismaService as any, mockAudit as any, allowAllScope());
   });
 
   describe('getActive', () => {

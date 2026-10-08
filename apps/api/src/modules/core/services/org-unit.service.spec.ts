@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import {
   ConflictException,
   NotFoundException,
@@ -75,7 +76,7 @@ describe('OrgUnitService', () => {
     mockTx.orgUnit.count.mockResolvedValue(0);
     mockTx.userOrganizationRole.findMany.mockResolvedValue([]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new OrgUnitService(mockPrismaService as any, mockAudit as any, mockCounter);
+    service = new OrgUnitService(mockPrismaService as any, mockAudit as any, mockCounter, allowAllScope());
   });
 
   describe('create', () => {

@@ -3,6 +3,7 @@
  * Los puertos de `core` y los lectores de `scoped` se mockean; el recálculo corre con la matemática real
  * de `okr-domain` sobre una base en memoria.
  */
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -52,6 +53,7 @@ function build(): ProjectService {
     unitLookup as any,
     hierarchy as any,
     lifecycle as any,
+    allowAllScope(),
   );
   /* eslint-enable @typescript-eslint/no-explicit-any */
 }

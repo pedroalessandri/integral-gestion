@@ -136,7 +136,7 @@ type UserSuperadminRevokedEvent = BaseEvent<
 type UserOrganizationRoleAssignedEvent = BaseEvent<
   'user_organization_role.assigned',
   'core.user_organization_role',
-  { before: null; after: { roleId: string; roleKey: string } }
+  { before: null; after: { roleId: string; roleKey: string; orgUnitId?: string | null } }
 >;
 
 type UserOrganizationRoleChangedEvent = BaseEvent<

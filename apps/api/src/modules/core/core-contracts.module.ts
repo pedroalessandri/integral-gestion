@@ -2,10 +2,12 @@ import { Global, Injectable, Module } from '@nestjs/common';
 import {
   ORG_UNIT_HIERARCHY,
   ORG_UNIT_LOOKUP,
+  ORG_UNIT_SCOPE,
   type OrgUnitHierarchy,
   type OrgUnitLookup,
   type OrgUnitRef,
 } from '../../common/contracts/index.js';
+import { OrgUnitScopeService } from './services/org-unit-scope.service.js';
 import { PrismaService } from '../auth/prisma/prisma.service.js';
 
 /**
@@ -57,7 +59,8 @@ export class PrismaOrgUnitHierarchy implements OrgUnitHierarchy {
   providers: [
     { provide: ORG_UNIT_LOOKUP, useClass: PrismaOrgUnitLookup },
     { provide: ORG_UNIT_HIERARCHY, useClass: PrismaOrgUnitHierarchy },
+    { provide: ORG_UNIT_SCOPE, useClass: OrgUnitScopeService },
   ],
-  exports: [ORG_UNIT_LOOKUP, ORG_UNIT_HIERARCHY],
+  exports: [ORG_UNIT_LOOKUP, ORG_UNIT_HIERARCHY, ORG_UNIT_SCOPE],
 })
 export class CoreContractsModule {}
