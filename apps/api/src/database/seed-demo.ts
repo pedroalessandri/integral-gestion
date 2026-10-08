@@ -31,9 +31,12 @@
  * El `outcome` semestral ("Viajes diarios en bicicleta") usa curva esperada MANUAL con `IndicatorTargetPoint`
  * (C15); el resto, curva lineal.
  *
- * Fuera del seed (todavía no existe en el código; se suma en F7): curva `from_projects`,
- * `ProjectContribution`, `linkMode` distinto de `independent` y proyectos `from_indicator`. Por eso todos los
- * indicadores usan el vínculo `independent`.
+ * El `output` "Kilómetros de ciclovía habilitados" usa el vínculo `execution_feeds_indicator` y la curva
+ * `from_projects` (F7): sus dos proyectos aportan 8 y 4 km al completarse (`ProjectContribution`). Ninguno está
+ * al 100 %, así que los aportes quedan pendientes y no hay cargas automáticas; la suma (12) no llega a la meta
+ * (20), para que se vea el aviso de la UI. El resto de los indicadores usa el vínculo `independent`.
+ *
+ * Fuera del seed: proyectos `from_indicator` (falta habilitarlos en `ProjectService`).
  */
 import { PrismaClient } from '@prisma/client';
 import {
@@ -181,7 +184,8 @@ const METRICS: SeedMetric[] = [
     baseline: '18',
     target: '8',
     source: 'Mesa de entradas',
-    description: 'Días corridos entre el inicio y la resolución de un trámite, promedio trimestral.',
+    description:
+      'Días corridos entre el inicio y la resolución de un trámite, promedio trimestral.',
     entries: [
       { bucketIndex: 0, increment: '-2' },
       { bucketIndex: 1, increment: '-3', comment: 'Efecto de la ventanilla única' },
@@ -237,11 +241,15 @@ interface SeedProject {
   description?: string;
   weightBp?: number;
   tasks: SeedTask[];
+  /** Aporte al indicador del objetivo con esa métrica (RN-P13); el indicador debe tener `feedsFromProjects`. */
+  contribution?: { metricKey: string; value: string };
 }
 
 interface SeedIndicator {
   metricKey: string;
   weightBp?: number;
+  /** `linkMode = execution_feeds_indicator` + curva `from_projects` (solo métricas `output`). */
+  feedsFromProjects?: boolean;
 }
 
 interface SeedObjective {
@@ -259,11 +267,12 @@ const OBJECTIVES: SeedObjective[] = [
   {
     key: 'ciclovias',
     title: 'Ampliar la red de ciclovías y fomentar la movilidad en bicicleta',
-    description: 'Conectar los barrios con el centro mediante ciclovías protegidas y bicisendas escolares.',
+    description:
+      'Conectar los barrios con el centro mediante ciclovías protegidas y bicisendas escolares.',
     unitKey: 'obras',
     axisKey: 'urbano',
     indicators: [
-      { metricKey: 'ciclovias', weightBp: 7000 },
+      { metricKey: 'ciclovias', weightBp: 7000, feedsFromProjects: true },
       { metricKey: 'bicicleta', weightBp: 3000 },
     ],
     projects: [
@@ -272,19 +281,51 @@ const OBJECTIVES: SeedObjective[] = [
         title: 'Ciclovía de la Av. Costanera',
         description: 'Tramo de 8 km entre el puerto y el parque lineal.',
         weightBp: 6000,
+        contribution: { metricKey: 'ciclovias', value: '8' },
         tasks: [
-          { title: 'Proyecto ejecutivo', start: [1, 5], end: [2, 28], progressBp: 10000, weightBp: 2000 },
-          { title: 'Licitación y adjudicación', start: [3, 1], end: [4, 30], progressBp: 10000, weightBp: 2000 },
-          { title: 'Obra civil y señalización', start: [5, 1], end: [10, 31], progressBp: 6000, weightBp: 6000 },
+          {
+            title: 'Proyecto ejecutivo',
+            start: [1, 5],
+            end: [2, 28],
+            progressBp: 10000,
+            weightBp: 2000,
+          },
+          {
+            title: 'Licitación y adjudicación',
+            start: [3, 1],
+            end: [4, 30],
+            progressBp: 10000,
+            weightBp: 2000,
+          },
+          {
+            title: 'Obra civil y señalización',
+            start: [5, 1],
+            end: [10, 31],
+            progressBp: 6000,
+            weightBp: 6000,
+          },
         ],
       },
       {
         key: 'bicisendas',
         title: 'Bicisendas escolares',
         weightBp: 4000,
+        contribution: { metricKey: 'ciclovias', value: '4' },
         tasks: [
-          { title: 'Relevamiento de rutas a escuelas', start: [2, 1], end: [3, 31], progressBp: 10000, weightBp: 4000 },
-          { title: 'Demarcación y cartelería', start: [4, 1], end: [8, 31], progressBp: 3000, weightBp: 6000 },
+          {
+            title: 'Relevamiento de rutas a escuelas',
+            start: [2, 1],
+            end: [3, 31],
+            progressBp: 10000,
+            weightBp: 4000,
+          },
+          {
+            title: 'Demarcación y cartelería',
+            start: [4, 1],
+            end: [8, 31],
+            progressBp: 3000,
+            weightBp: 6000,
+          },
         ],
       },
     ],
@@ -302,9 +343,24 @@ const OBJECTIVES: SeedObjective[] = [
         key: 'forestacion',
         title: 'Plan de forestación barrial',
         tasks: [
-          { title: 'Convenio con vivero provincial', start: [1, 10], end: [2, 20], progressBp: 10000 },
-          { title: 'Operativos de plantación por barrio', start: [3, 1], end: [11, 15], progressBp: 5500 },
-          { title: 'Campaña de cuidado del arbolado', start: [4, 1], end: [9, 30], progressBp: 2000 },
+          {
+            title: 'Convenio con vivero provincial',
+            start: [1, 10],
+            end: [2, 20],
+            progressBp: 10000,
+          },
+          {
+            title: 'Operativos de plantación por barrio',
+            start: [3, 1],
+            end: [11, 15],
+            progressBp: 5500,
+          },
+          {
+            title: 'Campaña de cuidado del arbolado',
+            start: [4, 1],
+            end: [9, 30],
+            progressBp: 2000,
+          },
         ],
       },
       {
@@ -329,7 +385,12 @@ const OBJECTIVES: SeedObjective[] = [
         key: 'portal',
         title: 'Portal de trámites en línea',
         tasks: [
-          { title: 'Relevar y rediseñar los 20 trámites más usados', start: [1, 15], end: [3, 31], progressBp: 10000 },
+          {
+            title: 'Relevar y rediseñar los 20 trámites más usados',
+            start: [1, 15],
+            end: [3, 31],
+            progressBp: 10000,
+          },
           { title: 'Desarrollo del portal', start: [4, 1], end: [8, 31], progressBp: 7000 },
           { title: 'Capacitación del personal', start: [9, 1], end: [10, 31], progressBp: 0 },
         ],
@@ -338,8 +399,18 @@ const OBJECTIVES: SeedObjective[] = [
         key: 'ventanilla',
         title: 'Ventanilla única presencial',
         tasks: [
-          { title: 'Reorganización de la mesa de entradas', start: [2, 1], end: [4, 30], progressBp: 10000 },
-          { title: 'Capacitación en atención al vecino', start: [5, 1], end: [7, 31], progressBp: 4000 },
+          {
+            title: 'Reorganización de la mesa de entradas',
+            start: [2, 1],
+            end: [4, 30],
+            progressBp: 10000,
+          },
+          {
+            title: 'Capacitación en atención al vecino',
+            start: [5, 1],
+            end: [7, 31],
+            progressBp: 4000,
+          },
         ],
       },
     ],
@@ -357,7 +428,12 @@ const OBJECTIVES: SeedObjective[] = [
         title: 'Recambio de luminarias LED, etapa 1',
         tasks: [
           { title: 'Licitación de luminarias', start: [1, 20], end: [3, 15], progressBp: 10000 },
-          { title: 'Instalación en avenidas principales', start: [3, 16], end: [9, 30], progressBp: 7500 },
+          {
+            title: 'Instalación en avenidas principales',
+            start: [3, 16],
+            end: [9, 30],
+            progressBp: 7500,
+          },
         ],
       },
     ],
@@ -374,7 +450,12 @@ const OBJECTIVES: SeedObjective[] = [
         key: 'linea147',
         title: 'Rediseño de la línea 147',
         tasks: [
-          { title: 'Nuevo sistema de seguimiento de reclamos', start: [2, 15], end: [6, 30], progressBp: 9000 },
+          {
+            title: 'Nuevo sistema de seguimiento de reclamos',
+            start: [2, 15],
+            end: [6, 30],
+            progressBp: 9000,
+          },
           { title: 'Tablero público de reclamos', start: [7, 1], end: [10, 15], progressBp: 2500 },
         ],
       },
@@ -386,6 +467,7 @@ const OBJECTIVES: SeedObjective[] = [
 async function wipeDemoBusinessData(organizationId: string): Promise<void> {
   const where = { organizationId };
   await prisma.metricObjectiveContext.deleteMany({ where });
+  await prisma.projectContribution.deleteMany({ where });
   await prisma.metricEntry.deleteMany({ where });
   await prisma.metricKrLink.deleteMany({ where });
   await prisma.project.updateMany({ where, data: { sourceObjectiveIndicatorId: null } });
@@ -421,7 +503,12 @@ async function main(): Promise<void> {
   // ── Organización (resuelve por slug; la crea si falta) ─────────────────────
   const org = await prisma.organization.upsert({
     where: { slug: DEMO_ORG_SLUG },
-    create: { id: DEMO_ORG_ID, slug: DEMO_ORG_SLUG, name: 'Municipalidad de San Carrillo', status: 'active' },
+    create: {
+      id: DEMO_ORG_ID,
+      slug: DEMO_ORG_SLUG,
+      name: 'Municipalidad de San Carrillo',
+      status: 'active',
+    },
     update: { name: 'Municipalidad de San Carrillo', status: 'active' },
   });
   const orgId = org.id;
@@ -430,7 +517,12 @@ async function main(): Promise<void> {
 
   await prisma.userOrganizationRole.upsert({
     where: { userId_organizationId: { userId: user.id, organizationId: orgId } },
-    create: { userId: user.id, organizationId: orgId, roleId: ROLE_ORG_ADMIN_ID, assignedByUserId: user.id },
+    create: {
+      userId: user.id,
+      organizationId: orgId,
+      roleId: ROLE_ORG_ADMIN_ID,
+      assignedByUserId: user.id,
+    },
     update: {},
   });
 
@@ -470,18 +562,35 @@ async function main(): Promise<void> {
   });
   const axisIds: Record<string, string> = {};
   for (const [i, axis] of [
-    { key: 'urbano', name: 'Ciudad sostenible', description: 'Espacio público, movilidad y ambiente.' },
-    { key: 'servicios', name: 'Servicios modernos y cercanos', description: 'Gestión digital y servicios urbanos de calidad.' },
+    {
+      key: 'urbano',
+      name: 'Ciudad sostenible',
+      description: 'Espacio público, movilidad y ambiente.',
+    },
+    {
+      key: 'servicios',
+      name: 'Servicios modernos y cercanos',
+      description: 'Gestión digital y servicios urbanos de calidad.',
+    },
   ].entries()) {
     const id = `seed-axis-${axis.key}`;
     await prisma.axis.create({
-      data: { id, strategicPlanId: plan.id, organizationId: orgId, name: axis.name, description: axis.description, order: i },
+      data: {
+        id,
+        strategicPlanId: plan.id,
+        organizationId: orgId,
+        name: axis.name,
+        description: axis.description,
+        order: i,
+      },
     });
     axisIds[axis.key] = id;
   }
 
   // ── N3: unidades (central + 3 operativas) con visión y misión ──────────────
-  let central = await prisma.orgUnit.findFirst({ where: { organizationId: orgId, kind: 'central', deletedAt: null } });
+  let central = await prisma.orgUnit.findFirst({
+    where: { organizationId: orgId, kind: 'central', deletedAt: null },
+  });
   const centralData = {
     name: 'Municipalidad de San Carrillo',
     vision: 'Un municipio que planifica, mide y rinde cuentas de lo que hace.',
@@ -489,7 +598,9 @@ async function main(): Promise<void> {
   };
   central = central
     ? await prisma.orgUnit.update({ where: { id: central.id }, data: centralData })
-    : await prisma.orgUnit.create({ data: { organizationId: orgId, kind: 'central', order: 0, ...centralData } });
+    : await prisma.orgUnit.create({
+        data: { organizationId: orgId, kind: 'central', order: 0, ...centralData },
+      });
 
   const unitIds: Record<string, string> = {};
   const unitDefs = [
@@ -601,6 +712,11 @@ async function main(): Promise<void> {
     for (const ind of o.indicators) {
       const m = METRICS.find((x) => x.key === ind.metricKey);
       if (!m) throw new Error(`métrica desconocida: ${ind.metricKey}`);
+      if (ind.feedsFromProjects && (m.kind !== 'output' || m.curvePoints)) {
+        throw new Error(
+          `${m.key}: el vínculo con proyectos exige una métrica output sin curva manual`,
+        );
+      }
       const progressBp = objectiveIndicatorProgressBp({
         metricBaseline: m.baseline,
         increments: incrementsByMetric.get(m.key) ?? [],
@@ -617,8 +733,12 @@ async function main(): Promise<void> {
           targetValue: m.target,
           direction: m.direction,
           weightBp: ind.weightBp ?? null,
-          expectedCurveMode: m.curvePoints ? 'manual' : 'linear',
-          linkMode: 'independent',
+          expectedCurveMode: ind.feedsFromProjects
+            ? 'from_projects'
+            : m.curvePoints
+              ? 'manual'
+              : 'linear',
+          linkMode: ind.feedsFromProjects ? 'execution_feeds_indicator' : 'independent',
           progressCachedBp: progressBp,
         },
       });
@@ -626,7 +746,8 @@ async function main(): Promise<void> {
         const metricBuckets = buildBuckets(range, m.frequency);
         for (const point of m.curvePoints) {
           const bucketDate = metricBuckets[point.bucketIndex];
-          if (!bucketDate) throw new Error(`bucket inexistente en la curva de ${m.key}: ${point.bucketIndex}`);
+          if (!bucketDate)
+            throw new Error(`bucket inexistente en la curva de ${m.key}: ${point.bucketIndex}`);
           await prisma.indicatorTargetPoint.create({
             data: {
               id: `seed-tp-${o.key}-${m.key}-${point.bucketIndex}`,
@@ -643,7 +764,12 @@ async function main(): Promise<void> {
 
     for (const key of o.contextMetricKeys ?? []) {
       await prisma.metricObjectiveContext.create({
-        data: { metricId: `seed-metric-${key}`, objectiveId, organizationId: orgId, createdByUserId: user.id },
+        data: {
+          metricId: `seed-metric-${key}`,
+          objectiveId,
+          organizationId: orgId,
+          createdByUserId: user.id,
+        },
       });
     }
 
@@ -651,7 +777,10 @@ async function main(): Promise<void> {
     const projectBp: Array<{ weightBp: number | null; progressBp: number }> = [];
     for (const p of o.projects) {
       const projectId = `seed-proj-${p.key}`;
-      const taskBp = p.tasks.map((t) => ({ weightBp: t.weightBp ?? null, progressBp: t.progressBp }));
+      const taskBp = p.tasks.map((t) => ({
+        weightBp: t.weightBp ?? null,
+        progressBp: t.progressBp,
+      }));
       const progressBp = computeProjectProgress(taskBp);
       const starts = p.tasks.map((t) => utc(t.start[0], t.start[1]).getTime());
       const ends = p.tasks.map((t) => utc(t.end[0], t.end[1]).getTime());
@@ -683,6 +812,26 @@ async function main(): Promise<void> {
             startsAt: utc(t.start[0], t.start[1]),
             endsAt: utc(t.end[0], t.end[1]),
             ownerUserId: user.id,
+          },
+        });
+      }
+      if (p.contribution) {
+        const target = o.indicators.find((i) => i.metricKey === p.contribution?.metricKey);
+        if (!target?.feedsFromProjects) {
+          throw new Error(
+            `${p.key}: aporta a ${p.contribution.metricKey}, que no recibe aportes de proyectos`,
+          );
+        }
+        // Un aporte de un proyecto al 100 % generaría una carga automática; el seed no la simula.
+        if (progressBp >= 10000)
+          throw new Error(`${p.key}: el seed no admite aportes de proyectos completos`);
+        await prisma.projectContribution.create({
+          data: {
+            id: `seed-contrib-${p.key}-${p.contribution.metricKey}`,
+            organizationId: orgId,
+            projectId,
+            objectiveIndicatorId: `seed-oi-${o.key}-${p.contribution.metricKey}`,
+            contributionValue: p.contribution.value,
           },
         });
       }
