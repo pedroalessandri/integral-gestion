@@ -60,6 +60,16 @@
 - Posible solución: 422 `ProjectDatesExcludeTasks` con la lista de tareas afectadas, como pide D7 para los períodos.
 - Origen: pregunta abierta de C08.
 
+### [F] Cambiar el `linkMode` o borrar un indicador con proyectos vinculados: 422 con la lista (ADR-0009 D5, regla 3)
+- Por qué: C11 valida `execution_feeds_indicator` solo para métricas `output` (RN-P14b) pero todavía no puede validar vínculos vigentes: `ProjectContribution` llega en C17 y `from_indicator` en F7. Hoy se puede cambiar el `linkMode` o borrar un indicador sin chequear proyectos que lo usan (`okr.project.source_objective_indicator_id` ya tiene FK, pero nadie lo setea todavía).
+- Posible solución: puerto `INDICATOR_LINK_READER` / `PROJECT_LINK_READER` (ADR-0009 D5) con la lista de proyectos vinculados; 422 en `update` (cambio de `linkMode`) y en `softDelete` de `ObjectiveIndicatorService`. Va con C17 / F7.
+- Origen: C11 (2026-10-08).
+
+### [F] Borrar un objetivo no da de baja sus ObjectiveIndicator
+- Por qué: `ObjectiveService.softDelete` no toca `metrics.objective_indicator`. C11 lo resuelve de lectura (los puertos filtran objetivos vivos, así que un indicador de un objetivo borrado no bloquea borrar la métrica ni cambiar su `kind`), pero las filas quedan vivas.
+- Posible solución: puerto en `common/contracts` (implementa `metrics`, inyecta `okr`) que da de baja los indicadores del objetivo en la misma transacción, con su `objective_indicator.deleted`.
+- Origen: C11 (2026-10-08).
+
 ### [B] `PeriodController` sin `TenantGuard` ni permisos: cualquier usuario autenticado lista o crea períodos de cualquier org
 - Por qué: `GET`/`POST orgs/:orgId/periods` y `GET periods/:id` solo tienen un TODO(ADR-0004): sin `TenantGuard`, sin `PermissionsGuard` y sin tenant scoping. `OrgParamGuard` (fix de `:orgId`) no alcanza ahí porque sin `TenantGuard` no hay org en el contexto. Lo mismo vale para los guards de `OrganizationController` (`orgs/:id`, operaciones de superadmin).
 - Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.

@@ -52,6 +52,7 @@ model Organization {
   metrics                 Metric[]
   metricEntries           MetricEntry[]
   metricKrLinks           MetricKrLink[]
+  objectiveIndicators     ObjectiveIndicator[]
   metricObjectiveContexts MetricObjectiveContext[]
   orgUnits                OrgUnit[]
   strategicPlans          StrategicPlan[]
@@ -349,7 +350,7 @@ model Project {
   endsAt                     DateTime  @map("ends_at") @db.Timestamptz(6)
   /// 'from_tasks' | 'from_indicator' — CHECK constraint in migration. Hoy solo 'from_tasks' es operable (F4/F7 habilita el otro).
   progressMode               String    @default("from_tasks") @map("progress_mode") @db.VarChar(15)
-  /// FK a metrics.objective_indicator se agrega por SQL crudo en F4 (la tabla todavía no existe).
+  /// FK a metrics.objective_indicator por SQL crudo (migración 20261008000002); sin relación en Prisma (convención cross-schema).
   sourceObjectiveIndicatorId String?   @map("source_objective_indicator_id")
   progressCachedBp           Int       @default(0) @map("progress_cached_bp")
   /// Idempotencia de la migración KR -> Project (ADR-0009 D6). Unique parcial en la migración SQL.
@@ -444,6 +445,7 @@ model Metric {
   entries           MetricEntry[]
   krLinks           MetricKrLink[]
   objectiveContexts MetricObjectiveContext[]
+  objectiveIndicators ObjectiveIndicator[]
 
   // Case-insensitive partial unique index uq_metric_org_period_name ON
   // (organization_id, period_id, lower(name)) WHERE deleted_at IS NULL
@@ -481,6 +483,43 @@ model MetricKrLink {
   @@index([metricId], map: "idx_mkl_metric")
   @@index([organizationId], map: "idx_mkl_org")
   @@map("metric_kr_link")
+  @@schema("metrics")
+}
+
+/// Vínculo objetivo <-> métrica (N4, ADR-0009 D2). Manda sobre Metric para base, meta y dirección (D8).
+/// FK a okr.objective por SQL crudo (sin relación en Prisma, convención cross-schema).
+/// Únicos parciales en la migración: (objective_id, metric_id) WHERE deleted_at IS NULL (no expresable en Prisma).
+model ObjectiveIndicator {
+  id                  String    @id @default(cuid())
+  organizationId      String    @map("organization_id")
+  objectiveId         String    @map("objective_id")
+  metricId            String    @map("metric_id")
+  baselineValue       Decimal   @map("baseline_value") @db.Decimal(18, 4)
+  targetValue         Decimal   @map("target_value") @db.Decimal(18, 4)
+  /// 'increasing' | 'decreasing' — CHECK constraint in migration.
+  direction           String    @db.VarChar(10)
+  /// Opcional, todo-o-nada entre indicadores hermanos (RN-P6). Basis points 0..10000.
+  weightBp            Int?      @map("weight_bp")
+  /// 'linear' | 'manual' | 'from_projects' — CHECK in migration. Hoy solo 'linear' es operable (curva: F6).
+  expectedCurveMode   String    @default("linear") @map("expected_curve_mode") @db.VarChar(15)
+  /// 'independent' | 'execution_feeds_indicator' | 'indicator_feeds_execution' — CHECK in migration (RN-P14b).
+  linkMode            String    @default("independent") @map("link_mode") @db.VarChar(30)
+  /// Avance de este indicador (bp). Alimenta Objective.resultProgressCachedBp.
+  progressCachedBp    Int       @default(0) @map("progress_cached_bp")
+  /// Idempotencia de la migración KR -> indicador (ADR-0009 D6). Unique parcial en la migración SQL.
+  legacyKeyResultId   String?   @map("legacy_key_result_id")
+  deletedAt           DateTime? @map("deleted_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  metric       Metric       @relation(fields: [metricId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, objectiveId], map: "idx_objective_indicator_org_objective")
+  @@index([objectiveId], map: "idx_objective_indicator_objective")
+  @@index([metricId], map: "idx_objective_indicator_metric")
+  @@index([deletedAt], map: "idx_objective_indicator_deleted_at")
+  @@map("objective_indicator")
   @@schema("metrics")
 }
 

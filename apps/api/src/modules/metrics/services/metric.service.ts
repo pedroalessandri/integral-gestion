@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -31,6 +32,8 @@ import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import { PeriodService } from '../../core/index.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
+import { OBJECTIVE_LOOKUP, type ObjectiveLookup } from '../../../common/contracts/index.js';
+import type { PrismaTransactionClient } from '../../audit/index.js';
 import type { CreateMetricDto } from '../dto/create-metric.dto.js';
 import type { UpdateMetricDto } from '../dto/update-metric.dto.js';
 import type { ListMetricsQueryDto } from '../dto/list-metrics-query.dto.js';
@@ -72,6 +75,7 @@ export class MetricService {
     private readonly prisma: PrismaService,
     private readonly periodService: PeriodService,
     private readonly auditEmitter: AuditEventEmitterService,
+    @Inject(OBJECTIVE_LOOKUP) private readonly objectiveLookup: ObjectiveLookup,
   ) {}
 
   async list(orgId: string, query: ListMetricsQueryDto): Promise<MetricSummaryDto[]> {
@@ -107,51 +111,75 @@ export class MetricService {
       );
     }
 
-    await this.assertNameAvailable(orgId, period.id, dto.name);
-
     return tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
-        const metric = (await tx.metric.create({
-          data: {
-            organizationId: orgId,
-            periodId: period.id,
-            name: dto.name,
-            unit: dto.unit,
-            direction: dto.direction,
-            frequency: dto.frequency,
-            kind: dto.kind,
-            source: dto.source ?? null,
-            description: dto.description ?? null,
-            baselineValue: dto.baselineValue ?? '0',
-            targetValue: dto.targetValue,
-          },
-          include: METRIC_PERIOD_INCLUDE,
-        })) as MetricRow;
-
-        await this.auditEmitter.emit({
-          action: 'metric.created',
-          entityType: 'metrics.metric',
-          entityId: metric.id,
-          diff: {
-            before: null,
-            after: {
-              name: metric.name,
-              unit: metric.unit,
-              direction: metric.direction,
-              frequency: metric.frequency,
-              kind: metric.kind,
-              source: metric.source,
-              description: metric.description,
-              baselineValue: metric.baselineValue.toString(),
-              targetValue: metric.targetValue.toString(),
-              periodId: metric.periodId,
-            },
-          },
-        });
-
+        const metric = await this.insertMetric(tx, orgId, period.id, dto);
         return this.toDetailDto(metric, 0n);
       }),
     );
+  }
+
+  /**
+   * Inserta la métrica y audita `metric.created` dentro de la transacción recibida. Lo usa `create` (período
+   * abierto de la org) y el alta de indicador en un solo paso (período del objetivo, ADR-0009 D8: la métrica
+   * toma base, meta y dirección del indicador como valores iniciales). Valida RN-M1 (nombre único por período).
+   */
+  async insertMetric(
+    tx: PrismaTransactionClient,
+    orgId: string,
+    periodId: string,
+    input: {
+      name: string;
+      unit: MetricUnit;
+      direction: MetricDirection;
+      frequency: MetricFrequency;
+      kind: MetricKind;
+      source?: string | null;
+      description?: string | null;
+      baselineValue?: string;
+      targetValue: string;
+    },
+  ): Promise<MetricRow> {
+    await this.assertNameAvailable(orgId, periodId, input.name);
+
+    const metric = (await tx.metric.create({
+      data: {
+        organizationId: orgId,
+        periodId,
+        name: input.name,
+        unit: input.unit,
+        direction: input.direction,
+        frequency: input.frequency,
+        kind: input.kind,
+        source: input.source ?? null,
+        description: input.description ?? null,
+        baselineValue: input.baselineValue ?? '0',
+        targetValue: input.targetValue,
+      },
+      include: METRIC_PERIOD_INCLUDE,
+    })) as MetricRow;
+
+    await this.auditEmitter.emit({
+      action: 'metric.created',
+      entityType: 'metrics.metric',
+      entityId: metric.id,
+      diff: {
+        before: null,
+        after: {
+          name: metric.name,
+          unit: metric.unit,
+          direction: metric.direction,
+          frequency: metric.frequency,
+          kind: metric.kind,
+          source: metric.source,
+          description: metric.description,
+          baselineValue: metric.baselineValue.toString(),
+          targetValue: metric.targetValue.toString(),
+          periodId: metric.periodId,
+        },
+      },
+    });
+    return metric;
   }
 
   async update(
@@ -165,6 +193,11 @@ export class MetricService {
 
     if (dto.name !== undefined && dto.name.toLowerCase() !== existing.name.toLowerCase()) {
       await this.assertNameAvailable(orgId, existing.periodId, dto.name, id);
+    }
+
+    // RN-P12: una métrica `output` con indicadores `execution_feeds_indicator` no puede pasar a `outcome`.
+    if (dto.kind === 'outcome' && existing.kind === 'output') {
+      await this.assertNoExecutionFeedsIndicator(id, orgId);
     }
 
     return tenantContextStorage.run(authContext, () =>
@@ -238,6 +271,14 @@ export class MetricService {
       );
     }
 
+    // ADR-0009 D2: una métrica que mide un objetivo no se borra; quitá primero el indicador del objetivo.
+    const objectiveIndicators = await this.findLiveObjectiveIndicators(id, orgId);
+    if (objectiveIndicators.length > 0) {
+      throw new ConflictException(
+        `MetricInUseByObjective: no se puede eliminar el indicador: mide ${objectiveIndicators.length} objetivo(s). Quitalo primero de los objetivos.`,
+      );
+    }
+
     await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         await tx.metric.update({
@@ -301,6 +342,36 @@ export class MetricService {
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
+
+  /** ObjectiveIndicators vivos de la métrica cuyo objetivo también está vivo (lectura del objetivo por puerto). */
+  private async findLiveObjectiveIndicators(
+    metricId: string,
+    orgId: string,
+  ): Promise<Array<{ id: string; objectiveId: string; linkMode: string }>> {
+    const rows = (await this.prisma.scoped.objectiveIndicator.findMany({
+      where: { metricId, organizationId: orgId, deletedAt: null },
+      select: { id: true, objectiveId: true, linkMode: true },
+    })) as Array<{ id: string; objectiveId: string; linkMode: string }>;
+    const liveObjectiveIds = new Set(
+      await this.objectiveLookup.filterLiveObjectiveIds(
+        orgId,
+        rows.map((r) => r.objectiveId),
+      ),
+    );
+    return rows.filter((r) => liveObjectiveIds.has(r.objectiveId));
+  }
+
+  /** RN-P12: `output` -> `outcome` se rechaza (422) si algún indicador de la métrica es `execution_feeds_indicator`. */
+  private async assertNoExecutionFeedsIndicator(metricId: string, orgId: string): Promise<void> {
+    const blocking = (await this.findLiveObjectiveIndicators(metricId, orgId)).filter(
+      (r) => r.linkMode === 'execution_feeds_indicator',
+    );
+    if (blocking.length > 0) {
+      throw new UnprocessableEntityException(
+        `MetricKindChangeBlocked: no se puede pasar el indicador de producto (output) a resultado (outcome): alimenta con aportes de proyectos a ${blocking.length} indicador(es) de objetivos (${blocking.map((b) => b.id).join(', ')}). Cambiá primero su vínculo con la gestión (RN-P12).`,
+      );
+    }
+  }
 
   private async findActiveOrThrow(id: string, orgId: string): Promise<MetricRow> {
     const metric = (await this.prisma.scoped.metric.findFirst({

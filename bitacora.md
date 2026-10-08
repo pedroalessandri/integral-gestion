@@ -15,6 +15,41 @@ Formato:
 
 ---
 
+## 2026-10-08 · C11 · backend-dev · feature/plan-f4-indicadores
+- Hecho:
+  - Migración `20261008000002_objective_indicator`, escrita a mano y aplicada con `migrate deploy`. Crea `metrics.objective_indicator`: base y meta NUMERIC(18,4), `direction`, `weight_bp` nullable, `expected_curve_mode`, `link_mode`, `progress_cached_bp`, `legacy_key_result_id` y `deleted_at`, con CHECKs, único parcial `(objective_id, metric_id)` entre vivos y FKs. También agrega la FK pendiente de C08 `okr.project.source_objective_indicator_id`.
+  - ABM en `metrics` bajo `okr/objectives/:id/indicators`, `okr/indicators/:id` y `PUT .../indicators/weights`. Se puede crear con `metricId` o con métrica inline, en la misma transacción y en el período del objetivo. Base, meta y dirección mandan desde el indicador (D8). Hay audit `objective_indicator.*`.
+  - Recálculo según ADR-0009 D5. En su transacción, `metrics` recalcula `progressCachedBp` de los indicadores y el agregado del objetivo (`computeResultProgress`). Después del commit emite `indicator.progress_changed` (`@nestjs/event-emitter`). En `okr`, `IndicatorProgressListener` setea `resultProgressCachedBp` de forma idempotente y audita `objective.result_progress_changed`. La gestión no se toca.
+  - Se dispara al crear, editar o borrar una `MetricEntry` o un indicador y al cambiar pesos.
+  - Pesos todo-o-nada con el helper movido a `common/weights`. Validaciones:
+    - RN-P12: `MetricKindChangeBlocked`.
+    - RN-P14b: `LinkModeRequiresOutputMetric`.
+    - Dirección contra (meta − base): `IndicatorDirectionMismatch`.
+  - Funciones puras: `objectiveIndicatorProgressBp` y `accumulatedValue` (`metrics-domain`), `computeResultProgress` (`okr-domain`).
+- Commit: este commit (`feat(metrics): ObjectiveIndicator con avance de resultado por evento post-commit, pesos opcionales y RN-P12`)
+- Verificación:
+  - `pnpm typecheck --force`: 5/5 OK.
+  - `pnpm --filter api test`: 37 archivos, 371 tests OK.
+  - `okr-domain`: 101 tests OK. `metrics-domain`: 46 tests OK.
+  - `pnpm --filter api lint`: 0 errores, 3 warnings preexistentes.
+  - `psql \d metrics.objective_indicator`: columnas, CHECKs, únicos parciales y FKs presentes, migración aplicada.
+  - Punta a punta en DB descartable `gp_c11` (ya borrada), con el oyente real por `@OnEvent`. El resultado pasó por 0 → 1250 → 3750 → 5000 → 3250 → 10000 y la gestión quedó fija en 4750. Hubo 7 audits `objective.result_progress_changed` con el actor del payload; los pasos sin cambio no auditaron.
+- Pendiente / desvíos:
+  - Dependencia nueva `@nestjs/event-emitter@^2.1.1` (la v3 pide Nest 11).
+  - El payload del evento suma `organizationId`, `actorId` y `requestId` a lo que pide el ADR. Con eso el oyente arma su contexto sin depender del ALS.
+  - El lock del grupo es un `pg_advisory_xact_lock` por objetivo en `metrics` y ya no bloquea la fila de `okr.objective`. Los mocks no detectaban que `$queryRaw` falla con una función `void`; se pasó a `$executeRaw`.
+  - El orden de eventos concurrentes no está garantizado. Quedó en tech-debt.
+  - Las rutas van bajo `okr/` sin `ModuleEnabledGuard`, como `ProjectController`.
+  - `expected_curve_mode` queda con default `linear` y sin DTO hasta F6.
+  - Borrar una métrica que mide un objetivo vivo da 409.
+  - No se corrieron los e2e.
+  - TODO.md suma 2 ítems: el 422 por proyectos vinculados (C17/F7) y que borrar un objetivo no da de baja sus indicadores. tech-debt suma 3 ítems.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08 y aplicadas en este mismo commit con amend):
+  - ✅ Respetar el ADR: el recálculo del objetivo va por evento post-commit, no por puerto síncrono. Se eliminó `OBJECTIVE_RESULT_RECOMPUTER`.
+  - ✅ Crear con métrica inline exige solo `okr:write`.
+  - ✅ Dirección que contradice el signo de (meta − base): 422, en create y en update.
+  - ✅ El valor actual es el acumulado de la métrica; la base del indicador solo entra en la interpolación.
+
 ## 2026-10-08 · C10 · backend-dev · feature/plan-f4-indicadores
 - Hecho: migración `20261008000001_metric_kind_source_frequencies` (escrita a mano, aplicada con `migrate deploy` porque `migrate dev` es interactivo): `chk_metric_frequency` suma `quarterly`, `semiannual` y `annual` (RN-P15); columnas `kind VARCHAR(10) NOT NULL DEFAULT 'output'` con `chk_metric_kind` (`output`|`outcome`), `source VARCHAR(500)` y `description VARCHAR(2000)` nullable. `metrics-domain/buckets.ts`: buckets trimestrales (ene/abr/jul/oct), semestrales (ene/jul) y anuales; si el período arranca a mitad de bucket, el primer bucket empieza en la fecha de inicio. Tipo `MetricKind`. DTOs: `kind` obligatorio en el create; `source` y `description` opcionales; en el update los tres son opcionales y `source`/`description` aceptan `null`; `frequency` sigue fuera del update (RN-P16, lo rechaza `forbidNonWhitelisted`); el filtro del listado acepta las 6 frecuencias. `MetricSummaryDto` y los payloads de audit `metric.created`/`metric.updated` llevan los campos nuevos. En web, solo las 3 etiquetas nuevas de `FREQUENCY_LABELS` (`Record` exhaustivo).
 - Commit: este commit (`feat(metrics): frecuencias trimestral, semestral y anual, y tipo, fuente y descripción del indicador`)

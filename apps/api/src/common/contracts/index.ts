@@ -15,3 +15,5 @@ export type {
 } from './objective-links.port.js';
 export { ORG_UNIT_HIERARCHY } from './org-unit-hierarchy.port.js';
 export type { OrgUnitHierarchy } from './org-unit-hierarchy.port.js';
+export { OBJECTIVE_LOOKUP } from './objective-indicator.port.js';
+export type { ObjectiveRef, ObjectiveLookup } from './objective-indicator.port.js';

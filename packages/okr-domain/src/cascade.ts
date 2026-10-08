@@ -1,4 +1,4 @@
-import type { OptionalWeightInput, ProjectInput, ProjectTaskInput, TaskInput } from './types';
+import type { IndicatorInput, OptionalWeightInput, ProjectInput, ProjectTaskInput, TaskInput } from './types';
 import { weightMode } from './invariants';
 
 /**
@@ -134,4 +134,12 @@ export function computeProjectProgress(tasks: ReadonlyArray<ProjectTaskInput>): 
  */
 export function computeExecutionProgress(projects: ReadonlyArray<ProjectInput>): number {
   return aggregateProgressBp(projects, 'project');
+}
+
+/**
+ * RN-P8: an Objective's result progress = (weighted or simple) mean of its indicators' progress.
+ * RN-P6 applies (all-or-nothing weights). Never combined with execution progress.
+ */
+export function computeResultProgress(indicators: ReadonlyArray<IndicatorInput>): number {
+  return aggregateProgressBp(indicators, 'indicator');
 }

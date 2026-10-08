@@ -1,4 +1,5 @@
 import { parseDecimal4 } from './decimal';
+import { accumulatedValue } from './accumulate';
 
 /**
  * Linear-interpolation progress in basis points (Int 0..10000):
@@ -71,4 +72,27 @@ export function deviationBp(input: {
   if (span === 0n) return 0;
 
   return Number(((actual - expected) * 10_000n) / span);
+}
+
+/**
+ * Progress in basis points of an ObjectiveIndicator (RN-P8, ADR-0009 D8): the `baseline`, `target`
+ * (and implicit direction) are the ObjectiveIndicator's, not the Metric's. The actual value is the
+ * Metric's accumulated value (`metricBaseline` + Σ `increments`, RN-C5).
+ *
+ * A metric with no entries ("sin datos") yields 0 regardless of how baseline/target relate to the
+ * metric baseline (same criterion as RN-O6); otherwise a decreasing indicator would read 100% before
+ * any load. Never NaN.
+ */
+export function objectiveIndicatorProgressBp(input: {
+  metricBaseline: string;
+  increments: ReadonlyArray<string>;
+  baseline: string;
+  target: string;
+}): number {
+  if (input.increments.length === 0) return 0;
+  return progressBp({
+    actual: accumulatedValue(input.metricBaseline, input.increments),
+    baseline: input.baseline,
+    target: input.target,
+  });
 }

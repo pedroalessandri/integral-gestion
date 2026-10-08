@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { progressBp, computeAutomaticKrProgressBp } from './progress';
+import { progressBp, computeAutomaticKrProgressBp, objectiveIndicatorProgressBp } from './progress';
 
 describe('progressBp — interpolation edge cases', () => {
   it('increasing metric: linear midpoint → 5000bp', () => {
@@ -36,5 +36,39 @@ describe('computeAutomaticKrProgressBp', () => {
     const input = { actual: '75', baseline: '0', target: '100' };
     expect(computeAutomaticKrProgressBp(input)).toBe(progressBp(input));
     expect(computeAutomaticKrProgressBp(input)).toBe(7_500);
+  });
+});
+
+describe('objectiveIndicatorProgressBp', () => {
+  it('sin cargas -> 0, aunque el indicador sea decreciente y la base de la métrica ya esté en la meta', () => {
+    expect(
+      objectiveIndicatorProgressBp({ metricBaseline: '0', increments: [], baseline: '100', target: '0' }),
+    ).toBe(0);
+  });
+
+  it('usa base y meta del indicador y el acumulado de la métrica (base de la métrica + incrementos)', () => {
+    // métrica: base 0, +30 +20 -> acumulado 50; indicador: 0 -> 100
+    expect(
+      objectiveIndicatorProgressBp({ metricBaseline: '0', increments: ['30', '20'], baseline: '0', target: '100' }),
+    ).toBe(5_000);
+    // misma serie, pero el indicador tiene otra base/meta: 50 sobre 40 -> 80
+    expect(
+      objectiveIndicatorProgressBp({ metricBaseline: '0', increments: ['30', '20'], baseline: '40', target: '80' }),
+    ).toBe(2_500);
+  });
+
+  it('indicador decreciente: la dirección sale del signo de (meta - base)', () => {
+    expect(
+      objectiveIndicatorProgressBp({ metricBaseline: '100', increments: ['-40'], baseline: '100', target: '20' }),
+    ).toBe(5_000);
+  });
+
+  it('acota a 0..10000 y respeta incrementos negativos (compensatorios)', () => {
+    expect(
+      objectiveIndicatorProgressBp({ metricBaseline: '0', increments: ['500'], baseline: '0', target: '100' }),
+    ).toBe(10_000);
+    expect(
+      objectiveIndicatorProgressBp({ metricBaseline: '0', increments: ['50', '-80'], baseline: '0', target: '100' }),
+    ).toBe(0);
   });
 });

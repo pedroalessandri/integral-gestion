@@ -1,3 +1,4 @@
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -40,6 +41,8 @@ import { PlanningModule, PlanningContractsModule } from './modules/planning/inde
       isGlobal: true,
       validate: validateEnv,
     }),
+    // Eventos de dominio post-commit (ADR-0009 D5): solo efectos, nunca validaciones.
+    EventEmitterModule.forRoot(),
     ThrottlerModule.forRoot([
       {
         ttl: 60_000, // 60 seconds
