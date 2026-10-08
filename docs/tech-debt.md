@@ -46,29 +46,11 @@
 
 ## Infra
 
-### Sin CI que corra `next build` antes del merge
-- **Qué**: no hay workflows en `.github/workflows/`. Las corridas verifican con `tsc --noEmit` y lint, que no detectan errores propios del build de Next (p. ej. exports no `async` en archivos `'use server'`).
-- **Por qué importa**: el merge del PR #12 rompió el deploy de producción en Vercel (`Server Actions must be async functions` en `features/projects/project-actions.ts`) y producción quedó en el deploy anterior sin que se notara.
-- **Posible solución**: workflow de GitHub Actions en PRs con `pnpm install`, `pnpm typecheck`, `pnpm lint` y `pnpm --filter web build`; mientras tanto, sumar `pnpm --filter web build` a las verificaciones de las corridas de frontend.
-- **Prioridad**: alta.
-
 ### Custom domain del backend (apigestion.pialab.dev)
 - **Qué**: el frontend se sirve en `gestion.pialab.dev` (custom domain), pero el backend sigue en `gestion-publicaapi-production.up.railway.app`.
 - **Por qué importa**: documentado en ADR-0007 D3 como "decided, pending implementation". Mejora portabilidad y branding.
 - **Posible solución**: configurar custom domain en Railway, ajustar `NEXT_PUBLIC_API_URL` y CORS.
 - **Prioridad**: baja. Cosmético, no afecta funcionamiento.
-
-### Lint preexistente: eslint-module-utils/resolve
-- **Qué**: `pnpm --filter web lint` falla con `Cannot find module 'eslint-module-utils/resolve'`.
-- **Por qué importa**: bloquea correr lint local; aún no rompe CI porque CI no corre lint (verificar).
-- **Posible solución**: investigar incompatibilidad entre `eslint-config-next@16.x` (Next 15+ flat config) y `eslint-plugin-import`. Probable fix: actualizar `eslint-import-resolver-typescript` o downgrade alguno de los dos.
-- **Prioridad**: media. Activa cuando alguien intente correr lint local o cuando se quiera meter en CI.
-
-### Lint preexistente: variable sin usar en task.service.spec.ts
-- **Qué**: `pnpm --filter api lint` falla con 1 error: `mockKeyResultFindFirst` asignada pero nunca usada en `apps/api/src/modules/okr/services/task.service.spec.ts:61`. Existe en `main` (no lo introdujo la corrida de indicadores M1). Hay además un warning preexistente de `eslint-disable` sin uso en `ai/providers/openai.provider.ts:12`.
-- **Por qué importa**: `pnpm --filter api lint` sale con exit 1 por este error ajeno; enmascara errores de lint nuevos en corridas del api.
-- **Posible solución**: borrar el mock sin usar (o prefijarlo con `_`) y quitar el `eslint-disable` sobrante. Corrida trivial.
-- **Prioridad**: baja. No afecta typecheck, tests ni build (todos verdes).
 
 ### Controller de Key Result sin ValidationPipe (C05; Task resuelto en C08)
 - **Qué**: `KeyResultController` recibe `@Body()` con DTOs de `class-validator` pero sin `ValidationPipe` (ni global en `main.ts`), así que los decoradores no se ejecutan. C05 lo agregó en create/update de `ObjectiveController` y C08 en todo `TaskController` (más los endpoints nuevos de proyectos), porque tocó esos DTOs.
@@ -83,6 +65,27 @@
 - **Prioridad**: media.
 
 ## Resuelto
+
+### Sin CI que corra `next build` antes del merge
+- **Qué**: no hay workflows en `.github/workflows/`. Las corridas verifican con `tsc --noEmit` y lint, que no detectan errores propios del build de Next (p. ej. exports no `async` en archivos `'use server'`).
+- **Por qué importa**: el merge del PR #12 rompió el deploy de producción en Vercel (`Server Actions must be async functions` en `features/projects/project-actions.ts`) y producción quedó en el deploy anterior sin que se notara.
+- **Posible solución**: workflow de GitHub Actions en PRs con `pnpm install`, `pnpm typecheck`, `pnpm lint` y `pnpm --filter web build`; mientras tanto, sumar `pnpm --filter web build` a las verificaciones de las corridas de frontend.
+- **Prioridad**: alta.
+- **Resolución (2026-10-08)**: `.github/workflows/ci.yml` corre en cada PR y en `main`: install, `prisma:generate`, build de `packages/*`, `pnpm typecheck`, `pnpm lint`, `pnpm test` y `pnpm --filter web build`.
+
+### Lint preexistente: variable sin usar en task.service.spec.ts
+- **Qué**: `pnpm --filter api lint` falla con 1 error: `mockKeyResultFindFirst` asignada pero nunca usada en `apps/api/src/modules/okr/services/task.service.spec.ts:61`. Existe en `main` (no lo introdujo la corrida de indicadores M1). Hay además un warning preexistente de `eslint-disable` sin uso en `ai/providers/openai.provider.ts:12`.
+- **Por qué importa**: `pnpm --filter api lint` sale con exit 1 por este error ajeno; enmascara errores de lint nuevos en corridas del api.
+- **Posible solución**: borrar el mock sin usar (o prefijarlo con `_`) y quitar el `eslint-disable` sobrante. Corrida trivial.
+- **Prioridad**: baja. No afecta typecheck, tests ni build (todos verdes).
+- **Resolución (2026-10-08)**: se borró el mock sin usar para que `pnpm lint` pase en CI. El warning de `openai.provider.ts` sigue (es warning, no falla).
+
+### Lint preexistente: eslint-module-utils/resolve
+- **Qué**: `pnpm --filter web lint` falla con `Cannot find module 'eslint-module-utils/resolve'`.
+- **Por qué importa**: bloquea correr lint local; aún no rompe CI porque CI no corre lint (verificar).
+- **Posible solución**: investigar incompatibilidad entre `eslint-config-next@16.x` (Next 15+ flat config) y `eslint-plugin-import`. Probable fix: actualizar `eslint-import-resolver-typescript` o downgrade alguno de los dos.
+- **Prioridad**: media. Activa cuando alguien intente correr lint local o cuando se quiera meter en CI.
+- **Resolución (verificado 2026-10-08)**: `pnpm --filter web lint` corre sin ese error (0 errores, 2 warnings); ya no reproduce.
 
 ### Puerto ORG_UNIT_OBJECTIVE_COUNTER con implementación stub (C04 -> C05)
 - **Qué**: `PendingObjectiveOrgUnitCounter` devolvía siempre 0 porque `okr.objective.org_unit_id` llegaba recién con C05.
