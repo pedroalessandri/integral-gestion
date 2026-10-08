@@ -15,6 +15,24 @@ Formato:
 
 ---
 
+## 2026-10-08 · C14 · backend-dev · feature/plan-f6-curvas
+- Hecho:
+  - `metrics-domain/src/curves.ts` (puro, sin DB, valores como strings decimales / bp enteros):
+    - `expectedCurve({ mode, at, range, baseline, target, points | steps })`: `linear` reusa `expectedAt`; `manual` interpola en el tiempo entre `IndicatorTargetPoint` (desde (inicio, base) hasta el primer punto; constante después del último); `from_projects` es escalonada: `baseline + Σ contributionValue` de los pasos con `endsAt <= at`.
+    - `deviation({ actual, expected, baseline, target })`: envoltorio de `deviationBp` (ya existía; no se duplicó). Signo: positivo = adelantado hacia la meta, para ambas direcciones.
+    - `semaphore(devBp, thresholds = { yellowBp: 1000, redBp: 2500 })`: verde `dev >= -yellow`, amarillo `>= -red`, rojo debajo; adelantado siempre verde.
+    - `pendingBuckets(entries, buckets, today, graceDays = 10, periodEnd?)`: buckets cerrados hace más de `graceDays` días sin entry.
+  - Exportado desde el index; `dist` rebuildeado. `okr-domain` no se tocó (el desvío de gestión de RN-P9 sigue sin función propia ahí; ver preguntas).
+- Commit: este commit (`feat(metrics-domain): curvas esperadas, desvío, semáforo y cargas vencidas`)
+- Verificación: `pnpm --filter @gestion-publica/metrics-domain test` → 71/71 (25 nuevos, con fast-check); `pnpm typecheck` 6/6; `pnpm lint` 0 errores (1 warning preexistente); `pnpm test` 10/10 (api 390).
+- Pendiente / desvíos: `pendingBuckets` recibe un 5to parámetro opcional `periodEnd` (no está en el plan): sin él, el último bucket no tiene cierre conocido y nunca vence.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ Umbrales 10/25 puntos; bordes: exactamente -10 puntos es verde y exactamente -25 es amarillo.
+  - ✅ Manual: antes del primer punto se interpola desde la base en el inicio del período, por tiempo.
+  - ✅ Desvío y semáforo se mueven a un lugar común, ni `okr-domain` ni `metrics-domain` ("los OKR progresivamente van a tener menos peso"). Se hace en C15; el desvío de gestión (RN-P9) usa ese mismo lugar.
+  - ✅ El parámetro `periodEnd` de `pendingBuckets` queda aprobado.
+  - Sin cambio: `from_projects` parte de la base del indicador (D8) y sube en el `endsAt` planificado de cada proyecto con aporte (RN-P17); se revisa en C17.
+
 ## 2026-10-08 · C13 · backend-dev · feature/plan-f5-migracion
 - Hecho:
   - PA-1 quedó respondida por Pedro y registrada en SPEC §8 y en las Open questions del ADR-0009: no hay clientes con datos reales en producción; los datos viejos son descartables y se pueden borrar siempre. Desbloquea la Fase 5.
