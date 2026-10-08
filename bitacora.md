@@ -18,7 +18,7 @@ Formato:
 ## 2026-10-08 · C13 · backend-dev · feature/plan-f5-migracion
 - Hecho:
   - PA-1 quedó respondida por Pedro y registrada en SPEC §8 y en las Open questions del ADR-0009: no hay clientes con datos reales en producción; los datos viejos son descartables y se pueden borrar siempre. Desbloquea la Fase 5.
-  - `apps/api/src/database/migrate-to-planning.ts`: script idempotente con `--dry-run` (hace todo en una transacción por org y la revierte; los conteos son los reales) y `--org <slug>`. Por org: asegura la unidad central, crea "Sin asignar" (`ministry`) solo si hay objetivos sin unidad y se los asigna; KR `automatic` con `MetricKrLink` -> `ObjectiveIndicator` (métrica, base, meta, dirección y peso) y sus tareas a un proyecto "Tareas de <KR>"; KR `manual` (o automático sin vínculo) -> `Project` con título, owner, peso y fechas min/max de sus tareas o del período, y re-parenta sus tareas; recalcula indicador, proyecto y las dos lecturas del objetivo con `metrics-domain` / `okr-domain`. Idempotencia por `legacy_key_result_id` (indicador o proyecto). Audit `migration.*` con actor `system:migration` (un `request_id` por corrida); no hay UPDATE ni DELETE sobre `audit.event`.
+  - `apps/api/src/database/migrate-to-planning.ts`: script idempotente con `--dry-run` (hace todo en una transacción por org y la revierte; los conteos son los reales) y `--org <slug>`. Por org: asegura la unidad central, crea siempre "Sin asignar" (`ministry`) y le asigna los objetivos sin unidad; KR `automatic` con `MetricKrLink` -> `ObjectiveIndicator` (métrica, base, meta, dirección y peso) y sus tareas a un proyecto "Tareas de <KR>"; KR `manual` (o automático sin vínculo) -> `Project` con título, owner, peso y fechas min/max de sus tareas o del período, y re-parenta sus tareas; recalcula indicador, proyecto y las dos lecturas del objetivo con `metrics-domain` / `okr-domain`. Idempotencia por `legacy_key_result_id` (indicador o proyecto). Audit `migration.*` con actor `system:migration` (un `request_id` por corrida); no hay UPDATE ni DELETE sobre `audit.event`.
   - Lógica pura del mapeo en `planning-migration.ts` (19 tests Vitest sin DB, incluida la cascada de `okr-domain` sobre el resultado). Scripts de `apps/api`: `migrate:planning` y `migrate:planning:dry-run` (corren sobre `dist/`).
   - `seed-demo.ts` reescrito: "Municipalidad de San Carrillo" (org `demo`, año en curso), 1 plan con 2 ejes, central + 3 unidades con visión y misión, 5 objetivos (uno sin eje), 8 métricas / 8 indicadores (`output` mensuales, `outcome` semestral, trimestral, anual y mensual), 8 proyectos y 19 tareas, con resultado y gestión derivados por las funciones puras. Borra primero los datos de negocio de la org demo (PA-1) y no toca `audit.event`.
 - Commit: este commit (`feat(api): script de migración KR -> planificación y seed demo de San Carrillo`)
@@ -31,12 +31,13 @@ Formato:
   - Los nuevos y viejos `progress_cached_bp` del KR legacy no se tocan (`KeyResult` y `MetricKrLink` siguen vivos hasta F10).
   - El seed no emite audit (igual que el anterior y las migraciones de catálogo).
   - Un solo `$transaction` por org con timeout de 120 s; para una org muy grande habría que partir.
-- Preguntas abiertas:
-  - Pesos al partir los KR en indicadores y proyectos: ningún grupo suele sumar 10000. Se aplicó RN-P6 de forma conservadora: si el grupo resultante no queda completo y sumando 10000, queda sin pesos (promedio simple); no se renormaliza. El proyecto "Tareas de <KR>" no lleva peso propio. La SPEC no lo define: confirmar o pedir renormalización proporcional.
-  - KR `automatic` sin `MetricKrLink` se migra como proyecto. La SPEC no lo cubre.
-  - Dos KR del mismo objetivo con la misma métrica: el segundo queda como CONFLICTO y no se migra (único parcial objetivo+métrica).
-  - "Sin asignar" se crea solo si la org tiene objetivos sin unidad (la SPEC dice crearla siempre).
-  - "3 unidades" del seed se interpretó como 3 operativas bajo la central (4 en total).
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ Pesos al partir los KR en indicadores y proyectos: queda lo actual. Si el grupo resultante no queda completo y sumando 10000, queda sin pesos (promedio simple), sin renormalizar; "Tareas de <KR>" no lleva peso propio.
+  - ✅ KR `automatic` sin `MetricKrLink` se migra como proyecto.
+  - ✅ Dos KR del mismo objetivo con la misma métrica: el segundo queda como CONFLICTO y no se migra.
+  - ✅ "Sin asignar" se crea siempre, como dice la SPEC (corregido en un commit aparte sobre la misma rama).
+  - ✅ "3 unidades" del seed: 3 operativas bajo la central (4 en total).
+  - ✅ El seed no emite audit.
 
 ## 2026-10-08 · C12 · frontend-dev · feature/plan-f4-indicadores
 - Hecho:

@@ -3,8 +3,8 @@
  * expand -> migrate -> contract).
  *
  * Por cada organización:
- *  1. Asegura la unidad `central` y crea "Sin asignar" (`ministry`, hija de la central) para asignarle
- *     los objetivos vivos que no tienen unidad.
+ *  1. Asegura la unidad `central` y "Sin asignar" (`ministry`, hija de la central; se crea siempre) y
+ *     le asigna los objetivos vivos que no tienen unidad.
  *  2. Por cada KR vivo todavía no migrado:
  *       - `automatic` con `MetricKrLink` -> `ObjectiveIndicator` (misma métrica, base, meta, dirección y
  *         peso) y sus tareas pasan a un proyecto "Tareas de <KR>".
@@ -167,7 +167,8 @@ async function migrateOrganization(
   const unitOf = new Map<string, string>(); // objectiveId -> orgUnitId
   for (const o of objectives) if (o.orgUnitId) unitOf.set(o.id, o.orgUnitId);
 
-  if (unassigned.length > 0) {
+  // "Sin asignar" se crea siempre (SPEC §6.2.1, confirmado por Pedro en C13), haya o no objetivos sin unidad.
+  {
     let sinAsignar = await tx.orgUnit.findFirst({
       where: { organizationId, kind: 'ministry', parentId: central.id, name: UNASSIGNED_UNIT_NAME, deletedAt: null },
     });
