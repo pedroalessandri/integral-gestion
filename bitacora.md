@@ -31,10 +31,10 @@ Formato:
   - Bug de C14 detectado acá y corregido en este mismo commit (no quedó en TODO.md): `expectedCurve` manual devolvía la base en el instante exacto del inicio del período aunque hubiera un punto ahí (el seed tiene 1/ene → 18), así que el desvío con carga solo en el primer bucket se medía contra la base. Ahora un punto en el inicio (o antes) reemplaza al ancla (inicio, base); test de regresión en `curves.test.ts`.
   - La pestaña hace 1 request extra de `/status` por indicador (y uno de `target-points` por cada manual) más el del objetivo, en paralelo en el servidor.
   - Sin tests de componentes con Testing Library (no está en web): se probaron `SemaphoreBadge` y `PendingLoadBadge` con `renderToStaticMarkup`.
-- Preguntas abiertas:
-  - El último intervalo (inicio del último bucket) queda fijo en la meta. Para una frecuencia semestral en un período anual la meta se "alcanza" el 1/jul, no el 31/dic. Es lo que ya hace el seed y la API; ¿está bien o querés poder ubicar la meta en el fin del período?
-  - Nombres del semáforo en la UI: "En tiempo" (verde, incluye adelantado), "Atención" (amarillo), "Atrasado" (rojo). ¿Los cambiás?
-  - Con un solo intervalo en el período (ej: frecuencia anual) la curva manual no aporta nada: hoy se avisa pero se permite. ¿Se bloquea?
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ La meta queda en el inicio del último intervalo (para semestral en período anual, el 1/jul). Se deja así.
+  - ✅ Nombres del semáforo: "En tiempo", "Atención", "Atrasado".
+  - ✅ Un solo intervalo en el período: se permite; es una curva para ese período y listo. No se bloquea.
 
 ## 2026-10-08 · C15 · backend-dev · feature/plan-f6-curvas
 - Hecho:
