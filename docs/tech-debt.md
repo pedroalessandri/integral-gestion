@@ -118,3 +118,9 @@
 - **Por qué importa**: redundancia inofensiva; ensucia `\d okr.task`.
 - **Posible solución**: `DROP CONSTRAINT chk_task_weight_bp` en una migración futura (la ya aplicada no se edita).
 - **Prioridad**: baja.
+
+### La migración KR -> planificación reporta conflictos pero no los resuelve sola (C13)
+- **Qué**: `migrate-to-planning.ts` saltea (y reporta como `CONFLICTO`) los KR cuya métrica ya mide otro indicador vivo del mismo objetivo (único parcial objetivo+métrica) y los objetivos con hermanos ya ponderados donde habría que agregar. No hay una acción automática; hay que resolverlos a mano y volver a correr el script (es idempotente).
+- **Por qué importa**: con PA-1 respondida (no hay datos reales) no debería pasar; queda como red de seguridad.
+- **Posible solución**: ninguna hasta que aparezca un caso real. Se elimina junto con el script en el contract (F10).
+- **Prioridad**: baja.

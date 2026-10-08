@@ -175,7 +175,7 @@ Descartada por ahora: agrega un tercer módulo para un cálculo que los eventos 
 
 Preguntas de la SPEC §8. Mientras no haya respuesta, rige el default de la SPEC.
 
-- **PA-1** — ¿No hay clientes con datos reales en producción? Default: no los hay; se permite migración con transformación y reemplazo del seed. **Bloquea F5.**
+- **PA-1** — ¿No hay clientes con datos reales en producción? ✅ Respondida por Pedro (2026-10-08): no los hay; los datos viejos son descartables y se pueden borrar siempre. Se desbloquea F5.
 - **PA-2** — ¿Lectura de toda la org para usuarios de unidad (RN-P20)? Default: sí; la lectura restringida es una opción futura.
 - **PA-3** — ¿Aporte al 100% o proporcional? Default: al 100% (RN-P13).
 - **PA-4** — ¿Umbrales de semáforo? Default: 10 y 25 puntos.

@@ -1,36 +1,49 @@
 /**
- * Demo seed for the "indicadores" axis (Módulo 1 + Módulo 2).
+ * Seed demo: "Municipalidad de San Carrillo" (planificación de gobierno, ADR-0009; SPEC §6 punto 4).
  *
- * Idempotent and re-runnable: every row uses a deterministic id and is written
- * via `upsert`, so running the seed twice never duplicates data. Run it after
- * `prisma migrate deploy` with the compiled output:
+ * Contenido: 1 plan de gobierno (N1) con 2 ejes (N2); unidad central + 3 unidades operativas (N3: 2
+ * secretarías y 1 dirección con visión y misión); 5 objetivos estratégicos (N4) con indicadores `output`
+ * y `outcome` (incluye un `outcome` semestral, uno trimestral y uno anual), y proyectos con tareas (N5).
+ * Las dos lecturas de cada objetivo (resultado y gestión) se DERIVAN con las funciones puras de
+ * `metrics-domain` / `okr-domain`; no hay cachés hardcodeados.
+ *
+ * Idempotente y re-ejecutable: PA-1 (SPEC §8) confirma que los datos viejos son descartables, así que
+ * cada corrida BORRA todos los datos de negocio de la org demo (slug `demo`) y los recrea con ids
+ * determinísticos. No borra la organización, el usuario ni las membresías; `audit.event` no se toca
+ * (append-only). Se corre después de `prisma migrate deploy` y de compilar:
  *
  *   pnpm --filter api build
- *   node dist/database/seed-demo.js        # (or: pnpm --filter api prisma:seed)
+ *   pnpm --filter api prisma:seed        # node dist/database/seed-demo.js
  *
- * It uses a plain PrismaClient (NOT the tenant-scoped extension), writing
- * organizationId explicitly — a seed is a trusted, cross-tenant operation.
+ * Usa un PrismaClient plano (sin la extensión de tenant) y escribe `organizationId` explícito: un seed es
+ * una operación confiable cross-tenant.
  *
- * Progress caches are DERIVED with the same pure domain functions the runtime
- * uses (metrics-domain / okr-domain), never hardcoded — so the first cascade
- * request shows the values that the recompute hook would have produced, and any
- * later MetricEntry loaded through the API recomputes consistently.
+ * Decisiones (para revisión):
+ *  - Como las migraciones SQL de catálogo, el seed NO emite audit events (audit.event registra acciones
+ *    de usuarios en runtime, no datos de seed).
+ *  - La org demo conserva slug `demo` e id `seed-org-demo` (se renombra a "Municipalidad de San Carrillo")
+ *    para no romper el acceso del demo desplegado.
+ *  - El período es anual y sigue al año en curso (label "<año>"), así las cargas y buckets son vigentes.
+ *    Solo se cargan valores en buckets que ya empezaron.
+ *  - "3 unidades" se interpreta como 3 unidades operativas bajo la central (los objetivos solo cuelgan
+ *    de `ministry` o `area`, RN-P3).
  *
- * Decisions (recorded for review):
- *  - Like the existing SQL seed migrations, this seed does NOT emit audit events
- *    (audit.event records runtime user actions, not seed/catalog data).
- *  - The demo org is resolved by slug 'demo' (find-or-create); the open period is
- *    reused if the org already has one, else a ±90-day open period is created.
+ * Fuera del seed (todavía no existe en el código; se suma en F6/F7): curva esperada manual
+ * (`IndicatorTargetPoint`), curva `from_projects`, `ProjectContribution`, `linkMode` distinto de
+ * `independent` y proyectos `from_indicator`. Por eso hoy todos los indicadores usan curva lineal y el
+ * vínculo `independent`.
  */
 import { PrismaClient } from '@prisma/client';
 import {
   buildBuckets,
-  parseDecimal4,
-  formatDecimal4,
-  computeAutomaticKrProgressBp,
+  objectiveIndicatorProgressBp,
   type MetricFrequency,
 } from '@gestion-publica/metrics-domain';
-import { computeKrProgress, computeObjectiveProgress } from '@gestion-publica/okr-domain';
+import {
+  computeExecutionProgress,
+  computeProjectProgress,
+  computeResultProgress,
+} from '@gestion-publica/okr-domain';
 
 const prisma = new PrismaClient();
 
@@ -40,92 +53,346 @@ const DEMO_ORG_ID = 'seed-org-demo';
 const DEMO_PERIOD_ID = 'seed-period-demo';
 const ROLE_ORG_ADMIN_ID = 'role_org_admin';
 
-/** Sum increments over a baseline using the exact decimal path the backend uses. */
-function accumulate(baseline: string, increments: string[]): string {
-  let running = parseDecimal4(baseline);
-  for (const inc of increments) running += parseDecimal4(inc);
-  return formatDecimal4(running);
+const YEAR = new Date().getUTCFullYear();
+
+function utc(month: number, day: number, year = YEAR): Date {
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
-function addDays(base: Date, days: number): Date {
-  return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
-}
+// ── Definición del demo ───────────────────────────────────────────────────────
 
 interface SeedMetric {
-  id: string;
+  key: string;
   name: string;
   unit: 'number' | 'percent' | 'currency';
+  kind: 'output' | 'outcome';
   direction: 'increasing' | 'decreasing';
   frequency: MetricFrequency;
-  baselineValue: string;
-  targetValue: string;
-  /** One increment per used bucket index (null = leave that bucket empty). */
+  baseline: string;
+  target: string;
+  source: string;
+  description: string;
+  /** Un incremento por bucket usado (índice de bucket). Los buckets futuros se omiten. */
   entries: Array<{ bucketIndex: number; increment: string; comment?: string }>;
 }
 
 const METRICS: SeedMetric[] = [
   {
-    id: 'seed-metric-arboles',
-    name: 'Árboles podados',
+    key: 'ciclovias',
+    name: 'Kilómetros de ciclovía habilitados',
     unit: 'number',
+    kind: 'output',
     direction: 'increasing',
-    frequency: 'weekly',
-    baselineValue: '0',
-    targetValue: '500',
-    entries: [
-      { bucketIndex: 0, increment: '40' },
-      { bucketIndex: 1, increment: '55', comment: 'Cuadrilla reforzada esta semana' },
-      // bucket 2 intentionally empty (RN-O6 / flat curve segment)
-      { bucketIndex: 3, increment: '30' },
-    ],
-  },
-  {
-    id: 'seed-metric-desempleo',
-    name: 'Tasa de desempleo juvenil',
-    unit: 'percent',
-    direction: 'decreasing',
     frequency: 'monthly',
-    baselineValue: '8',
-    targetValue: '6',
+    baseline: '0',
+    target: '20',
+    source: 'Dirección de Tránsito',
+    description: 'Suma de kilómetros de ciclovía protegida habilitados al uso.',
     entries: [
-      { bucketIndex: 0, increment: '-0.5', comment: 'Programa de primer empleo' },
-      // bucket 1 intentionally empty
-      { bucketIndex: 2, increment: '-0.3' },
+      { bucketIndex: 0, increment: '1.5' },
+      { bucketIndex: 1, increment: '2' },
+      { bucketIndex: 2, increment: '2.5', comment: 'Tramo Av. Costanera' },
+      { bucketIndex: 4, increment: '1' },
     ],
   },
   {
-    id: 'seed-metric-reclamos',
+    key: 'bicicleta',
+    name: 'Viajes diarios en bicicleta cada mil habitantes',
+    unit: 'number',
+    kind: 'outcome',
+    direction: 'increasing',
+    frequency: 'semiannual',
+    baseline: '12',
+    target: '30',
+    source: 'Encuesta de movilidad municipal',
+    description: 'Viajes en bicicleta por día cada mil habitantes, relevados semestralmente.',
+    entries: [
+      { bucketIndex: 0, increment: '4', comment: 'Relevamiento de verano' },
+      { bucketIndex: 1, increment: '3' },
+    ],
+  },
+  {
+    key: 'arboles',
+    name: 'Árboles plantados',
+    unit: 'number',
+    kind: 'output',
+    direction: 'increasing',
+    frequency: 'monthly',
+    baseline: '0',
+    target: '1500',
+    source: 'Dirección de Espacios Verdes',
+    description: 'Ejemplares plantados en veredas y espacios públicos.',
+    entries: [
+      { bucketIndex: 1, increment: '120' },
+      { bucketIndex: 2, increment: '210', comment: 'Operativo de otoño' },
+      { bucketIndex: 3, increment: '180' },
+      { bucketIndex: 5, increment: '150' },
+    ],
+  },
+  {
+    key: 'verde',
+    name: 'Superficie verde por habitante (m²)',
+    unit: 'number',
+    kind: 'outcome',
+    direction: 'increasing',
+    frequency: 'annual',
+    baseline: '9',
+    target: '10.5',
+    source: 'Catastro municipal',
+    description: 'Metros cuadrados de espacio verde público por habitante, medición anual.',
+    entries: [{ bucketIndex: 0, increment: '0.4' }],
+  },
+  {
+    key: 'tramites',
+    name: 'Trámites digitalizados',
+    unit: 'percent',
+    kind: 'output',
+    direction: 'increasing',
+    frequency: 'monthly',
+    baseline: '0',
+    target: '100',
+    source: 'Secretaría de Modernización',
+    description: 'Porcentaje del catálogo de trámites disponible de punta a punta en línea.',
+    entries: [
+      { bucketIndex: 0, increment: '10' },
+      { bucketIndex: 1, increment: '15' },
+      { bucketIndex: 3, increment: '20', comment: 'Habilitación de trámites de comercio' },
+    ],
+  },
+  {
+    key: 'espera',
+    name: 'Tiempo promedio de resolución de un trámite (días)',
+    unit: 'number',
+    kind: 'outcome',
+    direction: 'decreasing',
+    frequency: 'quarterly',
+    baseline: '18',
+    target: '8',
+    source: 'Mesa de entradas',
+    description: 'Días corridos entre el inicio y la resolución de un trámite, promedio trimestral.',
+    entries: [
+      { bucketIndex: 0, increment: '-2' },
+      { bucketIndex: 1, increment: '-3', comment: 'Efecto de la ventanilla única' },
+    ],
+  },
+  {
+    key: 'luminarias',
+    name: 'Luminarias LED instaladas',
+    unit: 'number',
+    kind: 'output',
+    direction: 'increasing',
+    frequency: 'monthly',
+    baseline: '0',
+    target: '2400',
+    source: 'Dirección de Alumbrado',
+    description: 'Luminarias de sodio reemplazadas por tecnología LED.',
+    entries: [
+      { bucketIndex: 2, increment: '300' },
+      { bucketIndex: 3, increment: '420' },
+      { bucketIndex: 4, increment: '380' },
+    ],
+  },
+  {
+    key: 'reclamos',
     name: 'Reclamos pendientes',
     unit: 'number',
+    kind: 'outcome',
     direction: 'decreasing',
-    frequency: 'weekly',
-    baselineValue: '120',
-    targetValue: '40',
+    frequency: 'monthly',
+    baseline: '120',
+    target: '40',
+    source: 'Línea 147',
+    description: 'Reclamos vecinales abiertos al cierre de cada mes.',
     entries: [
       { bucketIndex: 0, increment: '-15' },
       { bucketIndex: 1, increment: '-10', comment: 'Backlog depurado' },
-      // bucket 2 empty
-      { bucketIndex: 3, increment: '-8' },
-    ],
-  },
-  {
-    id: 'seed-metric-tramites',
-    name: 'Trámites digitalizados',
-    unit: 'percent',
-    direction: 'increasing',
-    frequency: 'monthly',
-    baselineValue: '0',
-    targetValue: '100',
-    entries: [
-      { bucketIndex: 0, increment: '20' },
-      // bucket 1 empty
-      { bucketIndex: 2, increment: '15', comment: 'Nuevos trámites online' },
+      { bucketIndex: 3, increment: '-18' },
     ],
   },
 ];
 
+interface SeedTask {
+  title: string;
+  start: [number, number];
+  end: [number, number];
+  progressBp: number;
+  weightBp?: number;
+}
+
+interface SeedProject {
+  key: string;
+  title: string;
+  description?: string;
+  weightBp?: number;
+  tasks: SeedTask[];
+}
+
+interface SeedIndicator {
+  metricKey: string;
+  weightBp?: number;
+}
+
+interface SeedObjective {
+  key: string;
+  title: string;
+  description: string;
+  unitKey: string;
+  axisKey: string | null;
+  indicators: SeedIndicator[];
+  projects: SeedProject[];
+  contextMetricKeys?: string[];
+}
+
+const OBJECTIVES: SeedObjective[] = [
+  {
+    key: 'ciclovias',
+    title: 'Ampliar la red de ciclovías y fomentar la movilidad en bicicleta',
+    description: 'Conectar los barrios con el centro mediante ciclovías protegidas y bicisendas escolares.',
+    unitKey: 'obras',
+    axisKey: 'urbano',
+    indicators: [
+      { metricKey: 'ciclovias', weightBp: 7000 },
+      { metricKey: 'bicicleta', weightBp: 3000 },
+    ],
+    projects: [
+      {
+        key: 'costanera',
+        title: 'Ciclovía de la Av. Costanera',
+        description: 'Tramo de 8 km entre el puerto y el parque lineal.',
+        weightBp: 6000,
+        tasks: [
+          { title: 'Proyecto ejecutivo', start: [1, 5], end: [2, 28], progressBp: 10000, weightBp: 2000 },
+          { title: 'Licitación y adjudicación', start: [3, 1], end: [4, 30], progressBp: 10000, weightBp: 2000 },
+          { title: 'Obra civil y señalización', start: [5, 1], end: [10, 31], progressBp: 6000, weightBp: 6000 },
+        ],
+      },
+      {
+        key: 'bicisendas',
+        title: 'Bicisendas escolares',
+        weightBp: 4000,
+        tasks: [
+          { title: 'Relevamiento de rutas a escuelas', start: [2, 1], end: [3, 31], progressBp: 10000, weightBp: 4000 },
+          { title: 'Demarcación y cartelería', start: [4, 1], end: [8, 31], progressBp: 3000, weightBp: 6000 },
+        ],
+      },
+    ],
+    contextMetricKeys: ['reclamos'],
+  },
+  {
+    key: 'verde',
+    title: 'Aumentar el arbolado y la superficie verde por habitante',
+    description: 'Plan de forestación barrial y nuevos espacios verdes públicos.',
+    unitKey: 'verdes',
+    axisKey: 'urbano',
+    indicators: [{ metricKey: 'arboles' }, { metricKey: 'verde' }],
+    projects: [
+      {
+        key: 'forestacion',
+        title: 'Plan de forestación barrial',
+        tasks: [
+          { title: 'Convenio con vivero provincial', start: [1, 10], end: [2, 20], progressBp: 10000 },
+          { title: 'Operativos de plantación por barrio', start: [3, 1], end: [11, 15], progressBp: 5500 },
+          { title: 'Campaña de cuidado del arbolado', start: [4, 1], end: [9, 30], progressBp: 2000 },
+        ],
+      },
+      {
+        key: 'parque',
+        title: 'Parque lineal del arroyo',
+        tasks: [
+          { title: 'Estudio de impacto ambiental', start: [2, 1], end: [5, 31], progressBp: 8000 },
+          { title: 'Primera etapa de obra', start: [6, 1], end: [12, 15], progressBp: 1000 },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'tramites',
+    title: 'Simplificar y digitalizar los trámites municipales',
+    description: 'Que el vecino resuelva sus trámites sin ir al municipio y en menos tiempo.',
+    unitKey: 'modernizacion',
+    axisKey: 'servicios',
+    indicators: [{ metricKey: 'tramites' }, { metricKey: 'espera' }],
+    projects: [
+      {
+        key: 'portal',
+        title: 'Portal de trámites en línea',
+        tasks: [
+          { title: 'Relevar y rediseñar los 20 trámites más usados', start: [1, 15], end: [3, 31], progressBp: 10000 },
+          { title: 'Desarrollo del portal', start: [4, 1], end: [8, 31], progressBp: 7000 },
+          { title: 'Capacitación del personal', start: [9, 1], end: [10, 31], progressBp: 0 },
+        ],
+      },
+      {
+        key: 'ventanilla',
+        title: 'Ventanilla única presencial',
+        tasks: [
+          { title: 'Reorganización de la mesa de entradas', start: [2, 1], end: [4, 30], progressBp: 10000 },
+          { title: 'Capacitación en atención al vecino', start: [5, 1], end: [7, 31], progressBp: 4000 },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'alumbrado',
+    title: 'Modernizar el alumbrado público con tecnología LED',
+    description: 'Reemplazo de luminarias de sodio para mejorar la seguridad y reducir el consumo.',
+    unitKey: 'obras',
+    axisKey: 'servicios',
+    indicators: [{ metricKey: 'luminarias' }],
+    projects: [
+      {
+        key: 'led1',
+        title: 'Recambio de luminarias LED, etapa 1',
+        tasks: [
+          { title: 'Licitación de luminarias', start: [1, 20], end: [3, 15], progressBp: 10000 },
+          { title: 'Instalación en avenidas principales', start: [3, 16], end: [9, 30], progressBp: 7500 },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'atencion',
+    title: 'Mejorar la atención y la respuesta a los reclamos vecinales',
+    description: 'Objetivo sin eje: muestra que el eje es opcional (RN-P2).',
+    unitKey: 'modernizacion',
+    axisKey: null,
+    indicators: [{ metricKey: 'reclamos' }],
+    projects: [
+      {
+        key: 'linea147',
+        title: 'Rediseño de la línea 147',
+        tasks: [
+          { title: 'Nuevo sistema de seguimiento de reclamos', start: [2, 15], end: [6, 30], progressBp: 9000 },
+          { title: 'Tablero público de reclamos', start: [7, 1], end: [10, 15], progressBp: 2500 },
+        ],
+      },
+    ],
+  },
+];
+
+/** Borra los datos de negocio de la org demo (PA-1: descartables). `audit.event` no se toca. */
+async function wipeDemoBusinessData(organizationId: string): Promise<void> {
+  const where = { organizationId };
+  await prisma.metricObjectiveContext.deleteMany({ where });
+  await prisma.metricEntry.deleteMany({ where });
+  await prisma.metricKrLink.deleteMany({ where });
+  await prisma.project.updateMany({ where, data: { sourceObjectiveIndicatorId: null } });
+  await prisma.task.deleteMany({ where });
+  await prisma.project.deleteMany({ where });
+  await prisma.objectiveIndicator.deleteMany({ where });
+  await prisma.keyResult.deleteMany({ where });
+  await prisma.objective.deleteMany({ where });
+  await prisma.metric.deleteMany({ where });
+  await prisma.period.deleteMany({ where });
+  await prisma.axis.deleteMany({ where });
+  await prisma.strategicPlan.deleteMany({ where });
+  await prisma.userOrganizationRole.updateMany({ where, data: { orgUnitId: null } });
+  await prisma.orgUnit.deleteMany({ where: { organizationId, kind: 'area' } });
+  await prisma.orgUnit.deleteMany({ where: { organizationId, kind: 'ministry' } });
+}
+
 async function main(): Promise<void> {
-  // ── Demo user ──────────────────────────────────────────────────────────────
+  // ── Usuario demo ────────────────────────────────────────────────────────────
   const user = await prisma.user.upsert({
     where: { id: DEMO_USER_ID },
     create: {
@@ -138,33 +405,22 @@ async function main(): Promise<void> {
     update: {},
   });
 
-  // ── Demo org (resolve by slug; create if missing) ─────────────────────────
-  let org = await prisma.organization.findUnique({ where: { slug: DEMO_ORG_SLUG } });
-  if (!org) {
-    org = await prisma.organization.create({
-      data: {
-        id: DEMO_ORG_ID,
-        slug: DEMO_ORG_SLUG,
-        name: 'Organización Demo',
-        status: 'active',
-      },
-    });
-  }
+  // ── Organización (resuelve por slug; la crea si falta) ─────────────────────
+  const org = await prisma.organization.upsert({
+    where: { slug: DEMO_ORG_SLUG },
+    create: { id: DEMO_ORG_ID, slug: DEMO_ORG_SLUG, name: 'Municipalidad de San Carrillo', status: 'active' },
+    update: { name: 'Municipalidad de San Carrillo', status: 'active' },
+  });
   const orgId = org.id;
 
-  // ── Membership (org-admin) ────────────────────────────────────────────────
+  await wipeDemoBusinessData(orgId);
+
   await prisma.userOrganizationRole.upsert({
     where: { userId_organizationId: { userId: user.id, organizationId: orgId } },
-    create: {
-      userId: user.id,
-      organizationId: orgId,
-      roleId: ROLE_ORG_ADMIN_ID,
-      assignedByUserId: user.id,
-    },
+    create: { userId: user.id, organizationId: orgId, roleId: ROLE_ORG_ADMIN_ID, assignedByUserId: user.id },
     update: {},
   });
 
-  // ── Enable modules (okr + both indicadores) ───────────────────────────────
   for (const moduleKey of ['okr', 'indicadores-gestion', 'indicadores-okr']) {
     await prisma.organizationModule.upsert({
       where: { organizationId_moduleKey: { organizationId: orgId, moduleKey } },
@@ -173,197 +429,258 @@ async function main(): Promise<void> {
     });
   }
 
-  // ── Open period (reuse existing, else create a ±90-day one) ────────────────
-  let period = await prisma.period.findFirst({
-    where: { organizationId: orgId, status: 'open', deletedAt: null },
+  // ── Período anual ───────────────────────────────────────────────────────────
+  const period = await prisma.period.create({
+    data: {
+      id: DEMO_PERIOD_ID,
+      organizationId: orgId,
+      code: String(YEAR),
+      status: 'open',
+      startsAt: utc(1, 1),
+      endsAt: utc(12, 31),
+    },
   });
-  if (!period) {
-    const now = new Date();
-    period = await prisma.period.upsert({
-      where: { id: DEMO_PERIOD_ID },
-      create: {
-        id: DEMO_PERIOD_ID,
-        organizationId: orgId,
-        code: 'DEMO',
-        status: 'open',
-        startsAt: addDays(now, -90),
-        endsAt: addDays(now, 90),
-      },
-      update: {},
-    });
-  }
   const range = { startsAt: period.startsAt, endsAt: period.endsAt };
 
-  // ── Metrics + entries ─────────────────────────────────────────────────────
-  const actualByMetricId = new Map<string, string>();
+  // ── N1: plan de gobierno y N2: ejes ────────────────────────────────────────
+  const plan = await prisma.strategicPlan.create({
+    data: {
+      id: 'seed-plan',
+      organizationId: orgId,
+      title: `Plan de Gobierno ${YEAR - 1}-${YEAR + 3}`,
+      vision:
+        'San Carrillo, una ciudad cercana, verde y conectada, donde cada vecino accede a servicios públicos de calidad y a una administración transparente.',
+      mandateStartsAt: utc(12, 10, YEAR - 1),
+      mandateEndsAt: utc(12, 9, YEAR + 3),
+      status: 'active',
+    },
+  });
+  const axisIds: Record<string, string> = {};
+  for (const [i, axis] of [
+    { key: 'urbano', name: 'Ciudad sostenible', description: 'Espacio público, movilidad y ambiente.' },
+    { key: 'servicios', name: 'Servicios modernos y cercanos', description: 'Gestión digital y servicios urbanos de calidad.' },
+  ].entries()) {
+    const id = `seed-axis-${axis.key}`;
+    await prisma.axis.create({
+      data: { id, strategicPlanId: plan.id, organizationId: orgId, name: axis.name, description: axis.description, order: i },
+    });
+    axisIds[axis.key] = id;
+  }
+
+  // ── N3: unidades (central + 3 operativas) con visión y misión ──────────────
+  let central = await prisma.orgUnit.findFirst({ where: { organizationId: orgId, kind: 'central', deletedAt: null } });
+  const centralData = {
+    name: 'Municipalidad de San Carrillo',
+    vision: 'Un municipio que planifica, mide y rinde cuentas de lo que hace.',
+    mission: 'Coordinar la acción de gobierno y velar por el cumplimiento del plan.',
+  };
+  central = central
+    ? await prisma.orgUnit.update({ where: { id: central.id }, data: centralData })
+    : await prisma.orgUnit.create({ data: { organizationId: orgId, kind: 'central', order: 0, ...centralData } });
+
+  const unitIds: Record<string, string> = {};
+  const unitDefs = [
+    {
+      key: 'obras',
+      kind: 'ministry',
+      parentKey: null,
+      name: 'Secretaría de Obras y Servicios Públicos',
+      vision: 'Una ciudad bien equipada, con obras que mejoran la vida cotidiana.',
+      mission: 'Planificar, ejecutar y mantener la infraestructura y los servicios urbanos.',
+    },
+    {
+      key: 'modernizacion',
+      kind: 'ministry',
+      parentKey: null,
+      name: 'Secretaría de Modernización y Atención al Vecino',
+      vision: 'Trámites simples y una atención que resuelve.',
+      mission: 'Digitalizar la gestión y acercar el municipio al vecino.',
+    },
+    {
+      key: 'verdes',
+      kind: 'area',
+      parentKey: 'obras',
+      name: 'Dirección de Espacios Verdes',
+      vision: 'Barrios arbolados y plazas cuidadas.',
+      mission: 'Crear y mantener el arbolado y los espacios verdes públicos.',
+    },
+  ] as const;
+  for (const [i, def] of unitDefs.entries()) {
+    const parentId = def.parentKey ? unitIds[def.parentKey] : central.id;
+    const unit = await prisma.orgUnit.create({
+      data: {
+        id: `seed-unit-${def.key}`,
+        organizationId: orgId,
+        kind: def.kind,
+        parentId: parentId ?? central.id,
+        name: def.name,
+        vision: def.vision,
+        mission: def.mission,
+        order: i,
+      },
+    });
+    unitIds[def.key] = unit.id;
+  }
+
+  // ── Métricas + cargas ──────────────────────────────────────────────────────
+  const now = new Date();
+  const incrementsByMetric = new Map<string, string[]>();
   for (const m of METRICS) {
-    await prisma.metric.upsert({
-      where: { id: m.id },
-      create: {
-        id: m.id,
+    const id = `seed-metric-${m.key}`;
+    await prisma.metric.create({
+      data: {
+        id,
         organizationId: orgId,
         periodId: period.id,
         name: m.name,
         unit: m.unit,
+        kind: m.kind,
         direction: m.direction,
         frequency: m.frequency,
-        baselineValue: m.baselineValue,
-        targetValue: m.targetValue,
-      },
-      update: {
-        periodId: period.id,
-        baselineValue: m.baselineValue,
-        targetValue: m.targetValue,
+        source: m.source,
+        description: m.description,
+        baselineValue: m.baseline,
+        targetValue: m.target,
       },
     });
-
     const buckets = buildBuckets(range, m.frequency);
+    const increments: string[] = [];
     for (const [i, entry] of m.entries.entries()) {
       const bucketDate = buckets[entry.bucketIndex];
-      if (!bucketDate) continue; // period too short for this bucket — skip safely
-      const entryId = `seed-entry-${m.id}-${i}`;
-      await prisma.metricEntry.upsert({
-        where: { id: entryId },
-        create: {
-          id: entryId,
-          metricId: m.id,
+      if (!bucketDate || bucketDate.getTime() > now.getTime()) continue; // solo buckets que ya empezaron
+      await prisma.metricEntry.create({
+        data: {
+          id: `seed-entry-${m.key}-${i}`,
+          metricId: id,
           organizationId: orgId,
           bucketDate,
           incrementValue: entry.increment,
           comment: entry.comment ?? null,
           createdByUserId: user.id,
         },
-        update: { bucketDate, incrementValue: entry.increment, comment: entry.comment ?? null },
+      });
+      increments.push(entry.increment);
+    }
+    incrementsByMetric.set(m.key, increments);
+  }
+
+  // ── N4/N5: objetivos, indicadores, proyectos y tareas ──────────────────────
+  const summary: string[] = [];
+  for (const o of OBJECTIVES) {
+    const orgUnitId = unitIds[o.unitKey];
+    if (!orgUnitId) throw new Error(`unidad desconocida: ${o.unitKey}`);
+    const objectiveId = `seed-obj-${o.key}`;
+    await prisma.objective.create({
+      data: {
+        id: objectiveId,
+        organizationId: orgId,
+        periodId: period.id,
+        title: o.title,
+        description: o.description,
+        ownerUserId: user.id,
+        orgUnitId,
+        axisId: o.axisKey ? (axisIds[o.axisKey] ?? null) : null,
+      },
+    });
+
+    // Indicadores -> lectura de resultado
+    const indicatorBp: Array<{ weightBp: number | null; progressBp: number }> = [];
+    for (const ind of o.indicators) {
+      const m = METRICS.find((x) => x.key === ind.metricKey);
+      if (!m) throw new Error(`métrica desconocida: ${ind.metricKey}`);
+      const progressBp = objectiveIndicatorProgressBp({
+        metricBaseline: m.baseline,
+        increments: incrementsByMetric.get(m.key) ?? [],
+        baseline: m.baseline,
+        target: m.target,
+      });
+      await prisma.objectiveIndicator.create({
+        data: {
+          id: `seed-oi-${o.key}-${m.key}`,
+          organizationId: orgId,
+          objectiveId,
+          metricId: `seed-metric-${m.key}`,
+          baselineValue: m.baseline,
+          targetValue: m.target,
+          direction: m.direction,
+          weightBp: ind.weightBp ?? null,
+          expectedCurveMode: 'linear',
+          linkMode: 'independent',
+          progressCachedBp: progressBp,
+        },
+      });
+      indicatorBp.push({ weightBp: ind.weightBp ?? null, progressBp });
+    }
+
+    for (const key of o.contextMetricKeys ?? []) {
+      await prisma.metricObjectiveContext.create({
+        data: { metricId: `seed-metric-${key}`, objectiveId, organizationId: orgId, createdByUserId: user.id },
       });
     }
 
-    actualByMetricId.set(m.id, accumulate(m.baselineValue, m.entries.map((e) => e.increment)));
+    // Proyectos y tareas -> lectura de gestión
+    const projectBp: Array<{ weightBp: number | null; progressBp: number }> = [];
+    for (const p of o.projects) {
+      const projectId = `seed-proj-${p.key}`;
+      const taskBp = p.tasks.map((t) => ({ weightBp: t.weightBp ?? null, progressBp: t.progressBp }));
+      const progressBp = computeProjectProgress(taskBp);
+      const starts = p.tasks.map((t) => utc(t.start[0], t.start[1]).getTime());
+      const ends = p.tasks.map((t) => utc(t.end[0], t.end[1]).getTime());
+      await prisma.project.create({
+        data: {
+          id: projectId,
+          objectiveId,
+          organizationId: orgId,
+          orgUnitId,
+          title: p.title,
+          description: p.description ?? null,
+          ownerUserId: user.id,
+          weightBp: p.weightBp ?? null,
+          startsAt: new Date(Math.min(...starts)),
+          endsAt: new Date(Math.max(...ends)),
+          progressMode: 'from_tasks',
+          progressCachedBp: progressBp,
+        },
+      });
+      for (const [i, t] of p.tasks.entries()) {
+        await prisma.task.create({
+          data: {
+            id: `${projectId}-task-${i}`,
+            projectId,
+            organizationId: orgId,
+            title: t.title,
+            weightBp: t.weightBp ?? null,
+            progressBp: t.progressBp,
+            startsAt: utc(t.start[0], t.start[1]),
+            endsAt: utc(t.end[0], t.end[1]),
+            ownerUserId: user.id,
+          },
+        });
+      }
+      projectBp.push({ weightBp: p.weightBp ?? null, progressBp });
+    }
+
+    const resultProgressCachedBp = computeResultProgress(indicatorBp);
+    const executionProgressCachedBp = computeExecutionProgress(projectBp);
+    await prisma.objective.update({
+      where: { id: objectiveId },
+      data: { resultProgressCachedBp, executionProgressCachedBp },
+    });
+    summary.push(
+      `${o.key}: resultado=${(resultProgressCachedBp / 100).toFixed(1)}% gestión=${(executionProgressCachedBp / 100).toFixed(1)}%`,
+    );
   }
 
-  // ── Demo objective with one automatic KR + one manual KR ──────────────────
-  const desempleo = METRICS.find((m) => m.id === 'seed-metric-desempleo')!;
-  const autoBaseline = '8';
-  const autoTarget = '6';
-  const autoActual = actualByMetricId.get('seed-metric-desempleo')!;
-  // Derived — same interpolation the runtime hook uses (RN-O2/§3), not hardcoded.
-  const autoKrProgressBp = computeAutomaticKrProgressBp({
-    actual: autoActual,
-    baseline: autoBaseline,
-    target: autoTarget,
-  });
-
-  // Manual KR: single task at 60% weight-10000 → KR progress = computeKrProgress.
-  const manualTaskProgressBp = 6000;
-  const manualKrProgressBp = computeKrProgress([{ weightBp: 10000, progressBp: manualTaskProgressBp }]);
-
-  const objectiveProgressBp = computeObjectiveProgress([
-    { weightBp: 5000, progressBp: autoKrProgressBp },
-    { weightBp: 5000, progressBp: manualKrProgressBp },
-  ]);
-
-  await prisma.objective.upsert({
-    where: { id: 'seed-obj-demo' },
-    create: {
-      id: 'seed-obj-demo',
-      organizationId: orgId,
-      periodId: period.id,
-      title: 'Mejorar la empleabilidad juvenil del municipio',
-      description: 'Objetivo demo con un KR automático (indicador) y uno manual (tareas).',
-      ownerUserId: user.id,
-      progressCachedBp: objectiveProgressBp,
-    },
-    update: { periodId: period.id, progressCachedBp: objectiveProgressBp },
-  });
-
-  await prisma.keyResult.upsert({
-    where: { id: 'seed-kr-auto' },
-    create: {
-      id: 'seed-kr-auto',
-      objectiveId: 'seed-obj-demo',
-      organizationId: orgId,
-      title: 'Reducir la tasa de desempleo juvenil a 6%',
-      weightBp: 5000,
-      progressMode: 'automatic',
-      progressCachedBp: autoKrProgressBp,
-      ownerUserId: user.id,
-    },
-    update: { progressMode: 'automatic', progressCachedBp: autoKrProgressBp },
-  });
-
-  await prisma.keyResult.upsert({
-    where: { id: 'seed-kr-manual' },
-    create: {
-      id: 'seed-kr-manual',
-      objectiveId: 'seed-obj-demo',
-      organizationId: orgId,
-      title: 'Ejecutar el plan de capacitación en oficios',
-      weightBp: 5000,
-      progressMode: 'manual',
-      progressCachedBp: manualKrProgressBp,
-      ownerUserId: user.id,
-    },
-    update: { progressMode: 'manual', progressCachedBp: manualKrProgressBp },
-  });
-
-  // Manual KR task (dates within the period)
-  const taskStart = period.startsAt;
-  const taskEnd = new Date(Math.min(addDays(period.startsAt, 45).getTime(), period.endsAt.getTime()));
-  await prisma.task.upsert({
-    where: { id: 'seed-task-manual' },
-    create: {
-      id: 'seed-task-manual',
-      keyResultId: 'seed-kr-manual',
-      organizationId: orgId,
-      title: 'Dictar 3 cursos de oficios',
-      weightBp: 10000,
-      progressBp: manualTaskProgressBp,
-      startsAt: taskStart,
-      endsAt: taskEnd,
-      ownerUserId: user.id,
-    },
-    update: { progressBp: manualTaskProgressBp },
-  });
-
-  // ── Automatic KR ↔ metric link ────────────────────────────────────────────
-  await prisma.metricKrLink.upsert({
-    where: { keyResultId: 'seed-kr-auto' },
-    create: {
-      id: 'seed-link-auto',
-      metricId: desempleo.id,
-      keyResultId: 'seed-kr-auto',
-      organizationId: orgId,
-      baselineValue: autoBaseline,
-      targetValue: autoTarget,
-      direction: 'decreasing',
-      createdByUserId: user.id,
-    },
-    update: { baselineValue: autoBaseline, targetValue: autoTarget, direction: 'decreasing' },
-  });
-
-  // ── Objective context metric (visual only, RN-O10) ────────────────────────
-  await prisma.metricObjectiveContext.upsert({
-    where: { metricId_objectiveId: { metricId: 'seed-metric-reclamos', objectiveId: 'seed-obj-demo' } },
-    create: {
-      metricId: 'seed-metric-reclamos',
-      objectiveId: 'seed-obj-demo',
-      organizationId: orgId,
-      createdByUserId: user.id,
-    },
-    update: {},
-  });
-
-  // eslint-disable-next-line no-console
   console.log(
-    `[seed] OK — org=${orgId} period=${period.id} | KR automático=${(autoKrProgressBp / 100).toFixed(
-      1,
-    )}% (actual ${autoActual}) | objetivo=${(objectiveProgressBp / 100).toFixed(1)}%`,
+    `[seed] OK — org=${orgId} (${org.name}) período=${period.code} | ejes=${Object.keys(axisIds).length} unidades=${
+      Object.keys(unitIds).length + 1
+    } objetivos=${OBJECTIVES.length}\n[seed] ${summary.join('\n[seed] ')}`,
   );
 }
 
 main()
   .then(() => prisma.$disconnect())
   .catch(async (err) => {
-    // eslint-disable-next-line no-console
     console.error('[seed] FAILED:', err);
     await prisma.$disconnect();
     process.exit(1);
