@@ -40,6 +40,7 @@ Formato:
 - Preguntas abiertas (respondidas por Pedro el 2026-10-08):
   - ✅ Baja de un indicador: alcanza con el aviso actual (la métrica y sus cargas se conservan); no hace falta contar las cargas.
   - ✅ Peso de un solo indicador en el editor: por ahora no; se sigue editando en bloque. Queda a futuro en TODO.md (prioridad baja).
+- Smoke de Pedro (2026-10-08): OK, 3 buckets cargados y las barras de resultado y gestión se mueven por separado. Fase 4 mergeada (PR #16); CI de `main` en verde.
 
 ## 2026-10-08 · C11 · backend-dev · feature/plan-f4-indicadores
 - Hecho:
