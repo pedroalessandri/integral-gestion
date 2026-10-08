@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   NotFoundException,
   ConflictException,
@@ -6,6 +7,7 @@ import {
 } from '@nestjs/common';
 import type { MemberDto } from '@gestion-publica/shared-types/core';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
+import { ORG_UNIT_SCOPE, type OrgUnitScope } from '../../../common/contracts/index.js';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/audit-event-emitter.service.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
@@ -42,6 +44,7 @@ export class MemberService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   /**
@@ -92,7 +95,7 @@ export class MemberService {
   async inviteByEmail(
     authContext: AuthContext,
     organizationId: string,
-    input: { email: string; roleKey: string },
+    input: { email: string; roleKey: string; orgUnitId: string | null },
   ): Promise<MemberDto> {
     if (!isInvitableRole(input.roleKey)) {
       throw new BadRequestException(
@@ -109,6 +112,12 @@ export class MemberService {
         `InvalidRole: role key "${input.roleKey}" not found in the role catalog.`,
       );
     }
+
+    // Alcance del miembro nuevo: `orgUnitId` explícito (unidad o null = toda la org); la validación del DTO ya
+    // rechazó la omisión. Sin escalada: otorgar null exige alcance central.
+    const orgUnitId = input.orgUnitId;
+    await this.assertCanGrantScope(authContext, orgUnitId);
+    if (orgUnitId !== null) await this.assertUnitInOrg(organizationId, orgUnitId);
 
     return tenantContextStorage.run(authContext, () =>
       this.prismaService.runInTransaction(async (tx) => {
@@ -145,6 +154,7 @@ export class MemberService {
             organizationId,
             roleId: role.id,
             assignedByUserId: authContext.userId,
+            orgUnitId,
           },
           include: { user: true, role: true },
         });
@@ -155,13 +165,32 @@ export class MemberService {
           entityId: `${user.id}:${organizationId}`,
           diff: {
             before: null,
-            after: { roleId: role.id, roleKey: role.key },
+            after: { roleId: role.id, roleKey: role.key, orgUnitId },
           },
         });
 
         return this.toMemberDto(membership, membership.user, membership.role);
       }),
     );
+  }
+
+  /**
+   * Un actor con alcance en una unidad no puede dar un alcance mayor al suyo (escalada de privilegios):
+   * otorgar `null` (toda la org) exige alcance central; otorgar una unidad exige poder escribir en ella.
+   */
+  private async assertCanGrantScope(authContext: AuthContext, orgUnitId: string | null): Promise<void> {
+    if (orgUnitId === null) await this.orgUnitScope.assertCentralScope(authContext);
+    else await this.orgUnitScope.assertCanWriteInUnit(authContext, orgUnitId);
+  }
+
+  private async assertUnitInOrg(organizationId: string, orgUnitId: string): Promise<void> {
+    const unit = await this.prismaService.raw.orgUnit.findFirst({
+      where: { id: orgUnitId, organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!unit) {
+      throw new NotFoundException(`OrgUnit "${orgUnitId}" not found in this organization.`);
+    }
   }
 
   /**
@@ -192,6 +221,8 @@ export class MemberService {
     if (!existing) {
       throw new NotFoundException(`NotMember: User "${userId}" is not a member of this organization.`);
     }
+    // Sin escalada: hay que poder administrar el alcance actual del miembro (null = alcance central).
+    await this.assertCanGrantScope(authContext, existing.orgUnitId);
 
     // No-op if same role.
     if (existing.role.key === newRoleKey) {
@@ -240,6 +271,8 @@ export class MemberService {
     input: AssignMemberInput,
     authContext: AuthContext,
   ): Promise<MemberDto> {
+    // La membresía nueva queda con alcance null (toda la org): exige alcance central (sin escalada).
+    await this.orgUnitScope.assertCentralScope(authContext);
     const user = await this.resolveUser(input.userIdOrEmail);
 
     const existing = await this.prismaService.raw.userOrganizationRole.findUnique({
@@ -304,6 +337,7 @@ export class MemberService {
     if (!existing) {
       throw new NotFoundException(`Member ${userId} not found in this organization.`);
     }
+    await this.assertCanGrantScope(authContext, existing.orgUnitId);
 
     const newRole = await this.prismaService.raw.role.findFirst({
       where: { OR: [{ id: input.roleId }, { key: input.roleId }] },
@@ -356,6 +390,11 @@ export class MemberService {
     if (!existing) {
       throw new NotFoundException(`NotMember: User "${userId}" is not a member of this organization.`);
     }
+
+    // Sin escalada: quien reasigna el alcance debe poder otorgar el nuevo y administrar el actual del miembro.
+    await this.assertCanGrantScope(authContext, orgUnitId);
+    if (existing.orgUnitId === null) await this.orgUnitScope.assertCentralScope(authContext);
+    else await this.orgUnitScope.assertCanWriteInUnit(authContext, existing.orgUnitId);
 
     if (orgUnitId !== null) {
       const unit = await this.prismaService.raw.orgUnit.findFirst({
@@ -421,6 +460,7 @@ export class MemberService {
     if (!existing) {
       throw new NotFoundException(`Member ${userId} not found in this organization.`);
     }
+    await this.assertCanGrantScope(authContext, existing.orgUnitId);
 
     await tenantContextStorage.run(authContext, () =>
       this.prismaService.runInTransaction(async (tx) => {

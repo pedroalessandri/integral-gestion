@@ -43,6 +43,7 @@ export class TenantGuard implements CanActivate {
         ...authCtx,
         organizationId: orgId,
         permissions: [ALL_PERMISSIONS],
+        orgUnitId: null,
       };
       tenantContextStorage.enterWith(enriched);
       (request as Record<string, unknown>)['authContext'] = enriched;
@@ -75,6 +76,7 @@ export class TenantGuard implements CanActivate {
       ...authCtx,
       organizationId: orgId,
       permissions,
+      orgUnitId: membership.orgUnitId,
     };
     tenantContextStorage.enterWith(enriched);
     (request as Record<string, unknown>)['authContext'] = enriched;

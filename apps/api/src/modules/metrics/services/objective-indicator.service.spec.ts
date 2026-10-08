@@ -4,6 +4,7 @@
  * `okr-domain` y `metrics-domain` (sin mockear la cascada). `metrics` calcula el resultado agregado y avisa por el
  * evento `indicator.progress_changed` DESPUÉS del commit; acá se captura el evento y se prueba el orden.
  */
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   ConflictException,
@@ -166,6 +167,7 @@ function build(): ObjectiveIndicatorService {
     lookup as any,
     eventEmitter as any,
     projectLinks as any,
+    allowAllScope(),
   );
   /* eslint-enable @typescript-eslint/no-explicit-any */
 }

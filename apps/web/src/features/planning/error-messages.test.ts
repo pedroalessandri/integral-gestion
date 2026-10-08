@@ -35,3 +35,10 @@ describe('describeApiError: aportes', () => {
     expect(describeApiError({ status: 422, code: 'AutomaticEntryReadOnly', message: '' })).toMatch(/solo lectura/);
   });
 });
+
+describe('describeApiError: OrgUnitScopeForbidden', () => {
+  it('explica el alcance en lugar del 403 genérico', () => {
+    const msg = describeApiError({ status: 403, code: 'OrgUnitScopeForbidden', message: 'x' });
+    expect(msg).toContain('Tu alcance no incluye esta unidad');
+  });
+});

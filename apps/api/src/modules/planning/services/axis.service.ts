@@ -18,6 +18,8 @@ import { tenantContextStorage } from '../../auth/context/tenant-context-storage.
 import {
   AXIS_OBJECTIVE_COUNTER,
   AXIS_OBJECTIVE_UNASSIGNER,
+  ORG_UNIT_SCOPE,
+  type OrgUnitScope,
   type ObjectiveAxisCounter,
   type ObjectiveAxisUnassigner,
 } from '../../../common/contracts/index.js';
@@ -52,6 +54,7 @@ export class AxisService {
     private readonly objectiveCounter: ObjectiveAxisCounter,
     @Inject(AXIS_OBJECTIVE_UNASSIGNER)
     private readonly objectiveUnassigner: ObjectiveAxisUnassigner,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   /** Ejes vivos del plan activo, ordenados. Sin plan activo devuelve lista vacía. */
@@ -68,6 +71,7 @@ export class AxisService {
   }
 
   async create(organizationId: string, input: CreateAxisDto, authContext: AuthContext): Promise<AxisDto> {
+    await this.orgUnitScope.assertCentralScope(authContext); // RN-P19: N2 solo con alcance central
     return tenantContextStorage.run(authContext, () =>
       this.prismaService.runInTransaction(async (tx) => {
         const plan = await tx.strategicPlan.findFirst({
@@ -107,6 +111,7 @@ export class AxisService {
     input: UpdateAxisDto,
     authContext: AuthContext,
   ): Promise<AxisDto> {
+    await this.orgUnitScope.assertCentralScope(authContext); // RN-P19
     return tenantContextStorage.run(authContext, () =>
       this.prismaService.runInTransaction(async (tx) => {
         const existing = await tx.axis.findFirst({ where: { id, organizationId, deletedAt: null } });
@@ -141,6 +146,7 @@ export class AxisService {
   }
 
   async softDelete(organizationId: string, id: string, authContext: AuthContext): Promise<DeleteAxisResultDto> {
+    await this.orgUnitScope.assertCentralScope(authContext); // RN-P19
     return tenantContextStorage.run(authContext, () =>
       this.prismaService.runInTransaction(async (tx) => {
         const existing = await tx.axis.findFirst({ where: { id, organizationId, deletedAt: null } });

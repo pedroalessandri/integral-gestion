@@ -66,3 +66,19 @@ export class UpdateOrgUnitBodyDto {
   @Max(100000)
   order?: number;
 }
+
+/**
+ * Body de `PATCH org-units/:id/vision-mission`: solo visión y misión (N3). Cualquier otra propiedad se rechaza
+ * (forbidNonWhitelisted en el controller), así que este endpoint nunca toca la estructura del árbol.
+ */
+export class UpdateOrgUnitVisionBodyDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  vision?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  mission?: string | null;
+}

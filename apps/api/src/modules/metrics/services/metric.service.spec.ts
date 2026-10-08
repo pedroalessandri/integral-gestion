@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { allowAllScope } from '../../../common/testing/org-unit-scope.stub.js';
 import {
   ConflictException,
   ForbiddenException,
@@ -15,7 +16,7 @@ const mockScoped = {
   objectiveIndicator: { findMany: vi.fn().mockResolvedValue([]) },
   projectContribution: { count: vi.fn().mockResolvedValue(0) },
 };
-const mockObjectiveLookup = { filterLiveObjectiveIds: vi.fn().mockResolvedValue([]) };
+const mockObjectiveLookup = { filterLiveObjectiveIds: vi.fn().mockResolvedValue([]), findLiveObjectives: vi.fn().mockResolvedValue([]) };
 const mockTx = {
   metric: { create: vi.fn(), update: vi.fn() },
 };
@@ -81,6 +82,7 @@ describe('MetricService', () => {
       mockAuditEmitter as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockObjectiveLookup as any,
+      allowAllScope(),
     );
   });
 
@@ -318,8 +320,10 @@ describe('MetricService', () => {
       mockScoped.metricEntry.findMany.mockResolvedValue([]);
       mockTx.metric.update.mockResolvedValue({ ...metricRow, kind: 'outcome' });
 
+      // La única consulta es la del alcance (RN-P20); la de RN-P12 (indicadores con aportes) no ocurre.
       await service.update('metric-1', 'org-1', { kind: 'outcome' }, authContext);
-      expect(mockScoped.objectiveIndicator.findMany).not.toHaveBeenCalled();
+      expect(mockScoped.objectiveIndicator.findMany).toHaveBeenCalledTimes(1);
+      expect(mockScoped.projectContribution.count).not.toHaveBeenCalled();
     });
   });
 

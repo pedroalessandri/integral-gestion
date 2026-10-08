@@ -11,6 +11,8 @@ export type PermissionKey =
   | 'core:period:manage'
   | 'core:member:manage'
   | 'core:module:manage'
+  | 'core:org-unit:manage'
+  | 'core:org-unit:vision:write'
   | 'core:user:read'
   | 'audit:read'
   | 'audit:read:all'

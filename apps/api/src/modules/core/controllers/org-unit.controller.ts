@@ -12,7 +12,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { OrgUnitService } from '../services/org-unit.service.js';
-import { CreateOrgUnitBodyDto, UpdateOrgUnitBodyDto } from '../dto/org-unit.dto.js';
+import { CreateOrgUnitBodyDto, UpdateOrgUnitBodyDto, UpdateOrgUnitVisionBodyDto } from '../dto/org-unit.dto.js';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
@@ -34,6 +34,7 @@ import type { AuthContext } from '@gestion-publica/shared-types/auth';
  *   GET    /api/v1/orgs/:orgId/org-units/:id
  *   POST   /api/v1/orgs/:orgId/org-units
  *   PATCH  /api/v1/orgs/:orgId/org-units/:id    — editar / mover
+ *   PATCH  /api/v1/orgs/:orgId/org-units/:id/vision-mission — solo visión y misión ('core:org-unit:vision:write' + alcance)
  *   DELETE /api/v1/orgs/:orgId/org-units/:id    — soft delete
  */
 @Controller('orgs/:orgId/org-units')
@@ -78,6 +79,22 @@ export class OrgUnitController {
     @CurrentUser() user: AuthContext,
   ) {
     return this.orgUnitService.update(orgId, id, body, user);
+  }
+
+  /**
+   * Edita solo visión y misión de la unidad (N3). Permiso fino `core:org-unit:vision:write`; el service exige además
+   * alcance sobre la unidad (la propia o una descendiente). La estructura sigue en `PATCH :id` (manage + central).
+   */
+  @Patch(':id/vision-mission')
+  @Permissions('core:org-unit:vision:write')
+  async updateVisionMission(
+    @Param('orgId') orgId: string,
+    @Param('id') id: string,
+    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+    body: UpdateOrgUnitVisionBodyDto,
+    @CurrentUser() user: AuthContext,
+  ) {
+    return this.orgUnitService.update(orgId, id, { vision: body.vision, mission: body.mission }, user);
   }
 
   @Delete(':id')

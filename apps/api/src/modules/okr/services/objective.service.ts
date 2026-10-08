@@ -32,8 +32,10 @@ import {
 import {
   ACTIVE_AXIS_LOOKUP,
   ORG_UNIT_LOOKUP,
+  ORG_UNIT_SCOPE,
   type ActiveAxisLookup,
   type OrgUnitLookup,
+  type OrgUnitScope,
 } from '../../../common/contracts/index.js';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
@@ -115,6 +117,7 @@ export class ObjectiveService {
     private readonly memberService: MemberService,
     @Inject(ORG_UNIT_LOOKUP) private readonly orgUnitLookup: OrgUnitLookup,
     @Inject(ACTIVE_AXIS_LOOKUP) private readonly axisLookup: ActiveAxisLookup,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
   /**
@@ -184,6 +187,9 @@ export class ObjectiveService {
     dto: CreateObjectiveDto,
     authContext: AuthContext,
   ): Promise<ObjectiveDetailDto> {
+    // RN-P20: se escribe solo en la unidad propia y descendientes. Sin unidad (null) solo alcance central.
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, dto.orgUnitId ?? null);
+
     const period = await this.periodService.getCurrentOpenPeriod(orgId);
     if (!period) {
       throw new UnprocessableEntityException(
@@ -263,6 +269,12 @@ export class ObjectiveService {
     });
     if (!existing) {
       throw new NotFoundException(`Objective ${id} not found`);
+    }
+
+    // RN-P20: hay que poder escribir en la unidad actual y, si se mueve, también en la destino.
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { orgUnitId: string | null }).orgUnitId);
+    if (dto.orgUnitId !== undefined && dto.orgUnitId !== (existing as ObjectiveRow).orgUnitId) {
+      await this.orgUnitScope.assertCanWriteInUnit(authContext, dto.orgUnitId);
     }
 
     assertPeriodOpen((existing as { period: { id: string; status: 'open' | 'closed' | 'future'; code: string } }).period);
@@ -381,6 +393,8 @@ export class ObjectiveService {
     if (!existing) {
       throw new NotFoundException(`Objective ${id} not found`);
     }
+
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { orgUnitId: string | null }).orgUnitId);
 
     assertPeriodOpen((existing as { period: { id: string; status: 'open' | 'closed' | 'future'; code: string } }).period);
 
@@ -562,6 +576,8 @@ export class ObjectiveService {
     if (!existing) {
       throw new NotFoundException(`Objective ${id} not found`);
     }
+
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { orgUnitId: string | null }).orgUnitId);
 
     assertPeriodOpen((existing as { period: { id: string; status: 'open' | 'closed' | 'future'; code: string } }).period);
 

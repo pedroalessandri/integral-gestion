@@ -32,7 +32,7 @@ import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import { PeriodService } from '../../core/index.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
-import { OBJECTIVE_LOOKUP, type ObjectiveLookup } from '../../../common/contracts/index.js';
+import { OBJECTIVE_LOOKUP, ORG_UNIT_SCOPE, type ObjectiveLookup, type OrgUnitScope } from '../../../common/contracts/index.js';
 import type { PrismaTransactionClient } from '../../audit/index.js';
 import type { CreateMetricDto } from '../dto/create-metric.dto.js';
 import type { UpdateMetricDto } from '../dto/update-metric.dto.js';
@@ -76,7 +76,27 @@ export class MetricService {
     private readonly periodService: PeriodService,
     private readonly auditEmitter: AuditEventEmitterService,
     @Inject(OBJECTIVE_LOOKUP) private readonly objectiveLookup: ObjectiveLookup,
+    @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
+
+  /**
+   * RN-P20: regla de escritura sobre una métrica existente (edición, borrado, cargas). Se exige poder escribir en
+   * la unidad de CADA objetivo vivo que la usa como indicador. Una métrica sin objetivos es de la organización
+   * completa y se asocia a la unidad central: solo la escribe el alcance central. Un objetivo sin unidad también
+   * exige alcance central.
+   */
+  async assertCanWriteMetric(metricId: string, orgId: string, authContext: AuthContext): Promise<void> {
+    const links = (await this.prisma.scoped.objectiveIndicator.findMany({
+      where: { metricId, organizationId: orgId, deletedAt: null },
+      select: { objectiveId: true },
+    })) as Array<{ objectiveId: string }>;
+    const objectiveIds = [...new Set(links.map((l) => l.objectiveId))];
+    const objectives = await this.objectiveLookup.findLiveObjectives(orgId, objectiveIds);
+    await this.orgUnitScope.assertCanWriteInAllUnits(
+      authContext,
+      objectives.map((o) => o.orgUnitId),
+    );
+  }
 
   async list(orgId: string, query: ListMetricsQueryDto): Promise<MetricSummaryDto[]> {
     const metrics = (await this.prisma.scoped.metric.findMany({
@@ -104,6 +124,8 @@ export class MetricService {
     dto: CreateMetricDto,
     authContext: AuthContext,
   ): Promise<MetricDetailDto> {
+    // Una métrica standalone es de toda la organización (unidad central): solo la crea el alcance central.
+    await this.orgUnitScope.assertCentralScope(authContext);
     const period = await this.periodService.getCurrentOpenPeriod(orgId);
     if (!period) {
       throw new UnprocessableEntityException(
@@ -189,6 +211,7 @@ export class MetricService {
     authContext: AuthContext,
   ): Promise<MetricDetailDto> {
     const existing = await this.findActiveOrThrow(id, orgId);
+    await this.assertCanWriteMetric(id, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(existing.period));
 
     if (dto.name !== undefined && dto.name.toLowerCase() !== existing.name.toLowerCase()) {
@@ -259,6 +282,7 @@ export class MetricService {
 
   async softDelete(id: string, orgId: string, authContext: AuthContext): Promise<void> {
     const existing = await this.findActiveOrThrow(id, orgId);
+    await this.assertCanWriteMetric(id, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(existing.period));
 
     // RN-O7: a metric with active KR links cannot be deleted — unlink first.
