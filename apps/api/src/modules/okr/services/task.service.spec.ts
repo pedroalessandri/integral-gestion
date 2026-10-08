@@ -122,7 +122,7 @@ describe('TaskService — date validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new TaskService(mockPrismaService as any, mockAuditEmitter as any);
+    service = new TaskService(mockPrismaService as any, mockAuditEmitter as any, { publishTransitions: vi.fn() } as any);
   });
 
   it('creates a task when dates are within period bounds', async () => {
@@ -239,7 +239,7 @@ describe('TaskService — KR+Objective cache recomputation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new TaskService(mockPrismaService as any, mockAuditEmitter as any);
+    service = new TaskService(mockPrismaService as any, mockAuditEmitter as any, { publishTransitions: vi.fn() } as any);
     vi.spyOn(tenantContextStorage, 'run').mockImplementation((_ctx, fn) => fn());
   });
 

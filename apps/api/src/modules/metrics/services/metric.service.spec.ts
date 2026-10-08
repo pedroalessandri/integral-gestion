@@ -13,6 +13,7 @@ const mockScoped = {
   metricEntry: { findMany: vi.fn() },
   metricKrLink: { count: vi.fn().mockResolvedValue(0) },
   objectiveIndicator: { findMany: vi.fn().mockResolvedValue([]) },
+  projectContribution: { count: vi.fn().mockResolvedValue(0) },
 };
 const mockObjectiveLookup = { filterLiveObjectiveIds: vi.fn().mockResolvedValue([]) };
 const mockTx = {
@@ -265,6 +266,23 @@ describe('MetricService', () => {
       await expect(service.update('metric-1', 'org-1', { kind: 'outcome' }, authContext)).rejects.toThrow(
         /MetricKindChangeBlocked/,
       );
+      expect(mockTx.metric.update).not.toHaveBeenCalled();
+    });
+
+    it('422 si algún indicador de la métrica tiene aportes de proyectos (ProjectContribution), aunque no sea execution_feeds_indicator', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue(outputMetric);
+      mockScoped.objectiveIndicator.findMany.mockResolvedValue([
+        { id: 'oi-1', objectiveId: 'obj-1', linkMode: 'independent' },
+      ]);
+      mockObjectiveLookup.filterLiveObjectiveIds.mockResolvedValue(['obj-1']);
+      mockScoped.projectContribution.count.mockResolvedValueOnce(2);
+
+      await expect(service.update('metric-1', 'org-1', { kind: 'outcome' }, authContext)).rejects.toThrow(
+        /MetricKindChangeBlocked.*2 aporte\(s\) de proyectos/,
+      );
+      expect(mockScoped.projectContribution.count).toHaveBeenCalledWith({
+        where: { objectiveIndicatorId: { in: ['oi-1'] }, organizationId: 'org-1' },
+      });
       expect(mockTx.metric.update).not.toHaveBeenCalled();
     });
 

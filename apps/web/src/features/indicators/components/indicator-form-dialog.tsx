@@ -9,6 +9,7 @@ import type {
   IndicatorTargetPointDto,
   MetricUnit,
   ObjectiveIndicatorDto,
+  ObjectiveIndicatorLinkMode,
 } from '@gestion-publica/shared-types/metrics';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,7 +24,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { FREQUENCY_LABELS, UNIT_LABELS } from '@/components/metrics/format';
-import { EXPECTED_CURVE_MODE_LABELS, INDICATOR_KIND_LABELS, LABELS } from '@/lib/labels';
+import {
+  EXPECTED_CURVE_MODE_LABELS,
+  FROM_PROJECTS_UNAVAILABLE_LABELS,
+  INDICATOR_KIND_LABELS,
+  LABELS,
+  LINK_MODE_FIELD_LABELS,
+  LINK_MODE_LABELS,
+} from '@/lib/labels';
+import { fromProjectsAvailability, type FromProjectsAvailability } from '@/features/contributions/contributions';
 import { formatBpPercent } from '@/features/projects/weights';
 import {
   curveBuckets,
@@ -315,8 +324,15 @@ export function IndicatorFormDialog({
             </div>
           </div>
 
+          <LinkModeField
+            value={values.linkMode}
+            kind={values.kind}
+            onChange={(linkMode) => set('linkMode', linkMode)}
+          />
+
           <CurveEditor
             mode={values.curveMode}
+            fromProjects={fromProjectsAvailability(values)}
             buckets={buckets}
             pointValues={values.pointValues}
             targetValue={values.targetValue}
@@ -367,6 +383,8 @@ interface CurveEditorProps {
   buckets: string[];
   pointValues: Record<string, string>;
   targetValue: string;
+  /** "Desde proyectos" solo para `output` + `execution_feeds_indicator`. */
+  fromProjects: FromProjectsAvailability;
   /** Es manual pero no pudimos traer sus puntos: editarlos pisaría la curva guardada. */
   unavailable: boolean;
   onModeChange: (mode: EditableCurveMode) => void;
@@ -376,10 +394,12 @@ interface CurveEditorProps {
 /**
  * Modo de la curva esperada (RN-P17) y, en manual, un valor esperado acumulado por intervalo. El último intervalo vale
  * siempre la meta (la API exige que el último punto sea igual a ella); los demás son opcionales y, vacíos, se
- * interpolan. `Desde proyectos` se muestra deshabilitado hasta que existan los aportes de proyecto.
+ * interpolan. `Desde proyectos` se habilita solo para indicadores Producto con el vínculo de aportes; si no, queda
+ * deshabilitado con la explicación.
  */
 function CurveEditor({
   mode,
+  fromProjects: fromProjectsStatus,
   buckets,
   pointValues,
   targetValue,
@@ -388,6 +408,9 @@ function CurveEditor({
   onPointChange,
 }: CurveEditorProps) {
   const fromProjects = EXPECTED_CURVE_MODE_LABELS.from_projects;
+  const fromProjectsReason = fromProjectsStatus.available
+    ? null
+    : FROM_PROJECTS_UNAVAILABLE_LABELS[fromProjectsStatus.reason];
   return (
     <fieldset className="space-y-3 rounded-lg border border-neutral-200 p-3">
       <legend className="px-1 text-sm font-medium text-neutral-800">{LABELS.expectedCurve}</legend>
@@ -409,18 +432,22 @@ function CurveEditor({
           type="button"
           size="sm"
           role="radio"
-          aria-checked={false}
-          variant="outline"
-          disabled
-          title={fromProjects.hint}
+          aria-checked={mode === 'from_projects'}
+          variant={mode === 'from_projects' ? 'default' : 'outline'}
+          disabled={!fromProjectsStatus.available}
+          title={fromProjectsReason ?? fromProjects.hint}
+          aria-describedby={fromProjectsReason ? 'curve-from-projects-reason' : undefined}
+          onClick={() => onModeChange('from_projects')}
         >
           {fromProjects.label}
         </Button>
       </div>
       <p className="text-xs text-neutral-500">{EXPECTED_CURVE_MODE_LABELS[mode].hint}</p>
-      <p className="text-xs text-neutral-500">
-        {fromProjects.label}: {fromProjects.hint}
-      </p>
+      {fromProjectsReason && (
+        <p id="curve-from-projects-reason" className="text-xs text-neutral-500">
+          {fromProjects.label}: {fromProjectsReason}
+        </p>
+      )}
 
       {unavailable && (
         <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
@@ -473,5 +500,45 @@ function CurveEditor({
         </div>
       )}
     </fieldset>
+  );
+}
+
+interface LinkModeFieldProps {
+  value: ObjectiveIndicatorLinkMode;
+  kind: MetricKind;
+  onChange: (value: ObjectiveIndicatorLinkMode) => void;
+}
+
+/** Vínculo con la gestión (RN-P14b). "Los proyectos aportan" solo para Producto; el otro sentido se arma desde el proyecto. */
+function LinkModeField({ value, kind, onChange }: LinkModeFieldProps) {
+  const modes: ObjectiveIndicatorLinkMode[] =
+    value === 'indicator_feeds_execution'
+      ? ['independent', 'execution_feeds_indicator', 'indicator_feeds_execution']
+      : ['independent', 'execution_feeds_indicator'];
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="indicator-link-mode">{LINK_MODE_FIELD_LABELS.legend}</Label>
+      <select
+        id="indicator-link-mode"
+        value={value}
+        onChange={(e) => onChange(e.target.value as ObjectiveIndicatorLinkMode)}
+        className={SELECT_CLASS}
+        aria-describedby="indicator-link-mode-hint"
+      >
+        {modes.map((m) => (
+          <option
+            key={m}
+            value={m}
+            disabled={m === 'indicator_feeds_execution' || (m === 'execution_feeds_indicator' && kind !== 'output')}
+          >
+            {LINK_MODE_LABELS[m].label}
+          </option>
+        ))}
+      </select>
+      <p id="indicator-link-mode-hint" className="text-xs text-neutral-500">
+        {LINK_MODE_LABELS[value].hint}
+        {kind !== 'output' && ` ${LINK_MODE_FIELD_LABELS.outputOnly}`}
+      </p>
+    </div>
   );
 }

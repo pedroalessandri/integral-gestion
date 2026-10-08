@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import { ListChecks, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ProjectDetailDto, TaskSummaryDto } from '@gestion-publica/shared-types/okr';
+import type { ObjectiveIndicatorDto, ProjectContributionDto } from '@gestion-publica/shared-types/metrics';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/empty-state';
 import { StatusIcon } from '@/components/objectives/status-icon';
 import { TaskProgressSlider } from '@/components/objectives/task-progress-slider';
+import { ProjectContributionsSection } from '@/features/contributions';
 import { LABELS } from '@/lib/labels';
 import { useProjectTasks } from '../useProjectTasks';
 import { formatBpPercent } from '../weights';
@@ -30,6 +32,12 @@ interface Props {
   tasks: TaskSummaryDto[];
   /** Nombre del responsable ya resuelto por la página, o null. */
   ownerName: string | null;
+  /** Indicadores del objetivo (candidatos a recibir el aporte del proyecto). */
+  indicators: ObjectiveIndicatorDto[];
+  /** Aportes del proyecto a indicadores. */
+  contributions: ProjectContributionDto[];
+  /** Error al cargar indicadores o aportes; la sección lo muestra en lugar de la lista. */
+  contributionsError: string | null;
   readOnly: boolean;
 }
 
@@ -43,7 +51,17 @@ type DialogState =
 const dateFmt = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
 const formatDate = (iso: string) => dateFmt.format(new Date(iso));
 
-export function ProjectDetailPanel({ orgId, objective, project, tasks, ownerName, readOnly }: Props) {
+export function ProjectDetailPanel({
+  orgId,
+  objective,
+  project,
+  tasks,
+  ownerName,
+  indicators,
+  contributions,
+  contributionsError,
+  readOnly,
+}: Props) {
   const s = useProjectTasks(orgId, project, tasks);
   const [dialog, setDialog] = useState<DialogState>(null);
 
@@ -202,6 +220,15 @@ export function ProjectDetailPanel({ orgId, objective, project, tasks, ownerName
           </ul>
         )}
       </section>
+
+      <ProjectContributionsSection
+        orgId={orgId}
+        projectId={project.id}
+        indicators={indicators}
+        contributions={contributions}
+        loadError={contributionsError}
+        readOnly={readOnly}
+      />
 
       {tasks.length > 0 && (
         <section className="space-y-2" aria-labelledby="gantt-heading">

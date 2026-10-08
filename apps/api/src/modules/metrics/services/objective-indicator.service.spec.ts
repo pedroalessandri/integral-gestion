@@ -31,6 +31,8 @@ let indicators: Row[];
 let entries: Row[];
 let metrics: Row[];
 let points: Row[];
+let contributionRows: Row[];
+let liveProjectRows: Row[];
 let committed: boolean;
 let emitted: Array<{ name: string; payload: Record<string, unknown>; afterCommit: boolean }>;
 let seq: number;
@@ -86,6 +88,7 @@ const tx = {
   },
   metric: table(() => metrics),
   metricEntry: table(() => entries),
+  projectContribution: table(() => contributionRows),
   indicatorTargetPoint: {
     ...table(() => points),
     deleteMany: vi.fn(async ({ where }: { where: Row }) => {
@@ -127,6 +130,14 @@ const eventEmitter = {
     return [];
   }),
 };
+/** Puerto `PROJECT_LINK_READER` fake (proyectos vivos). `from_indicator` se arma con `sourceObjectiveIndicatorId`. */
+const projectLinks = {
+  findLiveProjects: vi.fn(async (_org: string, ids: string[]) => liveProjectRows.filter((p) => ids.includes(p['id'] as string))),
+  findLiveProjectsBySourceIndicator: vi.fn(async (_org: string, indicatorId: string) =>
+    liveProjectRows.filter((p) => p['sourceObjectiveIndicatorId'] === indicatorId),
+  ),
+  findLiveProject: vi.fn(),
+};
 const metricService = {
   insertMetric: vi.fn(async (_tx: unknown, orgId: string, periodId: string, input: Row) => {
     const row: Row = {
@@ -154,6 +165,7 @@ function build(): ObjectiveIndicatorService {
     metricService as any,
     lookup as any,
     eventEmitter as any,
+    projectLinks as any,
   );
   /* eslint-enable @typescript-eslint/no-explicit-any */
 }
@@ -203,6 +215,8 @@ beforeEach(() => {
   indicators = [];
   entries = [];
   points = [];
+  contributionRows = [];
+  liveProjectRows = [];
   metrics = [metric('m-1'), metric('m-2')];
   committed = false;
   emitted = [];
@@ -708,7 +722,8 @@ describe('curva esperada (RN-P17)', () => {
     expect(indicators).toHaveLength(0);
   });
 
-  it('from_projects se rechaza con 422 tipado (no hay ProjectContribution todavía)', async () => {
+  it('from_projects: solo para output con execution_feeds_indicator; en otro caso 422 ExpectedCurveModeNotAvailable', async () => {
+    // Sin vínculo de ejecución (independent), aunque sea output.
     await expect(
       build().create('obj-1', ORG, { metricId: 'm-1', expectedCurveMode: 'from_projects' }, authCtx),
     ).rejects.toThrow(/ExpectedCurveModeNotAvailable/);
@@ -716,6 +731,36 @@ describe('curva esperada (RN-P17)', () => {
     await expect(build().update('oi-1', ORG, { expectedCurveMode: 'from_projects' }, authCtx)).rejects.toThrow(
       /ExpectedCurveModeNotAvailable/,
     );
+    // Métrica outcome: ni siquiera con el vínculo (que de por sí se rechaza antes).
+    metrics.push(metric('m-out', { kind: 'outcome' }));
+    indicators.push(indicator('oi-out', 'm-out'));
+    await expect(
+      build().update('oi-out', ORG, { expectedCurveMode: 'from_projects', linkMode: 'indicator_feeds_execution' }, authCtx),
+    ).rejects.toThrow(/ExpectedCurveModeNotAvailable/);
+    expect(indicators.map((i) => i['expectedCurveMode'])).toEqual(['linear', 'linear']);
+  });
+
+  it('from_projects se puede crear y editar sobre output con execution_feeds_indicator', async () => {
+    const created = await build().create(
+      'obj-1',
+      ORG,
+      { metricId: 'm-1', linkMode: 'execution_feeds_indicator', expectedCurveMode: 'from_projects' },
+      authCtx,
+    );
+    expect(created).toMatchObject({ expectedCurveMode: 'from_projects', linkMode: 'execution_feeds_indicator' });
+
+    indicators.push(indicator('oi-2', 'm-2', { linkMode: 'execution_feeds_indicator' }));
+    const updated = await build().update('oi-2', ORG, { expectedCurveMode: 'from_projects' }, authCtx);
+    expect(updated.expectedCurveMode).toBe('from_projects');
+  });
+
+  it('un indicador en from_projects no puede perder el vínculo de ejecución (curva sin aportes)', async () => {
+    indicators.push(indicator('oi-1', 'm-1', { linkMode: 'execution_feeds_indicator', expectedCurveMode: 'from_projects' }));
+    await expect(build().update('oi-1', ORG, { linkMode: 'independent' }, authCtx)).rejects.toThrow(
+      /ExpectedCurveModeNotAvailable/,
+    );
+    const dto = await build().update('oi-1', ORG, { linkMode: 'independent', expectedCurveMode: 'linear' }, authCtx);
+    expect(dto).toMatchObject({ linkMode: 'independent', expectedCurveMode: 'linear' });
   });
 
   it('el último punto debe ser igual a la meta (RN-P17)', async () => {
@@ -815,5 +860,49 @@ describe('curva esperada (RN-P17)', () => {
     expect(scoped.indicatorTargetPoint.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ organizationId: ORG, objectiveIndicatorId: 'oi-1' }) }),
     );
+  });
+});
+
+describe('proyectos vinculados vigentes (ADR-0009 D5 regla 3)', () => {
+  beforeEach(() => {
+    indicators.push(indicator('oi-1', 'm-1', { linkMode: 'execution_feeds_indicator' }));
+    contributionRows.push({ id: 'pc-1', organizationId: ORG, objectiveIndicatorId: 'oi-1', projectId: 'p-1' });
+    liveProjectRows.push({ id: 'p-1', title: 'Ciclovía Av. Y', sourceObjectiveIndicatorId: null });
+  });
+
+  it('cambiar el linkMode con aportes vigentes -> 422 con la lista de proyectos', async () => {
+    const error = await build()
+      .update('oi-1', ORG, { linkMode: 'independent' }, authCtx)
+      .catch((e: unknown) => e as { getResponse(): Record<string, unknown> });
+    expect((error as Error).message).toMatch(/IndicatorHasLinkedProjects.*Ciclovía Av\. Y/);
+    expect((error.getResponse()['details'] as Record<string, unknown>)['projects']).toEqual([{ id: 'p-1', title: 'Ciclovía Av. Y', link: 'contribution' }]);
+    expect(indicators[0]?.['linkMode']).toBe('execution_feeds_indicator');
+    expect(eventEmitter.emitAsync).not.toHaveBeenCalled();
+  });
+
+  it('borrar el indicador con aportes vigentes -> 422; el aporte de un proyecto borrado ya no cuenta', async () => {
+    await expect(build().softDelete('oi-1', ORG, authCtx)).rejects.toThrow(/IndicatorHasLinkedProjects/);
+    expect(indicators[0]?.['deletedAt']).toBeNull();
+
+    liveProjectRows = []; // el proyecto se borró: su aporte no está vigente
+    await expect(build().softDelete('oi-1', ORG, authCtx)).resolves.toBeUndefined();
+    expect(indicators[0]?.['deletedAt']).toBeInstanceOf(Date);
+  });
+
+  it('proyectos from_indicator que toman su avance del indicador también bloquean (lado indicator_feeds_execution)', async () => {
+    indicators.push(indicator('oi-2', 'm-2', { linkMode: 'indicator_feeds_execution' }));
+    liveProjectRows.push({ id: 'p-2', title: 'Tramo B', sourceObjectiveIndicatorId: 'oi-2' });
+    await expect(build().update('oi-2', ORG, { linkMode: 'independent' }, authCtx)).rejects.toThrow(/Tramo B/);
+    await expect(build().softDelete('oi-2', ORG, authCtx)).rejects.toThrow(/IndicatorHasLinkedProjects/);
+  });
+
+  it('sin proyectos vinculados el cambio de vínculo y el borrado siguen funcionando; editar otros campos no consulta', async () => {
+    contributionRows = [];
+    const dto = await build().update('oi-1', ORG, { linkMode: 'independent' }, authCtx);
+    expect(dto.linkMode).toBe('independent');
+
+    projectLinks.findLiveProjects.mockClear();
+    await build().update('oi-1', ORG, { weightBp: null }, authCtx);
+    expect(projectLinks.findLiveProjects).not.toHaveBeenCalled();
   });
 });

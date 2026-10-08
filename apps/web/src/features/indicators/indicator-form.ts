@@ -7,9 +7,11 @@ import type {
   IndicatorTargetPointDto,
   MetricUnit,
   ObjectiveIndicatorDto,
+  ObjectiveIndicatorLinkMode,
   UpdateObjectiveIndicatorDto,
 } from '@gestion-publica/shared-types/metrics';
 import { scaleDecimal } from './decimal';
+import { fromProjectsAvailability } from '@/features/contributions/contributions';
 import {
   curveBuckets,
   pointsToValues,
@@ -20,6 +22,8 @@ import {
   type EditableCurveMode,
   type PointValues,
 } from './curve-form';
+
+import { FROM_PROJECTS_UNAVAILABLE_LABELS } from '@/lib/labels';
 
 export { DECIMAL_RE, scaleDecimal } from './decimal';
 
@@ -39,7 +43,9 @@ export interface IndicatorFormValues {
   direction: MetricDirection;
   baselineValue: string;
   targetValue: string;
-  /** Curva esperada (RN-P17). `from_projects` todavía no se ofrece. */
+  /** Vínculo con la gestión (RN-P14b). */
+  linkMode: ObjectiveIndicatorLinkMode;
+  /** Curva esperada (RN-P17). `from_projects` exige `output` + `execution_feeds_indicator`. */
   curveMode: EditableCurveMode;
   /** Valores de la curva manual por inicio de bucket; el último bucket siempre vale la meta. */
   pointValues: PointValues;
@@ -58,6 +64,7 @@ export function emptyIndicatorForm(): IndicatorFormValues {
     direction: 'increasing',
     baselineValue: '0',
     targetValue: '',
+    linkMode: 'independent',
     curveMode: 'linear',
     pointValues: {},
   };
@@ -80,6 +87,7 @@ export function indicatorToFormValues(
     direction: indicator.direction,
     baselineValue: indicator.baselineValue,
     targetValue: indicator.targetValue,
+    linkMode: indicator.linkMode,
     curveMode: toEditableCurveMode(indicator.expectedCurveMode),
     pointValues: pointsToValues(targetPoints),
   };
@@ -130,6 +138,17 @@ export function validateIndicatorForm(
   }
   const baseTarget = validateBaselineTarget(values.baselineValue, values.targetValue, values.direction);
   if (baseTarget) return baseTarget;
+  if (values.linkMode === 'execution_feeds_indicator' && values.kind !== 'output') {
+    return 'Solo los indicadores de tipo Producto pueden recibir aportes de proyectos.';
+  }
+  if (values.curveMode === 'from_projects') {
+    const availability = fromProjectsAvailability(values);
+    if (!availability.available) {
+      return availability.reason === 'notOutput'
+        ? FROM_PROJECTS_UNAVAILABLE_LABELS.notOutput
+        : FROM_PROJECTS_UNAVAILABLE_LABELS.notLinked;
+    }
+  }
   if (values.curveMode === 'manual') {
     return validateCurvePoints(values.pointValues, curveBuckets(period, values.frequency), values.targetValue);
   }
@@ -148,6 +167,7 @@ function curveFields(values: IndicatorFormValues, period: CurvePeriod) {
       targetPoints: toTargetPointInputs(values.pointValues, buckets, values.targetValue),
     };
   }
+  if (values.curveMode === 'from_projects') return { expectedCurveMode: 'from_projects' as const };
   return { expectedCurveMode: 'linear' as const };
 }
 
@@ -165,6 +185,7 @@ export function toCreateIndicatorDto(
     targetValue: values.targetValue.trim(),
     direction: values.direction,
     ...(groupWeighted && { weightBp: 0 }),
+    ...(values.linkMode !== 'independent' && { linkMode: values.linkMode }),
     ...curveFields(values, period),
   };
   if (values.sourceMode === 'existing') return { metricId: values.metricId, ...common };
@@ -184,9 +205,15 @@ export function toCreateIndicatorDto(
 }
 
 /** Base, meta, dirección y curva van al indicador (D8). Los pesos viajan solo por el PUT en bloque. */
-export function toUpdateIndicatorDto(values: IndicatorFormValues, period: CurvePeriod): UpdateObjectiveIndicatorDto {
+export function toUpdateIndicatorDto(
+  values: IndicatorFormValues,
+  period: CurvePeriod,
+  /** Vínculo actual: `linkMode` solo viaja si cambió (cambiarlo con proyectos vinculados da 422). */
+  currentLinkMode: ObjectiveIndicatorLinkMode,
+): UpdateObjectiveIndicatorDto {
   return {
     ...curveFields(values, period),
+    ...(values.linkMode !== currentLinkMode && { linkMode: values.linkMode }),
     baselineValue: values.baselineValue.trim(),
     targetValue: values.targetValue.trim(),
     direction: values.direction,

@@ -5,6 +5,7 @@ import {
   OBJECTIVE_LOOKUP,
   OBJECTIVE_PROGRESS_READER,
   ORG_UNIT_OBJECTIVE_COUNTER,
+  PROJECT_LINK_READER,
   type ObjectiveAxisCounter,
   type ObjectiveAxisUnassigner,
   type ObjectiveLookup,
@@ -12,6 +13,8 @@ import {
   type ObjectiveProgressReading,
   type ObjectiveOrgUnitCounter,
   type ObjectiveRef,
+  type ProjectLinkReader,
+  type ProjectLinkRef,
 } from '../../common/contracts/index.js';
 import { plannedExecutionProgress } from '@gestion-publica/okr-domain';
 import { PrismaService } from '../auth/prisma/prisma.service.js';
@@ -149,6 +152,73 @@ export class PrismaObjectiveProgressReader implements ObjectiveProgressReader {
   }
 }
 
+const PROJECT_LINK_SELECT = {
+  id: true,
+  objectiveId: true,
+  title: true,
+  endsAt: true,
+  progressCachedBp: true,
+  progressMode: true,
+  sourceObjectiveIndicatorId: true,
+} as const;
+
+function toProjectLinkRef(row: {
+  id: string;
+  objectiveId: string;
+  title: string;
+  endsAt: Date;
+  progressCachedBp: number;
+  progressMode: string;
+  sourceObjectiveIndicatorId: string | null;
+}): ProjectLinkRef {
+  return {
+    id: row.id,
+    objectiveId: row.objectiveId,
+    title: row.title,
+    endsAt: row.endsAt,
+    progressBp: row.progressCachedBp,
+    progressMode: row.progressMode as ProjectLinkRef['progressMode'],
+    sourceObjectiveIndicatorId: row.sourceObjectiveIndicatorId,
+  };
+}
+
+/**
+ * Implementación de `PROJECT_LINK_READER`: proyectos vivos que `metrics` necesita para validar y armar los aportes a
+ * indicadores (RN-P12/P17). Solo lectura. Filtra siempre por organizationId y por `deletedAt: null`.
+ */
+@Injectable()
+export class PrismaProjectLinkReader implements ProjectLinkReader {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findLiveProject(organizationId: string, projectId: string): Promise<ProjectLinkRef | null> {
+    const row = await this.prisma.raw.project.findFirst({
+      where: { id: projectId, organizationId, deletedAt: null },
+      select: PROJECT_LINK_SELECT,
+    });
+    return row ? toProjectLinkRef(row) : null;
+  }
+
+  async findLiveProjects(organizationId: string, projectIds: ReadonlyArray<string>): Promise<ProjectLinkRef[]> {
+    if (projectIds.length === 0) return [];
+    const rows = await this.prisma.raw.project.findMany({
+      where: { id: { in: [...projectIds] }, organizationId, deletedAt: null },
+      select: PROJECT_LINK_SELECT,
+    });
+    return rows.map(toProjectLinkRef);
+  }
+
+  async findLiveProjectsBySourceIndicator(
+    organizationId: string,
+    objectiveIndicatorId: string,
+  ): Promise<ProjectLinkRef[]> {
+    const rows = await this.prisma.raw.project.findMany({
+      where: { organizationId, sourceObjectiveIndicatorId: objectiveIndicatorId, deletedAt: null },
+      select: PROJECT_LINK_SELECT,
+    });
+    return rows.map(toProjectLinkRef);
+  }
+}
+
 /**
  * Submódulo @Global de contratos de `okr`: solo lo importa AppModule. Si falta el provider,
  * Nest falla al arrancar (preferible a una validación que pasa en silencio).
@@ -162,6 +232,7 @@ export class PrismaObjectiveProgressReader implements ObjectiveProgressReader {
     { provide: AXIS_OBJECTIVE_UNASSIGNER, useClass: PrismaObjectiveAxisUnassigner },
     { provide: OBJECTIVE_LOOKUP, useClass: PrismaObjectiveLookup },
     { provide: OBJECTIVE_PROGRESS_READER, useClass: PrismaObjectiveProgressReader },
+    { provide: PROJECT_LINK_READER, useClass: PrismaProjectLinkReader },
   ],
   exports: [
     ORG_UNIT_OBJECTIVE_COUNTER,
@@ -169,6 +240,7 @@ export class PrismaObjectiveProgressReader implements ObjectiveProgressReader {
     AXIS_OBJECTIVE_UNASSIGNER,
     OBJECTIVE_LOOKUP,
     OBJECTIVE_PROGRESS_READER,
+    PROJECT_LINK_READER,
   ],
 })
 export class OkrContractsModule {}

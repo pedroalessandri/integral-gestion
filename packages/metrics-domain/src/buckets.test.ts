@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildBuckets, isValidBucketDate } from './buckets';
+import { bucketContaining, buildBuckets, isValidBucketDate } from './buckets';
 
 // Q2 2026: April 1 (Wednesday) → June 30.
 const q2 = {
@@ -165,5 +165,31 @@ describe('buildBuckets: quarterly / semiannual / annual (RN-P15)', () => {
     expect(isValidBucketDate(new Date('2026-04-01T00:00:00Z'), year2026, 'quarterly')).toBe(true);
     expect(isValidBucketDate(new Date('2026-05-01T00:00:00Z'), year2026, 'quarterly')).toBe(false);
     expect(isValidBucketDate(new Date('2026-07-01T00:00:00Z'), year2026, 'annual')).toBe(false);
+  });
+});
+
+describe('bucketContaining (RN-P13)', () => {
+  const range = { startsAt: new Date('2027-01-01T00:00:00Z'), endsAt: new Date('2027-12-31T00:00:00Z') };
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+  it('mensual: devuelve el inicio del mes que contiene la fecha', () => {
+    expect(iso(bucketContaining(new Date('2027-03-17T15:30:00Z'), range, 'monthly'))).toBe('2027-03-01');
+    expect(iso(bucketContaining(new Date('2027-03-01T00:00:00Z'), range, 'monthly'))).toBe('2027-03-01');
+  });
+
+  it('semestral y quincenal', () => {
+    expect(iso(bucketContaining(new Date('2027-09-10T00:00:00Z'), range, 'semiannual'))).toBe('2027-07-01');
+    expect(iso(bucketContaining(new Date('2027-03-20T00:00:00Z'), range, 'biweekly'))).toBe('2027-03-16');
+  });
+
+  it('antes del período -> primer bucket; después -> último bucket', () => {
+    expect(iso(bucketContaining(new Date('2026-06-01T00:00:00Z'), range, 'monthly'))).toBe('2027-01-01');
+    expect(iso(bucketContaining(new Date('2028-06-01T00:00:00Z'), range, 'monthly'))).toBe('2027-12-01');
+  });
+
+  it('siempre devuelve un inicio de bucket válido', () => {
+    for (const day of ['2027-02-28', '2027-07-04', '2027-12-31']) {
+      expect(isValidBucketDate(bucketContaining(new Date(`${day}T00:00:00Z`), range, 'weekly'), range, 'weekly')).toBe(true);
+    }
   });
 });

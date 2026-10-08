@@ -16,6 +16,7 @@ import type {
   ExpectedCurveMode,
   IndicatorProgressChangedEvent,
   IndicatorTargetPointDto,
+  LinkedProjectRefDto,
 } from '@gestion-publica/shared-types/metrics';
 import { INDICATOR_PROGRESS_CHANGED } from '@gestion-publica/shared-types/metrics';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -28,12 +29,14 @@ import {
   type PeriodRange,
 } from '@gestion-publica/metrics-domain';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
-import { AuditEventEmitterService, type PrismaTransactionClient } from '../../audit/index.js';
+import { AuditEventEmitterService, requestContextStorage, type PrismaTransactionClient } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import {
   OBJECTIVE_LOOKUP,
+  PROJECT_LINK_READER,
   type ObjectiveLookup,
   type ObjectiveRef,
+  type ProjectLinkReader,
 } from '../../../common/contracts/index.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 import { assertSameSiblingSet, assertValidWeightGroup } from '../../../common/weights/weight-group.js';
@@ -110,6 +113,7 @@ export class ObjectiveIndicatorService {
     private readonly metricService: MetricService,
     @Inject(OBJECTIVE_LOOKUP) private readonly objectiveLookup: ObjectiveLookup,
     private readonly eventEmitter: EventEmitter2,
+    @Inject(PROJECT_LINK_READER) private readonly projectLinks: ProjectLinkReader,
   ) {}
 
   async listByObjective(objectiveId: string, orgId: string): Promise<ObjectiveIndicatorDto[]> {
@@ -171,7 +175,7 @@ export class ObjectiveIndicatorService {
 
     // RN-P17: curva esperada. `manual` necesita puntos válidos en el mismo pedido.
     const expectedCurveMode: ExpectedCurveMode = dto.expectedCurveMode ?? 'linear';
-    this.assertCurveModeAvailable(expectedCurveMode);
+    this.assertCurveModeAvailable(expectedCurveMode, kind, linkMode);
     let targetPoints: ValidTargetPoint[] = [];
     if (dto.targetPoints !== undefined && dto.targetPoints.length > 0) {
       targetPoints = validateTargetPoints(dto.targetPoints, {
@@ -294,9 +298,9 @@ export class ObjectiveIndicatorService {
     // RN-P17: curva esperada. Si queda en `manual`, los puntos (nuevos o los guardados) deben ser válidos
     // contra la meta resultante (el último punto == meta).
     const expectedCurveMode = dto.expectedCurveMode ?? (existing.expectedCurveMode as ExpectedCurveMode);
-    if (dto.expectedCurveMode !== undefined && dto.expectedCurveMode !== existing.expectedCurveMode) {
-      this.assertCurveModeAvailable(dto.expectedCurveMode);
-    }
+    // `from_projects` se valida siempre con el tipo y el vínculo RESULTANTES: cambiar el vínculo de un indicador que
+    // está en `from_projects` también lo rompería.
+    this.assertCurveModeAvailable(expectedCurveMode, metric.kind as MetricKind, linkMode);
     const rawPoints: Array<{ bucketDate: string; expectedValue: string }> =
       dto.targetPoints ?? (expectedCurveMode === 'manual' ? await this.loadStoredPointsRaw(id, orgId) : []);
     const targetPoints =
@@ -314,6 +318,11 @@ export class ObjectiveIndicatorService {
     const { dto: updated, events } = await tenantContextStorage.run(authContext, () =>
       this.prisma.runInTransaction(async (tx) => {
         await this.lockGroup(tx, existing.objectiveId);
+
+        // ADR-0009 D5 regla 3: no se cambia el vínculo con proyectos vinculados vigentes.
+        if (linkMode !== existing.linkMode) {
+          await this.assertNoLinkedProjects(tx, orgId, id, 'cambiar el vínculo con la gestión');
+        }
 
         if (dto.weightBp !== undefined && dto.weightBp !== existing.weightBp) {
           const siblings = await tx.objectiveIndicator.findMany({
@@ -485,6 +494,9 @@ export class ObjectiveIndicatorService {
       this.prisma.runInTransaction(async (tx) => {
         await this.lockGroup(tx, existing.objectiveId);
 
+        // ADR-0009 D5 regla 3: un indicador con proyectos vinculados vigentes no se borra.
+        await this.assertNoLinkedProjects(tx, orgId, id, 'borrar el indicador');
+
         // RN-P6: no se puede dejar un grupo ponderado con suma != 10000.
         const siblings = await tx.objectiveIndicator.findMany({
           where: { objectiveId: existing.objectiveId, organizationId: orgId, deletedAt: null },
@@ -611,7 +623,8 @@ export class ObjectiveIndicatorService {
     return {
       organizationId: orgId,
       actorId: actor.userId,
-      requestId: actor.requestId,
+      // El request real (interceptor) manda; el del AuthContext es el respaldo.
+      requestId: requestContextStorage.getStore()?.requestId ?? actor.requestId,
       objectiveIndicatorId: indicator.id,
       objectiveId: indicator.objectiveId,
       progressBp: indicator.progressCachedBp,
@@ -688,14 +701,58 @@ export class ObjectiveIndicatorService {
   }
 
   /**
-   * RN-P17: `from_projects` es la curva escalonada de los aportes de proyectos (`ProjectContribution`, F7). Sin esa
-   * tabla no hay con qué construirla, así que hoy no se puede elegir.
+   * RN-P17: `from_projects` es la curva escalonada de los aportes de proyectos (`ProjectContribution`). Solo para
+   * indicadores `output` con vínculo `execution_feeds_indicator`; en cualquier otro caso se rechaza con 422.
    */
-  private assertCurveModeAvailable(mode: ExpectedCurveMode): void {
-    if (mode === 'from_projects') {
+  private assertCurveModeAvailable(
+    mode: ExpectedCurveMode,
+    kind: MetricKind,
+    linkMode: ObjectiveIndicatorLinkMode,
+  ): void {
+    if (mode === 'from_projects' && (kind !== 'output' || linkMode !== 'execution_feeds_indicator')) {
       throw new UnprocessableEntityException(
-        'ExpectedCurveModeNotAvailable: la curva "from_projects" depende de los aportes de proyectos al indicador (RN-P17), que todavía no existen. Usá "linear" o "manual".',
+        'ExpectedCurveModeNotAvailable: la curva "from_projects" solo existe para indicadores de producto (kind = output) con el vínculo "execution_feeds_indicator" (RN-P17). Usá "linear" o "manual".',
       );
+    }
+  }
+
+  /**
+   * ADR-0009 D5 regla 3: proyectos vivos vinculados al indicador, ya sea porque aportan a él (`ProjectContribution`)
+   * o porque toman su avance de él (`from_indicator`). Contribuciones propias de `metrics`; el título y la vida del
+   * proyecto se leen por el puerto `PROJECT_LINK_READER`.
+   */
+  private async findLinkedProjects(
+    tx: PrismaTransactionClient,
+    orgId: string,
+    indicatorId: string,
+  ): Promise<LinkedProjectRefDto[]> {
+    const contributions = await tx.projectContribution.findMany({
+      where: { objectiveIndicatorId: indicatorId, organizationId: orgId },
+      select: { projectId: true },
+    });
+    const contributing = await this.projectLinks.findLiveProjects(orgId, contributions.map((c) => c.projectId));
+    const sourced = await this.projectLinks.findLiveProjectsBySourceIndicator(orgId, indicatorId);
+    return [
+      ...contributing.map((p) => ({ id: p.id, title: p.title, link: 'contribution' as const })),
+      ...sourced.map((p) => ({ id: p.id, title: p.title, link: 'source_indicator' as const })),
+    ];
+  }
+
+  private async assertNoLinkedProjects(
+    tx: PrismaTransactionClient,
+    orgId: string,
+    indicatorId: string,
+    action: string,
+  ): Promise<void> {
+    const projects = await this.findLinkedProjects(tx, orgId, indicatorId);
+    if (projects.length > 0) {
+      throw new UnprocessableEntityException({
+        message: `IndicatorHasLinkedProjects: no se puede ${action} mientras tenga proyectos vinculados vigentes (${projects
+          .map((p) => `"${p.title}"`)
+          .join(', ')}). Desvinculalos primero (ADR-0009 D5).`,
+        // El filtro global lo expone como `details.projects` (ErrorResponseDto.details).
+        details: { projects },
+      });
     }
   }
 

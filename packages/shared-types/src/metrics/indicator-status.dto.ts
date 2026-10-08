@@ -9,6 +9,21 @@ import type { ExpectedCurveMode } from './objective-indicator.dto.js';
 
 export type SemaphoreColor = 'green' | 'yellow' | 'red';
 
+/**
+ * Resumen de los aportes de proyectos de un indicador `execution_feeds_indicator` (RN-P12, RN-P17). Sirve para el
+ * aviso "los aportes no alcanzan la meta" (C18).
+ */
+export interface IndicatorContributionsSummaryDto {
+  /** Cantidad de aportes de proyectos vivos. */
+  count: number;
+  /** Σ de `contributionValue` de los aportes vivos (decimal string). */
+  total: string;
+  /** Valor al que llegaría el indicador si todos los proyectos se completan: base + Σ aportes (decimal string). */
+  projectedValue: string;
+  /** `false` si base + Σ aportes no llega a la meta (según la dirección): la UI avisa. */
+  coversTarget: boolean;
+}
+
 /** GET /okr/indicators/:id/status */
 export interface IndicatorStatusDto {
   objectiveIndicatorId: string;
@@ -32,6 +47,8 @@ export interface IndicatorStatusDto {
   pendingBuckets: string[];
   /** Días de gracia aplicados (constante de la fase, RN-P15). */
   graceDays: number;
+  /** Aportes de proyectos; `null` si el indicador no es `execution_feeds_indicator`. */
+  contributions: IndicatorContributionsSummaryDto | null;
 }
 
 /** Lectura de RESULTADO de un objetivo: agrega sus indicadores. */

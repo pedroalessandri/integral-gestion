@@ -8,6 +8,10 @@
 
 ## 🟡 Prioridad media — próximas semanas
 
+### [F] `MetricEntryDto` sin el título del proyecto de origen de las cargas automáticas
+- Por qué: la UI muestra "Aporte del proyecto X" en el historial a partir de los aportes vivos del indicador (`GET indicators/:id/contributions`). Si el aporte ya no existe (proyecto borrado y compensado), o en la vista standalone de métricas (`/metrics/[id]`, sin indicador), la carga automática solo dice "Aporte de un proyecto" (el título queda en el comentario).
+- Posible solución: sumar `sourceProjectTitle: string | null` a `MetricEntryDto` (C17 ya tiene `sourceProjectId`).
+
 ### [F] Seed demo: sumar `from_projects`, aportes de proyecto y vínculos de gestión cuando existan (F7)
 - Por qué: el seed de C13 solo usa lo que existe hoy. La SPEC §6 punto 4 pide un indicador `output` con aportes de proyectos y curva `from_projects`. La curva manual ya está (C15: el `outcome` semestral "Viajes diarios en bicicleta" usa `IndicatorTargetPoint`); falta `ProjectContribution` y `from_projects` (C17), y un proyecto `from_indicator`.
 - Posible solución: extender `apps/api/src/database/seed-demo.ts` en la corrida C17.
@@ -17,6 +21,12 @@
 - Por qué: C15 rechaza `expectedCurveMode = 'from_projects'` con 422 `ExpectedCurveModeNotAvailable`, porque la curva escalonada necesita `ProjectContribution` (C17) y sin pasos queda plana en la base. `IndicatorStatusService` ya tiene la rama (`steps: []`).
 - Posible solución: en C17, cargar los pasos (`endsAt` del proyecto y `contributionValue`) en `IndicatorStatusService`, validar que sea `kind = output` con `linkMode = execution_feeds_indicator` y quitar el 422 de `assertCurveModeAvailable`.
 - Origen: C15 (2026-10-08).
+- Actualización (C17, 2026-10-08): hecho en la rama `feature/plan-f7-aportes` (pasos de la curva desde `ProjectContribution` + `endsAt` planificado vía `PROJECT_LINK_READER`, 422 solo si no es `output` + `execution_feeds_indicator`). Mover a Completados al mergear.
+
+### [F] Reconciliar los aportes de proyectos si el oyente falla (consistencia eventual)
+- Por qué: el aporte se aplica con el evento `project.completed` / `project.reopened`, post-commit (ADR-0009 D5). Si el oyente de `metrics` falla (DB caída, deploy en el medio), `okr` ya confirmó el avance del proyecto y el indicador queda sin la carga automática (o sin su compensación) hasta el próximo cambio del proyecto. Solo se loguea. `ProjectContributionApplier.reconcileProject` ya es idempotente y reconcilia contra el estado actual del proyecto, así que se puede reintentar sin riesgo.
+- Posible solución: un job (cron del módulo `metrics`) o un endpoint admin que recorra los `ProjectContribution` cuyo estado (`appliedEntryId`) no coincide con el avance del proyecto (100 % sin aplicar / aplicado y no al 100 %) y llame a `reconcileProject`.
+- Origen: C17 (2026-10-08).
 
 ### [F] Semáforos y "carga pendiente" en el listado de objetivos (`GET okr/objectives`)
 - Por qué: C16 muestra el semáforo de cada lectura y el badge "carga pendiente" en la ficha del objetivo y en la tarjeta del indicador, pero el listado `/objectives` no los tiene: `ObjectiveSummaryDto` no trae `pendingBucketsCount` ni el estado, y pedir `GET okr/objectives/:id/status` por fila sería un N+1 de requests por render.
@@ -84,6 +94,7 @@
 - Por qué: C11 valida `execution_feeds_indicator` solo para métricas `output` (RN-P14b) pero todavía no puede validar vínculos vigentes: `ProjectContribution` llega en C17 y `from_indicator` en F7. Hoy se puede cambiar el `linkMode` o borrar un indicador sin chequear proyectos que lo usan (`okr.project.source_objective_indicator_id` ya tiene FK, pero nadie lo setea todavía).
 - Posible solución: puerto `INDICATOR_LINK_READER` / `PROJECT_LINK_READER` (ADR-0009 D5) con la lista de proyectos vinculados; 422 en `update` (cambio de `linkMode`) y en `softDelete` de `ObjectiveIndicatorService`. Va con C17 / F7.
 - Origen: C11 (2026-10-08).
+- Actualización (C17, 2026-10-08): hecho el lado de los aportes (`PROJECT_LINK_READER` implementado por `okr`; `ObjectiveIndicatorService.update` y `softDelete` rechazan con 422 `IndicatorHasLinkedProjects` y `details.projects`; también consulta los proyectos `from_indicator` por `findLiveProjectsBySourceIndicator`). Falta el otro sentido: el puerto `INDICATOR_LINK_READER` (lo implementa `metrics`, lo inyecta `okr`) y habilitar `progressMode = 'from_indicator'` en `ProjectService` (hoy `ProjectProgressModeNotSupported`), con el recálculo de esos proyectos en `IndicatorProgressListener` (ver el `TODO(F7)` del oyente).
 
 ### [F] Borrar un objetivo no da de baja sus ObjectiveIndicator
 - Por qué: `ObjectiveService.softDelete` no toca `metrics.objective_indicator`. C11 lo resuelve de lectura (los puertos filtran objetivos vivos, así que un indicador de un objetivo borrado no bloquea borrar la métrica ni cambiar su `kind`), pero las filas quedan vivas.

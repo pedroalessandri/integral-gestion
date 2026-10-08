@@ -25,6 +25,7 @@ import type { SetSiblingWeightsDto } from '../dto/set-sibling-weights.dto.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 import { recomputeKrAndObjectiveProgress } from './recompute.js';
 import { lockProject, recomputeProjectAndObjectiveExecution } from './project-recompute.js';
+import { ProjectLifecyclePublisher, type ProjectProgressTransition } from './project-lifecycle-publisher.js';
 import { assertSameSiblingSet, assertValidWeightGroup } from './weight-group.js';
 
 type PeriodRow = {
@@ -122,6 +123,7 @@ export class TaskService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
+    private readonly lifecycle: ProjectLifecyclePublisher,
   ) {}
 
   async list(keyResultId: string, orgId: string): Promise<TaskSummaryDto[]> {
@@ -250,51 +252,49 @@ export class TaskService {
     assertTaskDatesWithinProject(startsAt, endsAt, project);
     const weightBp = dto.weightBp ?? null;
 
-    return tenantContextStorage.run(authContext, () =>
-      this.prisma.runInTransaction(async (tx) => {
-        await lockProject(tx, projectId, orgId);
-        const siblings = await tx.task.findMany({
-          where: { projectId, organizationId: orgId, deletedAt: null },
-          select: { weightBp: true },
-        });
-        assertValidWeightGroup([...siblings, { weightBp }], 'tareas');
+    return this.runWithTransitions(orgId, authContext, async (tx, transitions) => {
+      await lockProject(tx, projectId, orgId);
+      const siblings = await tx.task.findMany({
+        where: { projectId, organizationId: orgId, deletedAt: null },
+        select: { weightBp: true },
+      });
+      assertValidWeightGroup([...siblings, { weightBp }], 'tareas');
 
-        const task = await tx.task.create({
-          data: {
+      const task = await tx.task.create({
+        data: {
+          projectId,
+          organizationId: orgId,
+          title: dto.title,
+          description: dto.description ?? null,
+          ownerUserId: dto.ownerUserId ?? null,
+          weightBp,
+          startsAt,
+          endsAt,
+        },
+      });
+
+      await this.auditEmitter.emit({
+        action: 'task.created',
+        entityType: 'okr.task',
+        entityId: task.id,
+        diff: {
+          before: null,
+          after: {
             projectId,
-            organizationId: orgId,
-            title: dto.title,
-            description: dto.description ?? null,
-            ownerUserId: dto.ownerUserId ?? null,
-            weightBp,
-            startsAt,
-            endsAt,
+            title: task.title,
+            description: task.description,
+            ownerUserId: task.ownerUserId,
+            weightBp: task.weightBp,
+            progressBp: 0,
+            startsAt: startsAt.toISOString(),
+            endsAt: endsAt.toISOString(),
           },
-        });
+        },
+      });
 
-        await this.auditEmitter.emit({
-          action: 'task.created',
-          entityType: 'okr.task',
-          entityId: task.id,
-          diff: {
-            before: null,
-            after: {
-              projectId,
-              title: task.title,
-              description: task.description,
-              ownerUserId: task.ownerUserId,
-              weightBp: task.weightBp,
-              progressBp: 0,
-              startsAt: startsAt.toISOString(),
-              endsAt: endsAt.toISOString(),
-            },
-          },
-        });
-
-        await this.recomputeProject(tx, projectId, orgId);
-        return this.toDetailDto(task as TaskRow);
-      }),
-    );
+      await this.recomputeProject(tx, projectId, orgId, transitions);
+      return this.toDetailDto(task as TaskRow);
+    });
   }
 
   async update(
@@ -325,94 +325,92 @@ export class TaskService {
     }
     const weightChanged = dto.weightBp !== undefined && dto.weightBp !== existingRow.weightBp;
 
-    return tenantContextStorage.run(authContext, () =>
-      this.prisma.runInTransaction(async (tx) => {
-        if (project) await lockProject(tx, project.id, orgId);
+    return this.runWithTransitions(orgId, authContext, async (tx, transitions) => {
+      if (project) await lockProject(tx, project.id, orgId);
 
-        if (weightChanged && dto.weightBp !== undefined) {
-          const siblings = await tx.task.findMany({
-            where: project
-              ? { projectId: project.id, organizationId: orgId, deletedAt: null, id: { not: id } }
-              : { keyResultId: existingRow.keyResultId, organizationId: orgId, deletedAt: null, id: { not: id } },
-            select: { weightBp: true },
-          });
-          if (project) {
-            // RN-P6: se valida el grupo resultante (todo-o-nada, suma 10000).
-            assertValidWeightGroup([...siblings, { weightBp: dto.weightBp }], 'tareas');
-          } else {
-            const siblingsSum = siblings.reduce((acc: number, s: { weightBp: number | null }) => acc + (s.weightBp ?? 0), 0);
-            if (siblingsSum + (dto.weightBp ?? 0) > 10000) {
-              throw new ConflictException(
-                `Actualizar este peso haría que la suma de pesos de las tareas sea ${((siblingsSum + (dto.weightBp ?? 0)) / 100).toFixed(1)}%, superando el 100% permitido.`,
-              );
-            }
-          }
-        }
-
-        const updated = await tx.task.update({
-          where: { id },
-          data: {
-            ...(dto.title !== undefined && { title: dto.title }),
-            ...(dto.description !== undefined && { description: dto.description }),
-            ...(dto.ownerUserId !== undefined && { ownerUserId: dto.ownerUserId }),
-            ...(dto.weightBp !== undefined && { weightBp: dto.weightBp }),
-            ...(dto.startsAt !== undefined && { startsAt: new Date(dto.startsAt) }),
-            ...(dto.endsAt !== undefined && { endsAt: new Date(dto.endsAt) }),
-          },
+      if (weightChanged && dto.weightBp !== undefined) {
+        const siblings = await tx.task.findMany({
+          where: project
+            ? { projectId: project.id, organizationId: orgId, deletedAt: null, id: { not: id } }
+            : { keyResultId: existingRow.keyResultId, organizationId: orgId, deletedAt: null, id: { not: id } },
+          select: { weightBp: true },
         });
-
-        // If weight changed, recompute the cached progress up the branch (KR path or project path).
-        if (weightChanged) {
-          if (project) {
-            await this.recomputeProject(tx, project.id, orgId);
-          } else if (existingRow.keyResultId) {
-            await recomputeKrAndObjectiveProgress(
-              tx,
-              existingRow.keyResultId,
-              orgId,
-              computeKrProgress,
-              computeObjectiveProgress,
+        if (project) {
+          // RN-P6: se valida el grupo resultante (todo-o-nada, suma 10000).
+          assertValidWeightGroup([...siblings, { weightBp: dto.weightBp }], 'tareas');
+        } else {
+          const siblingsSum = siblings.reduce((acc: number, s: { weightBp: number | null }) => acc + (s.weightBp ?? 0), 0);
+          if (siblingsSum + (dto.weightBp ?? 0) > 10000) {
+            throw new ConflictException(
+              `Actualizar este peso haría que la suma de pesos de las tareas sea ${((siblingsSum + (dto.weightBp ?? 0)) / 100).toFixed(1)}%, superando el 100% permitido.`,
             );
           }
         }
+      }
 
-        const before: Record<string, unknown> = {};
-        const after: Record<string, unknown> = {};
-        if (dto.title !== undefined) {
-          before['title'] = existingRow.title;
-          after['title'] = dto.title;
-        }
-        if (dto.description !== undefined) {
-          before['description'] = existingRow.description;
-          after['description'] = dto.description;
-        }
-        if (dto.ownerUserId !== undefined) {
-          before['ownerUserId'] = existingRow.ownerUserId;
-          after['ownerUserId'] = dto.ownerUserId;
-        }
-        if (dto.weightBp !== undefined) {
-          before['weightBp'] = existingRow.weightBp;
-          after['weightBp'] = dto.weightBp;
-        }
-        if (dto.startsAt !== undefined) {
-          before['startsAt'] = existingRow.startsAt.toISOString();
-          after['startsAt'] = dto.startsAt;
-        }
-        if (dto.endsAt !== undefined) {
-          before['endsAt'] = existingRow.endsAt.toISOString();
-          after['endsAt'] = dto.endsAt;
-        }
+      const updated = await tx.task.update({
+        where: { id },
+        data: {
+          ...(dto.title !== undefined && { title: dto.title }),
+          ...(dto.description !== undefined && { description: dto.description }),
+          ...(dto.ownerUserId !== undefined && { ownerUserId: dto.ownerUserId }),
+          ...(dto.weightBp !== undefined && { weightBp: dto.weightBp }),
+          ...(dto.startsAt !== undefined && { startsAt: new Date(dto.startsAt) }),
+          ...(dto.endsAt !== undefined && { endsAt: new Date(dto.endsAt) }),
+        },
+      });
 
-        await this.auditEmitter.emit({
-          action: 'task.updated',
-          entityType: 'okr.task',
-          entityId: id,
-          diff: { before, after },
-        });
+      // If weight changed, recompute the cached progress up the branch (KR path or project path).
+      if (weightChanged) {
+        if (project) {
+          await this.recomputeProject(tx, project.id, orgId, transitions);
+        } else if (existingRow.keyResultId) {
+          await recomputeKrAndObjectiveProgress(
+            tx,
+            existingRow.keyResultId,
+            orgId,
+            computeKrProgress,
+            computeObjectiveProgress,
+          );
+        }
+      }
 
-        return this.toDetailDto(updated as TaskRow);
-      }),
-    );
+      const before: Record<string, unknown> = {};
+      const after: Record<string, unknown> = {};
+      if (dto.title !== undefined) {
+        before['title'] = existingRow.title;
+        after['title'] = dto.title;
+      }
+      if (dto.description !== undefined) {
+        before['description'] = existingRow.description;
+        after['description'] = dto.description;
+      }
+      if (dto.ownerUserId !== undefined) {
+        before['ownerUserId'] = existingRow.ownerUserId;
+        after['ownerUserId'] = dto.ownerUserId;
+      }
+      if (dto.weightBp !== undefined) {
+        before['weightBp'] = existingRow.weightBp;
+        after['weightBp'] = dto.weightBp;
+      }
+      if (dto.startsAt !== undefined) {
+        before['startsAt'] = existingRow.startsAt.toISOString();
+        after['startsAt'] = dto.startsAt;
+      }
+      if (dto.endsAt !== undefined) {
+        before['endsAt'] = existingRow.endsAt.toISOString();
+        after['endsAt'] = dto.endsAt;
+      }
+
+      await this.auditEmitter.emit({
+        action: 'task.updated',
+        entityType: 'okr.task',
+        entityId: id,
+        diff: { before, after },
+      });
+
+      return this.toDetailDto(updated as TaskRow);
+    });
   }
 
   /**
@@ -429,40 +427,38 @@ export class TaskService {
     const project = await this.findProjectOrThrow(projectId, orgId);
     assertPeriodOpen(project.objective.period as PeriodRef);
 
-    return tenantContextStorage.run(authContext, () =>
-      this.prisma.runInTransaction(async (tx) => {
-        await lockProject(tx, projectId, orgId);
-        const live = (await tx.task.findMany({
-          where: { projectId, organizationId: orgId, deletedAt: null },
-          orderBy: { createdAt: 'asc' },
-        })) as TaskRow[];
-        assertSameSiblingSet(
-          live.map((t) => t.id),
-          dto.weights.map((w) => w.id),
-        );
-        assertValidWeightGroup(dto.weights, 'tareas');
+    return this.runWithTransitions(orgId, authContext, async (tx, transitions) => {
+      await lockProject(tx, projectId, orgId);
+      const live = (await tx.task.findMany({
+        where: { projectId, organizationId: orgId, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+      })) as TaskRow[];
+      assertSameSiblingSet(
+        live.map((t) => t.id),
+        dto.weights.map((w) => w.id),
+      );
+      assertValidWeightGroup(dto.weights, 'tareas');
 
-        const result: TaskRow[] = [];
-        for (const task of live) {
-          const requested = dto.weights.find((w) => w.id === task.id)?.weightBp ?? null;
-          if (requested === task.weightBp) {
-            result.push(task);
-            continue;
-          }
-          const updated = (await tx.task.update({ where: { id: task.id }, data: { weightBp: requested } })) as TaskRow;
-          await this.auditEmitter.emit({
-            action: 'task.updated',
-            entityType: 'okr.task',
-            entityId: task.id,
-            diff: { before: { weightBp: task.weightBp }, after: { weightBp: requested } },
-          });
-          result.push(updated);
+      const result: TaskRow[] = [];
+      for (const task of live) {
+        const requested = dto.weights.find((w) => w.id === task.id)?.weightBp ?? null;
+        if (requested === task.weightBp) {
+          result.push(task);
+          continue;
         }
+        const updated = (await tx.task.update({ where: { id: task.id }, data: { weightBp: requested } })) as TaskRow;
+        await this.auditEmitter.emit({
+          action: 'task.updated',
+          entityType: 'okr.task',
+          entityId: task.id,
+          diff: { before: { weightBp: task.weightBp }, after: { weightBp: requested } },
+        });
+        result.push(updated);
+      }
 
-        await this.recomputeProject(tx, projectId, orgId);
-        return result.map((t) => this.toSummaryDto(t));
-      }),
-    );
+      await this.recomputeProject(tx, projectId, orgId, transitions);
+      return result.map((t) => this.toSummaryDto(t));
+    });
   }
 
   async softDelete(id: string, orgId: string, authContext: AuthContext): Promise<void> {
@@ -474,54 +470,52 @@ export class TaskService {
 
     const existingTask = existing as TaskRow;
 
-    await tenantContextStorage.run(authContext, () =>
-      this.prisma.runInTransaction(async (tx) => {
-        if (project) {
-          await lockProject(tx, project.id, orgId);
-          // RN-P6 / RN-25: no se puede dejar un grupo ponderado con suma != 10000.
-          const siblings = await tx.task.findMany({
-            where: { projectId: project.id, organizationId: orgId, deletedAt: null },
-            select: { id: true, weightBp: true },
-          });
-          if (weightMode(siblings) === 'weighted' && siblings.length > 1) {
-            const remaining = projectSumAfterDelete(siblings, id);
-            if (remaining !== 10000) {
-              throw new UnprocessableEntityException(
-                `WeightSumInvalid: borrar esta tarea dejaría los pesos de las tareas en ${remaining} bp (deben sumar 10000). Redistribuí los pesos primero (RN-P6).`,
-              );
-            }
+    await this.runWithTransitions(orgId, authContext, async (tx, transitions) => {
+      if (project) {
+        await lockProject(tx, project.id, orgId);
+        // RN-P6 / RN-25: no se puede dejar un grupo ponderado con suma != 10000.
+        const siblings = await tx.task.findMany({
+          where: { projectId: project.id, organizationId: orgId, deletedAt: null },
+          select: { id: true, weightBp: true },
+        });
+        if (weightMode(siblings) === 'weighted' && siblings.length > 1) {
+          const remaining = projectSumAfterDelete(siblings, id);
+          if (remaining !== 10000) {
+            throw new UnprocessableEntityException(
+              `WeightSumInvalid: borrar esta tarea dejaría los pesos de las tareas en ${remaining} bp (deben sumar 10000). Redistribuí los pesos primero (RN-P6).`,
+            );
           }
         }
+      }
 
-        await tx.task.update({
-          where: { id },
-          data: { deletedAt: new Date() },
-        });
+      await tx.task.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
 
-        // Recompute cached progress after task deletion (project path or KR path).
-        if (project) {
-          await this.recomputeProject(tx, project.id, orgId);
-        } else if (existingTask.keyResultId) {
-          await recomputeKrAndObjectiveProgress(
-            tx,
-            existingTask.keyResultId,
-            orgId,
-            computeKrProgress,
-            computeObjectiveProgress,
-          );
-        }
+      // Recompute cached progress after task deletion (project path or KR path).
+      if (project) {
+        await this.recomputeProject(tx, project.id, orgId, transitions);
+      } else if (existingTask.keyResultId) {
+        await recomputeKrAndObjectiveProgress(
+          tx,
+          existingTask.keyResultId,
+          orgId,
+          computeKrProgress,
+          computeObjectiveProgress,
+        );
+      }
 
-        await this.auditEmitter.emit({
-          action: 'task.deleted',
-          entityType: 'okr.task',
-          entityId: id,
-          diff: {
-            before: { deletedAt: null },
-            after: { deletedAt: new Date().toISOString() },
-          },
-        });
-      }),
-    );
+      await this.auditEmitter.emit({
+        action: 'task.deleted',
+        entityType: 'okr.task',
+        entityId: id,
+        diff: {
+          before: { deletedAt: null },
+          after: { deletedAt: new Date().toISOString() },
+        },
+      });
+    });
   }
 
   async setProgress(
@@ -545,42 +539,40 @@ export class TaskService {
     const existingTask = existing as TaskRow;
     const beforeProgressBp = existingTask.progressBp;
 
-    return tenantContextStorage.run(authContext, () =>
-      this.prisma.runInTransaction(async (tx) => {
-        if (project) await lockProject(tx, project.id, orgId);
+    return this.runWithTransitions(orgId, authContext, async (tx, transitions) => {
+      if (project) await lockProject(tx, project.id, orgId);
 
-        // Update task progress
-        const updatedTask = await tx.task.update({
-          where: { id },
-          data: { progressBp },
-        });
+      // Update task progress
+      const updatedTask = await tx.task.update({
+        where: { id },
+        data: { progressBp },
+      });
 
-        // Recompute cached progress via the shared helper of each branch
-        if (project) {
-          await this.recomputeProject(tx, project.id, orgId);
-        } else if (existingTask.keyResultId) {
-          await recomputeKrAndObjectiveProgress(
-            tx,
-            existingTask.keyResultId,
-            orgId,
-            computeKrProgress,
-            computeObjectiveProgress,
-          );
-        }
+      // Recompute cached progress via the shared helper of each branch
+      if (project) {
+        await this.recomputeProject(tx, project.id, orgId, transitions);
+      } else if (existingTask.keyResultId) {
+        await recomputeKrAndObjectiveProgress(
+          tx,
+          existingTask.keyResultId,
+          orgId,
+          computeKrProgress,
+          computeObjectiveProgress,
+        );
+      }
 
-        await this.auditEmitter.emit({
-          action: 'task.progress.updated',
-          entityType: 'okr.task',
-          entityId: id,
-          diff: {
-            before: { progressBp: beforeProgressBp },
-            after: { progressBp },
-          },
-        });
+      await this.auditEmitter.emit({
+        action: 'task.progress.updated',
+        entityType: 'okr.task',
+        entityId: id,
+        diff: {
+          before: { progressBp: beforeProgressBp },
+          after: { progressBp },
+        },
+      });
 
-        return this.toDetailDto(updatedTask as TaskRow);
-      }),
-    );
+      return this.toDetailDto(updatedTask as TaskRow);
+    });
   }
 
   /** Tarea viva de la org con su padre (KR o proyecto) y el período del objetivo. */
@@ -606,12 +598,34 @@ export class TaskService {
     return project as ProjectParentRow;
   }
 
-  /** Tarea -> proyecto -> avance de gestión del objetivo, en la transacción activa. */
+  /**
+   * Corre `fn` en una transacción con el contexto de tenant y, DESPUÉS del commit, publica los eventos de proyecto
+   * (`project.completed` / `project.reopened`, ADR-0009 D5) de las transiciones de avance que juntó `fn`.
+   */
+  private async runWithTransitions<T>(
+    orgId: string,
+    authContext: AuthContext,
+    fn: (tx: Parameters<typeof lockProject>[0], transitions: ProjectProgressTransition[]) => Promise<T>,
+  ): Promise<T> {
+    const transitions: ProjectProgressTransition[] = [];
+    const result = await tenantContextStorage.run(authContext, () =>
+      this.prisma.runInTransaction((tx) => fn(tx, transitions)),
+    );
+    await this.lifecycle.publishTransitions(orgId, authContext, transitions);
+    return result;
+  }
+
+  /** Tarea -> proyecto -> avance de gestión del objetivo, en la transacción activa. Anota la transición de avance. */
   private async recomputeProject(
     tx: Parameters<typeof lockProject>[0],
     projectId: string,
     orgId: string,
+    transitions: ProjectProgressTransition[],
   ): Promise<void> {
+    const before = await tx.project.findFirstOrThrow({
+      where: { id: projectId, organizationId: orgId },
+      select: { title: true, objectiveId: true, progressCachedBp: true },
+    });
     await recomputeProjectAndObjectiveExecution(
       tx,
       projectId,
@@ -619,6 +633,19 @@ export class TaskService {
       computeProjectProgress,
       computeExecutionProgress,
     );
+    const after = await tx.project.findFirstOrThrow({
+      where: { id: projectId, organizationId: orgId },
+      select: { progressCachedBp: true },
+    });
+    if (after.progressCachedBp !== before.progressCachedBp) {
+      transitions.push({
+        projectId,
+        projectTitle: before.title,
+        objectiveId: before.objectiveId,
+        fromBp: before.progressCachedBp,
+        toBp: after.progressCachedBp,
+      });
+    }
   }
 
   private toSummaryDto(t: TaskRow): TaskSummaryDto {

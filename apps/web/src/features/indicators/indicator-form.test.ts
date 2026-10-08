@@ -50,6 +50,32 @@ describe('inferDirection', () => {
 
 const period = { startsAt: '2027-01-01T00:00:00.000Z', endsAt: '2027-12-31T00:00:00.000Z' };
 
+describe('validateIndicatorForm: aportes y curva desde proyectos', () => {
+  const output = { ...emptyIndicatorForm(), name: 'Km', targetValue: '10', kind: 'output' as const };
+  it('execution_feeds_indicator exige tipo Producto', () => {
+    expect(
+      validateIndicatorForm({ ...output, kind: 'outcome', linkMode: 'execution_feeds_indicator' }, false, period),
+    ).toMatch(/Producto/);
+  });
+  it('from_projects exige output + execution_feeds_indicator', () => {
+    const fp = { ...output, curveMode: 'from_projects' as const };
+    expect(validateIndicatorForm(fp, false, period)).toMatch(/vínculo/);
+    expect(validateIndicatorForm({ ...fp, kind: 'outcome' }, false, period)).toMatch(/Producto/);
+    expect(validateIndicatorForm({ ...fp, linkMode: 'execution_feeds_indicator' }, false, period)).toBeNull();
+  });
+  it('el DTO manda linkMode y la curva from_projects sin puntos', () => {
+    const dto = toCreateIndicatorDto(
+      { ...output, linkMode: 'execution_feeds_indicator', curveMode: 'from_projects' },
+      false,
+      period,
+    );
+    expect(dto.linkMode).toBe('execution_feeds_indicator');
+    expect(dto.expectedCurveMode).toBe('from_projects');
+    expect(dto).not.toHaveProperty('targetPoints');
+    expect(toCreateIndicatorDto(output, false, period)).not.toHaveProperty('linkMode');
+  });
+});
+
 describe('validateIndicatorForm', () => {
   it('exige nombre con métrica nueva y métrica elegida con existente', () => {
     const base = { ...emptyIndicatorForm(), targetValue: '10' };
@@ -107,7 +133,7 @@ describe('toCreateIndicatorDto', () => {
 describe('toUpdateIndicatorDto / toMetricAttributesPatch', () => {
   const values = { ...emptyIndicatorForm(), kind: 'outcome' as const, source: '', description: 'Fórmula', targetValue: '9' };
   it('el update del indicador lleva base, meta, dirección y modo de curva', () => {
-    expect(toUpdateIndicatorDto(values, period)).toEqual({
+    expect(toUpdateIndicatorDto(values, period, 'independent')).toEqual({
       baselineValue: '0',
       targetValue: '9',
       direction: 'increasing',
@@ -115,9 +141,14 @@ describe('toUpdateIndicatorDto / toMetricAttributesPatch', () => {
     });
   });
   it('pasar a lineal no manda puntos', () => {
-    expect(toUpdateIndicatorDto({ ...values, pointValues: { '2027-01-01': '1' } }, period)).not.toHaveProperty(
+    expect(toUpdateIndicatorDto({ ...values, pointValues: { '2027-01-01': '1' } }, period, 'independent')).not.toHaveProperty(
       'targetPoints',
     );
+  });
+  it('linkMode solo viaja si cambió', () => {
+    const feeds = { ...values, kind: 'output' as const, linkMode: 'execution_feeds_indicator' as const };
+    expect(toUpdateIndicatorDto(feeds, period, 'independent').linkMode).toBe('execution_feeds_indicator');
+    expect(toUpdateIndicatorDto(feeds, period, 'execution_feeds_indicator')).not.toHaveProperty('linkMode');
   });
   it('el patch de la métrica solo incluye lo que cambió', () => {
     expect(toMetricAttributesPatch(values, { kind: 'output', source: null, description: 'Fórmula' })).toEqual({

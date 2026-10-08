@@ -10,6 +10,7 @@ export type {
   MetricActualPointDto,
   MetricSeriesDto,
   MetricEntryDto,
+  MetricEntryOrigin,
 } from './metric.dto.js';
 export type {
   MetricKrLinkDto,
@@ -32,9 +33,16 @@ export type {
 export type {
   SemaphoreColor,
   IndicatorStatusDto,
+  IndicatorContributionsSummaryDto,
   ObjectiveResultStatusDto,
   ObjectiveExecutionStatusDto,
   ObjectiveStatusDto,
 } from './indicator-status.dto.js';
+export type {
+  ProjectContributionDto,
+  CreateProjectContributionDto,
+  UpdateProjectContributionDto,
+  LinkedProjectRefDto,
+} from './project-contribution.dto.js';
 export { INDICATOR_PROGRESS_CHANGED } from './indicator-events.js';
 export type { IndicatorProgressChangedEvent } from './indicator-events.js';

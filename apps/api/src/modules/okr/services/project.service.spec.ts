@@ -37,14 +37,23 @@ const audit = { emit: vi.fn().mockResolvedValue(undefined) };
 const members = { isMemberOf: vi.fn().mockResolvedValue(true) };
 const unitLookup = { findLiveOrgUnit: vi.fn() };
 const hierarchy = { isSelfOrDescendant: vi.fn() };
+const lifecycle = { publishDeleted: vi.fn().mockResolvedValue(undefined) };
 const prisma = {
   scoped,
   runInTransaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db.tx)),
 };
 
 function build(): ProjectService {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new ProjectService(prisma as any, audit as any, members as any, unitLookup as any, hierarchy as any);
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  return new ProjectService(
+    prisma as any,
+    audit as any,
+    members as any,
+    unitLookup as any,
+    hierarchy as any,
+    lifecycle as any,
+  );
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 }
 
 const baseDto = {
@@ -344,5 +353,22 @@ describe('ProjectService.softDelete', () => {
     liveProject('p1', { weightBp: 10000, progressCachedBp: 4000 });
     await build().softDelete('p1', ORG, authCtx);
     expect(db.objective.rows[0]?.['executionProgressCachedBp']).toBe(0);
+  });
+
+  it('después del commit avisa project.reopened(deleted) para que metrics revierta los aportes; si falla, no avisa', async () => {
+    liveProject('p1', { title: 'Ciclovía Av. Y', progressCachedBp: 10000 });
+    await build().softDelete('p1', ORG, authCtx);
+    expect(lifecycle.publishDeleted).toHaveBeenCalledWith(
+      ORG,
+      authCtx,
+      expect.objectContaining({ id: 'p1', title: 'Ciclovía Av. Y', objectiveId: expect.any(String) }),
+    );
+
+    lifecycle.publishDeleted.mockClear();
+    liveProject('p2', { weightBp: 5000 });
+    liveProject('p3', { weightBp: 3000 });
+    liveProject('p4', { weightBp: 2000 });
+    await expect(build().softDelete('p2', ORG, authCtx)).rejects.toThrow(/WeightSumInvalid/);
+    expect(lifecycle.publishDeleted).not.toHaveBeenCalled();
   });
 });

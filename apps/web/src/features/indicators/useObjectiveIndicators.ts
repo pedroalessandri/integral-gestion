@@ -63,7 +63,7 @@ export function useObjectiveIndicators(
             const metricResult = await updateMetricAction({ orgId, metricId: indicator.metricId, ...patch });
             if (metricResult.error) return { ok: false, error: metricResult.error, code: null, status: 0 };
           }
-          return updateIndicatorAction(orgId, indicator.id, toUpdateIndicatorDto(values, period));
+          return updateIndicatorAction(orgId, indicator.id, toUpdateIndicatorDto(values, period, indicator.linkMode));
         })
       ).ok,
     [orgId, run, period],

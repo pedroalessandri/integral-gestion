@@ -7,7 +7,9 @@ export type {
   CumulativePoint,
 } from './types';
 export { parseDecimal4, formatDecimal4, InvalidDecimalError, DECIMAL_SCALE } from './decimal';
-export { buildBuckets, isValidBucketDate, toUTCMidnight } from './buckets';
+export { buildBuckets, bucketContaining, isValidBucketDate, toUTCMidnight } from './buckets';
+export { summarizeContributions } from './contributions';
+export type { ContributionsSummary } from './contributions';
 export { cumulativeSeries, cumulativeToDate, accumulatedValue } from './accumulate';
 export { expectedAt } from './expected';
 export {

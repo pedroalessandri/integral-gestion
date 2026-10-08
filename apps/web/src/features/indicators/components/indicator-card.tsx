@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import type { ObjectiveIndicatorDto } from '@gestion-publica/shared-types/metrics';
 import { Badge } from '@/components/ui/badge';
@@ -11,9 +11,11 @@ import { EntryFormPanel } from '@/components/metrics/entry-form-panel';
 import { EntryHistoryTable } from '@/components/metrics/entry-history-table';
 import { MetricChart } from '@/components/metrics/metric-chart';
 import { FREQUENCY_LABELS, formatMetricValue } from '@/components/metrics/format';
+import { ContributionShortfallAlert } from '@/features/contributions/components/contribution-shortfall-alert';
+import { contributionShortfall, projectTitleMap } from '@/features/contributions/contributions';
 import type { ActionResult } from '@/features/planning/error-messages';
 import { formatBpPercent } from '@/features/projects/weights';
-import { EXPECTED_CURVE_MODE_LABELS, INDICATOR_KIND_LABELS, LABELS } from '@/lib/labels';
+import { EXPECTED_CURVE_MODE_LABELS, INDICATOR_KIND_LABELS, LABELS, LINK_MODE_LABELS } from '@/lib/labels';
 import { seriesForIndicator } from '../chart-data';
 import { formatBucketDate } from '../curve-form';
 import type { IndicatorChartData, IndicatorExtras } from '../indicator-actions';
@@ -40,6 +42,9 @@ export function IndicatorCard({ orgId, indicator, chart, extras, readOnly, defau
   const pendingBuckets = status?.pendingBuckets ?? [];
   const curve = EXPECTED_CURVE_MODE_LABELS[indicator.expectedCurveMode];
   // Manual sin puntos cargados: no se dibuja una curva falsa (ver `seriesForIndicator`).
+  const shortfall = contributionShortfall(status);
+  const contributions = extras?.contributions ?? null;
+  const projectTitles = useMemo(() => projectTitleMap(contributions ?? []), [contributions]);
   const targetPoints = extras ? extras.targetPoints : indicator.expectedCurveMode === 'manual' ? null : [];
 
   return (
@@ -67,6 +72,11 @@ export function IndicatorCard({ orgId, indicator, chart, extras, readOnly, defau
             <Badge variant="outline" className="text-xs">
               {FREQUENCY_LABELS[indicator.frequency]}
             </Badge>
+            {indicator.linkMode === 'execution_feeds_indicator' && (
+              <Badge variant="outline" className="text-xs" title={LINK_MODE_LABELS.execution_feeds_indicator.hint}>
+                {LINK_MODE_LABELS.execution_feeds_indicator.label}
+              </Badge>
+            )}
             <Badge variant="outline" className="text-xs" title={curve.hint}>
               {LABELS.expectedCurve}: {curve.label.toLowerCase()}
             </Badge>
@@ -139,6 +149,12 @@ export function IndicatorCard({ orgId, indicator, chart, extras, readOnly, defau
       <div className="h-1.5 w-full rounded-full bg-neutral-200" aria-hidden>
         <div className="h-1.5 rounded-full bg-sky-600" style={{ width: `${pct}%` }} />
       </div>
+      {shortfall && (
+        <ContributionShortfallAlert shortfall={shortfall} targetValue={indicator.targetValue} unit={indicator.unit} />
+      )}
+      {extras?.contributionsError && (
+        <p className="text-xs text-amber-800">No pudimos cargar los aportes de proyectos. {extras.contributionsError}</p>
+      )}
 
       {open && (
         <div id={detailsId} className="grid grid-cols-1 gap-4 border-t border-neutral-100 pt-3 lg:grid-cols-3">
@@ -159,7 +175,7 @@ export function IndicatorCard({ orgId, indicator, chart, extras, readOnly, defau
                     </p>
                   )}
                   <MetricChart
-                    series={seriesForIndicator(chart.data.series, indicator, targetPoints, chart.data.metric.period)}
+                    series={seriesForIndicator(chart.data.series, indicator, targetPoints, chart.data.metric.period, contributions)}
                     expectedLabel={`${LABELS.expectedCurve} (${curve.label.toLowerCase()})`}
                     unit={indicator.unit}
                     baselineValue={indicator.baselineValue}
@@ -174,6 +190,7 @@ export function IndicatorCard({ orgId, indicator, chart, extras, readOnly, defau
                     orgId={orgId}
                     metricId={indicator.metricId}
                     entries={chart.data.entries}
+                    projectTitles={projectTitles}
                     unit={indicator.unit}
                     readOnly={readOnly}
                   />

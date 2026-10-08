@@ -65,6 +65,8 @@ function entryRow(overrides: Record<string, unknown> = {}) {
     bucketDate: new Date('2026-04-01T00:00:00Z'),
     incrementValue: { toString: () => '100' },
     comment: null,
+    origin: 'manual',
+    sourceProjectId: null,
     createdByUserId: 'user-1',
     deletedAt: null,
     createdAt: new Date('2026-04-02T00:00:00Z'),
@@ -102,10 +104,15 @@ describe('MetricEntryService', () => {
           id: 'entry-2',
           bucketDate: new Date('2026-05-01T00:00:00Z'),
           incrementValue: { toString: () => '50.5' },
+          origin: 'project_contribution',
+          sourceProjectId: 'p-1',
         }),
       ]);
 
       const items = await service.list('metric-1', 'org-1');
+      // RN-P14: el DTO distingue la carga automática de la manual.
+      expect(items[0]).toMatchObject({ origin: 'manual', sourceProjectId: null });
+      expect(items[1]).toMatchObject({ origin: 'project_contribution', sourceProjectId: 'p-1' });
       expect(items[0]!.cumulativeAfter).toBe('100');
       expect(items[1]!.cumulativeAfter).toBe('150.5');
       expect(items[0]!.createdBy).toEqual({ id: 'user-1', displayName: 'Test User' });
@@ -200,6 +207,17 @@ describe('MetricEntryService', () => {
       expect(mockObjectiveIndicatorService.recomputeForMetric).toHaveBeenCalledWith(mockTx, 'metric-1', 'org-1', authContext);
     });
 
+    it('RN-P14: una carga automática (aporte de proyecto) no se edita: 422 AutomaticEntryReadOnly', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue(metricWithPeriod);
+      mockScoped.metricEntry.findFirst.mockResolvedValue(
+        entryRow({ origin: 'project_contribution', sourceProjectId: 'p-1' }),
+      );
+      await expect(
+        service.update('metric-1', 'entry-1', 'org-1', { incrementValue: '80' }, authContext),
+      ).rejects.toThrow(/AutomaticEntryReadOnly/);
+      expect(mockTx.metricEntry.update).not.toHaveBeenCalled();
+    });
+
     it('throws 404 for an entry of another metric', async () => {
       mockScoped.metric.findFirst.mockResolvedValue(metricWithPeriod);
       mockScoped.metricEntry.findFirst.mockResolvedValue(null);
@@ -224,6 +242,17 @@ describe('MetricEntryService', () => {
         expect.objectContaining({ action: 'metric.entry.deleted' }),
       );
       expect(mockObjectiveIndicatorService.recomputeForMetric).toHaveBeenCalledWith(mockTx, 'metric-1', 'org-1', authContext);
+    });
+
+    it('RN-P14: una carga automática no se borra (append-only, se compensa): 422', async () => {
+      mockScoped.metric.findFirst.mockResolvedValue(metricWithPeriod);
+      mockScoped.metricEntry.findFirst.mockResolvedValue(
+        entryRow({ origin: 'project_contribution', sourceProjectId: 'p-1' }),
+      );
+      await expect(service.softDelete('metric-1', 'entry-1', 'org-1', authContext)).rejects.toThrow(
+        /AutomaticEntryReadOnly/,
+      );
+      expect(mockTx.metricEntry.update).not.toHaveBeenCalled();
     });
 
     it('throws 403 when the period is closed', async () => {

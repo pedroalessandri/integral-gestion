@@ -6,3 +6,4 @@ export { MetricService } from './services/metric.service.js';
 export { MetricEntryService } from './services/metric-entry.service.js';
 export { ObjectiveIndicatorService } from './services/objective-indicator.service.js';
 export { IndicatorStatusService } from './services/indicator-status.service.js';
+export { ProjectContributionService } from './services/project-contribution.service.js';
