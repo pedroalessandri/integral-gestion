@@ -18,6 +18,11 @@
 - Posible solución: en C17, cargar los pasos (`endsAt` del proyecto y `contributionValue`) en `IndicatorStatusService`, validar que sea `kind = output` con `linkMode = execution_feeds_indicator` y quitar el 422 de `assertCurveModeAvailable`.
 - Origen: C15 (2026-10-08).
 
+### [F] Semáforos y "carga pendiente" en el listado de objetivos (`GET okr/objectives`)
+- Por qué: C16 muestra el semáforo de cada lectura y el badge "carga pendiente" en la ficha del objetivo y en la tarjeta del indicador, pero el listado `/objectives` no los tiene: `ObjectiveSummaryDto` no trae `pendingBucketsCount` ni el estado, y pedir `GET okr/objectives/:id/status` por fila sería un N+1 de requests por render.
+- Posible solución (contrato faltante, backend): sumar a los ítems de `GET okr/objectives` un `status` con `{ result: { semaphore, deviationBp, pendingBucketsCount }, execution: { semaphore, deviationBp } }`, o un `GET okr/objectives/status?periodId=` en bloque. Después, en web, usar `SemaphoreBadge` y `PendingLoadBadge` (ya existen en `components/`) en la fila.
+- Origen: C16 (2026-10-08).
+
 ### [F] Umbrales del semáforo configurables por organización
 - Por qué: RN-P9 fija 10 y 25 puntos por defecto y dice que serán configurables por org en una fase posterior. Hoy son la constante `DEFAULT_SEMAPHORE_THRESHOLDS` de `deviation-domain`.
 - Posible solución: columnas o tabla de settings por org y pasar `SemaphoreThresholds` a `semaphore()` desde `IndicatorStatusService`.
@@ -93,6 +98,7 @@
 ### [F] Serie del indicador con base y meta del indicador (`GET okr/indicators/:id/series`)
 - Por qué: `GET metrics/:id/series` arma la curva esperada con la base y la meta de la `Metric`, pero para el objetivo mandan las del `ObjectiveIndicator` (ADR-0009 D8). C12 redibuja la recta esperada en el front (`features/indicators/chart-data.ts`) sobre las fechas que devuelve la API. Además el resumen (`expectedToDate`, `deviationPct`) sale con la base/meta de la métrica, así que la pestaña no lo muestra. El desvío de resultado (RN-P9) y la curva `manual`/`from_projects` (F6) necesitan el cálculo en el backend.
 - Actualización (C15, 2026-10-08): `GET okr/indicators/:id/status` ya devuelve esperado a la fecha, desvío, semáforo y buckets vencidos con la base/meta del indicador y su curva; falta la serie completa (puntos esperados por bucket) para graficarla sin recalcular en el front (C16).
+- Actualización (C16, 2026-10-08): el gráfico evalúa la curva con `expectedCurve` de `metrics-domain` (la misma función pura del backend, importada en web) sobre las fechas de muestreo de `GET metrics/:id/series` y los puntos de `GET okr/indicators/:id/target-points`. Sigue valiendo pedir el endpoint de serie para que el front no dependa de las fechas de la métrica.
 - Posible solución: endpoint de serie por indicador en `metrics` que devuelva `expected`, `actual` y el desvío con los valores del indicador; el front deja de recalcular la recta.
 - Origen: C12 (2026-10-08).
 

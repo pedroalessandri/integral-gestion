@@ -48,40 +48,76 @@ describe('inferDirection', () => {
   });
 });
 
+const period = { startsAt: '2027-01-01T00:00:00.000Z', endsAt: '2027-12-31T00:00:00.000Z' };
+
 describe('validateIndicatorForm', () => {
   it('exige nombre con métrica nueva y métrica elegida con existente', () => {
     const base = { ...emptyIndicatorForm(), targetValue: '10' };
-    expect(validateIndicatorForm(base, false)).toMatch(/nombre/);
-    expect(validateIndicatorForm({ ...base, sourceMode: 'existing' }, false)).toMatch(/Elegí una métrica/);
-    expect(validateIndicatorForm({ ...base, name: 'Km' }, false)).toBeNull();
+    expect(validateIndicatorForm(base, false, period)).toMatch(/nombre/);
+    expect(validateIndicatorForm({ ...base, sourceMode: 'existing' }, false, period)).toMatch(/Elegí una métrica/);
+    expect(validateIndicatorForm({ ...base, name: 'Km' }, false, period)).toBeNull();
+  });
+  it('en curva manual valida los valores de los intervalos', () => {
+    const manual = { ...emptyIndicatorForm(), name: 'Km', targetValue: '10', frequency: 'quarterly' as const, curveMode: 'manual' as const };
+    expect(validateIndicatorForm({ ...manual, pointValues: { '2027-04-01': '3,5' } }, false, period)).toMatch(/01\/04\/2027/);
+    expect(validateIndicatorForm({ ...manual, pointValues: { '2027-04-01': '3.5' } }, false, period)).toBeNull();
+    expect(validateIndicatorForm({ ...manual, frequency: 'monthly', pointValues: {} }, false, { startsAt: 'x', endsAt: 'y' })).toMatch(/intervalos/);
   });
 });
 
 describe('toCreateIndicatorDto', () => {
   const values = { ...emptyIndicatorForm(), name: ' Km de ciclovía ', source: ' Obras ', targetValue: '120' };
   it('arma la métrica inline en un solo paso, sin campos vacíos', () => {
-    expect(toCreateIndicatorDto(values, false)).toEqual({
+    expect(toCreateIndicatorDto(values, false, period)).toEqual({
       metric: { name: 'Km de ciclovía', unit: 'number', frequency: 'monthly', kind: 'output', source: 'Obras' },
       baselineValue: '0',
       targetValue: '120',
       direction: 'increasing',
+      expectedCurveMode: 'linear',
     });
   });
   it('con métrica existente manda solo metricId y los valores del indicador', () => {
-    const dto = toCreateIndicatorDto({ ...values, sourceMode: 'existing', metricId: 'm-1' }, false);
+    const dto = toCreateIndicatorDto({ ...values, sourceMode: 'existing', metricId: 'm-1' }, false, period);
     expect(dto.metricId).toBe('m-1');
     expect(dto.metric).toBeUndefined();
   });
+  it('en curva manual manda los puntos con valor y el último intervalo igual a la meta', () => {
+    const dto = toCreateIndicatorDto(
+      {
+        ...values,
+        frequency: 'semiannual',
+        curveMode: 'manual',
+        pointValues: { '2027-01-01': ' 18 ', '2027-07-01': '99' },
+      },
+      false,
+      period,
+    );
+    expect(dto.expectedCurveMode).toBe('manual');
+    expect(dto.targetPoints).toEqual([
+      { bucketDate: '2027-01-01', expectedValue: '18' },
+      { bucketDate: '2027-07-01', expectedValue: '120' },
+    ]);
+  });
   it('en un grupo ponderado el nuevo entra con peso 0', () => {
-    expect(toCreateIndicatorDto(values, true).weightBp).toBe(0);
-    expect(toCreateIndicatorDto(values, false)).not.toHaveProperty('weightBp');
+    expect(toCreateIndicatorDto(values, true, period).weightBp).toBe(0);
+    expect(toCreateIndicatorDto(values, false, period)).not.toHaveProperty('weightBp');
   });
 });
 
 describe('toUpdateIndicatorDto / toMetricAttributesPatch', () => {
   const values = { ...emptyIndicatorForm(), kind: 'outcome' as const, source: '', description: 'Fórmula', targetValue: '9' };
-  it('el update del indicador lleva base, meta y dirección', () => {
-    expect(toUpdateIndicatorDto(values)).toEqual({ baselineValue: '0', targetValue: '9', direction: 'increasing' });
+  it('el update del indicador lleva base, meta, dirección y modo de curva', () => {
+    expect(toUpdateIndicatorDto(values, period)).toEqual({
+      baselineValue: '0',
+      targetValue: '9',
+      direction: 'increasing',
+      expectedCurveMode: 'linear',
+    });
+  });
+  it('pasar a lineal no manda puntos', () => {
+    expect(toUpdateIndicatorDto({ ...values, pointValues: { '2027-01-01': '1' } }, period)).not.toHaveProperty(
+      'targetPoints',
+    );
   });
   it('el patch de la métrica solo incluye lo que cambió', () => {
     expect(toMetricAttributesPatch(values, { kind: 'output', source: null, description: 'Fórmula' })).toEqual({

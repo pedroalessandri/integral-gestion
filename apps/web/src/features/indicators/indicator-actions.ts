@@ -2,11 +2,14 @@
 
 import type {
   CreateObjectiveIndicatorDto,
+  IndicatorStatusDto,
+  IndicatorTargetPointDto,
   MetricDetailDto,
   MetricEntryDto,
   MetricSeriesDto,
   MetricSummaryDto,
   ObjectiveIndicatorDto,
+  ObjectiveStatusDto,
   SetObjectiveIndicatorWeightsDto,
   UpdateObjectiveIndicatorDto,
 } from '@gestion-publica/shared-types/metrics';
@@ -105,4 +108,37 @@ export async function getIndicatorChartDataAction(
   if (!series.ok) return series;
   if (!entries.ok) return entries;
   return { ok: true, data: { metric: metric.data, series: series.data, entries: entries.data } };
+}
+
+/** Estado de un objetivo: resultado y gestión, cada una con su desvío y semáforo (nunca combinadas). */
+export async function getObjectiveStatusAction(orgId: string, objectiveId: string) {
+  return request<ObjectiveStatusDto>(orgId, `${OKR}/objectives/${objectiveId}/status`);
+}
+
+/** Estado y puntos de curva manual de un indicador. Solo necesitan `okr:read` (no el módulo de métricas). */
+export interface IndicatorExtras {
+  /** `null` si no se pudo calcular: la tarjeta se muestra igual, sin semáforo. */
+  status: IndicatorStatusDto | null;
+  statusError: string | null;
+  /** Puntos de la curva manual (vacío si la curva no es manual). `null` si no se pudieron cargar. */
+  targetPoints: IndicatorTargetPointDto[] | null;
+  pointsError: string | null;
+}
+
+export async function getIndicatorExtrasAction(
+  orgId: string,
+  indicator: Pick<ObjectiveIndicatorDto, 'id' | 'expectedCurveMode'>,
+): Promise<IndicatorExtras> {
+  const [status, points] = await Promise.all([
+    request<IndicatorStatusDto>(orgId, `${OKR}/indicators/${indicator.id}/status`),
+    indicator.expectedCurveMode === 'manual'
+      ? requestItems<IndicatorTargetPointDto>(orgId, `${OKR}/indicators/${indicator.id}/target-points`)
+      : Promise.resolve<ActionResult<IndicatorTargetPointDto[]>>({ ok: true, data: [] }),
+  ]);
+  return {
+    status: status.ok ? status.data : null,
+    statusError: status.ok ? null : status.error,
+    targetPoints: points.ok ? points.data : null,
+    pointsError: points.ok ? null : points.error,
+  };
 }

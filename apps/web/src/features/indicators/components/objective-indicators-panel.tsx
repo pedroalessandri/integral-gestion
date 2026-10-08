@@ -8,7 +8,8 @@ import { EmptyState } from '@/components/empty-state';
 import type { ActionResult } from '@/features/planning/error-messages';
 import { WeightsControl } from '@/features/projects/components/weights-control';
 import { LABELS } from '@/lib/labels';
-import type { IndicatorChartData } from '../indicator-actions';
+import type { CurvePeriod } from '../curve-form';
+import type { IndicatorChartData, IndicatorExtras } from '../indicator-actions';
 import { useObjectiveIndicators } from '../useObjectiveIndicators';
 import { DeleteIndicatorDialog } from './delete-indicator-dialog';
 import { IndicatorCard } from './indicator-card';
@@ -21,6 +22,10 @@ interface Props {
   /** Gráfico y cargas por `metricId`; `null` si el módulo de métricas no está habilitado para la organización. */
   chartsByMetricId: Record<string, ActionResult<IndicatorChartData>> | null;
   /** Métricas del período del objetivo que todavía no son indicadores de él. */
+  /** Estado y puntos de curva por `indicator.id`. */
+  extrasByIndicatorId: Record<string, IndicatorExtras>;
+  /** Período del objetivo: de ahí salen los intervalos de la curva manual. */
+  period: CurvePeriod;
   availableMetrics: MetricSummaryDto[];
   catalogError: string | null;
   /** Período cerrado: solo lectura. */
@@ -39,12 +44,14 @@ export function ObjectiveIndicatorsPanel({
   objective,
   indicators,
   chartsByMetricId,
+  extrasByIndicatorId,
+  period,
   availableMetrics,
   catalogError,
   readOnly,
   loadError,
 }: Props) {
-  const s = useObjectiveIndicators(orgId, objective.id, indicators);
+  const s = useObjectiveIndicators(orgId, objective.id, indicators, period);
   const [dialog, setDialog] = useState<DialogState>(null);
 
   function open(next: DialogState) {
@@ -113,6 +120,7 @@ export function ObjectiveIndicatorsPanel({
                 orgId={orgId}
                 indicator={indicator}
                 chart={chartsByMetricId?.[indicator.metricId] ?? null}
+                extras={extrasByIndicatorId[indicator.id] ?? null}
                 readOnly={readOnly}
                 defaultOpen={indicators.length === 1}
                 onEdit={() => open({ type: 'edit', indicator })}
@@ -127,6 +135,8 @@ export function ObjectiveIndicatorsPanel({
         <IndicatorFormDialog
           indicator={null}
           metric={null}
+          targetPoints={[]}
+          period={period}
           availableMetrics={availableMetrics}
           catalogError={catalogError}
           groupWeighted={s.weights.mode === 'weighted'}
@@ -140,6 +150,8 @@ export function ObjectiveIndicatorsPanel({
         <IndicatorFormDialog
           indicator={editing}
           metric={editingMetric}
+          targetPoints={extrasByIndicatorId[editing.id] ? extrasByIndicatorId[editing.id]!.targetPoints : []}
+          period={period}
           availableMetrics={[]}
           catalogError={null}
           groupWeighted={false}

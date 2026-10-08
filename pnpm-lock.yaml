@@ -153,6 +153,9 @@ importers:
       '@auth0/nextjs-auth0':
         specifier: ^4.18.0
         version: 4.18.0(next@16.2.4(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@gestion-publica/metrics-domain':
+        specifier: workspace:^
+        version: link:../../packages/metrics-domain
       '@gestion-publica/shared-types':
         specifier: workspace:^
         version: link:../../packages/shared-types

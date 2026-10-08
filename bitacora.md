@@ -15,6 +15,27 @@ Formato:
 
 ---
 
+## 2026-10-08 · C16 · frontend-dev · feature/plan-f6-curvas
+- Hecho:
+  - **Editor de curva** en el diálogo del indicador (`indicator-form-dialog.tsx`): modo Lineal / Manual y "Desde proyectos" deshabilitado con su explicación (la API lo rechaza hasta C17). En manual hay un campo por intervalo (los buckets salen de `buildBuckets` de `metrics-domain` con el período del objetivo y la frecuencia, así que coinciden con la validación de la API); los vacíos se interpolan y el último intervalo queda bloqueado y siempre vale la meta, de modo que "el último punto = meta" no se puede romper. Validación de decimales en `curve-form.ts` y DTOs con `expectedCurveMode` + `targetPoints` en el mismo POST/PATCH (hace falta si cambió la meta). Mensajes en español para `IndicatorTargetPointsInvalid` (con el detalle de la API) y `ExpectedCurveModeNotAvailable`.
+  - **Curva en el gráfico**: `chart-data.ts` ahora evalúa `expectedCurve` de `@gestion-publica/metrics-domain` (función pura, la misma del backend; no se duplicó lógica) sobre las fechas de muestreo de `series.expected` y los puntos de `GET okr/indicators/:id/target-points`. Reemplaza la recta con `Number`. La leyenda dice "Curva esperada (manual|lineal)". Si no se pueden cargar los puntos de un manual, se deja la serie de la API y se avisa.
+  - **Semáforos**: `SemaphoreBadge` (texto + ícono + desvío en puntos, `lib/format-deviation.ts` con enteros) en la tarjeta del indicador (desde `/status`), junto a la barra de resultado y junto a la de gestión en el encabezado del objetivo (`GET okr/objectives/:id/status`). Uno por lectura; nunca combinados. Sin cargas: "Sin datos".
+  - **"Carga pendiente"**: `PendingLoadBadge` en la tarjeta del indicador (con las fechas en el tooltip) y en la barra de resultado del objetivo (`pendingBucketsCount`).
+  - `apps/web` suma la dependencia de workspace `@gestion-publica/metrics-domain` (consume `dist` igual que `shared-types`; turbo la buildea antes por `^build`). Etiquetas en `lib/labels.ts` (`SEMAPHORE_LABELS`, `DEVIATION_LABELS`, `PENDING_LOAD_LABELS`, `EXPECTED_CURVE_MODE_LABELS`). Vitest de web ahora incluye `*.test.tsx`.
+- Commit: este commit (`feat(web): editor de curva manual, curva esperada en el gráfico, semáforos y carga pendiente`)
+- Verificación:
+  - `pnpm typecheck` 7/7; `pnpm lint` 0 errores (2 warnings preexistentes en web); `pnpm test` 12/12 (web 49 tests, 24 nuevos); `pnpm --filter web build` OK.
+  - No se probó contra la API levantada: lo cubre el smoke de Pedro (indicador `outcome` semestral con curva manual).
+- Pendiente / desvíos:
+  - **Listado de objetivos sin semáforo ni badge**: `ObjectiveSummaryDto` no trae el estado y pedirlo por fila sería N+1. Contrato faltante anotado en TODO.md (estado en los ítems de `GET okr/objectives` o `GET okr/objectives/status?periodId=`); los componentes ya existen para enchufarlo.
+  - Bug de C14 detectado acá y corregido en este mismo commit (no quedó en TODO.md): `expectedCurve` manual devolvía la base en el instante exacto del inicio del período aunque hubiera un punto ahí (el seed tiene 1/ene → 18), así que el desvío con carga solo en el primer bucket se medía contra la base. Ahora un punto en el inicio (o antes) reemplaza al ancla (inicio, base); test de regresión en `curves.test.ts`.
+  - La pestaña hace 1 request extra de `/status` por indicador (y uno de `target-points` por cada manual) más el del objetivo, en paralelo en el servidor.
+  - Sin tests de componentes con Testing Library (no está en web): se probaron `SemaphoreBadge` y `PendingLoadBadge` con `renderToStaticMarkup`.
+- Preguntas abiertas:
+  - El último intervalo (inicio del último bucket) queda fijo en la meta. Para una frecuencia semestral en un período anual la meta se "alcanza" el 1/jul, no el 31/dic. Es lo que ya hace el seed y la API; ¿está bien o querés poder ubicar la meta en el fin del período?
+  - Nombres del semáforo en la UI: "En tiempo" (verde, incluye adelantado), "Atención" (amarillo), "Atrasado" (rojo). ¿Los cambiás?
+  - Con un solo intervalo en el período (ej: frecuencia anual) la curva manual no aporta nada: hoy se avisa pero se permite. ¿Se bloquea?
+
 ## 2026-10-08 · C15 · backend-dev · feature/plan-f6-curvas
 - Hecho:
   - **Lugar común del desvío** (decisión de Pedro en C14): paquete puro nuevo `packages/deviation-domain` (`@gestion-publica/deviation-domain`, misma config que los otros: tsconfig, tsup, vitest, exports; sin dependencias). Tiene `deviationBp` (sobre enteros `bigint` en la misma escala), `progressDeviationBp` (gestión: real − planificado, bp), `aggregateDeviationBp` (media simple o ponderada de los hermanos medibles), `semaphore` y `DEFAULT_SEMAPHORE_THRESHOLDS` (10/25 puntos; -10 exacto verde, -25 exacto amarillo; adelantado siempre verde). Se movieron ahí las funciones y sus tests. `metrics-domain` ya no exporta `deviation` ni `semaphore`; conserva `deviationBp(strings)` solo como adaptador que parsea decimales y delega (lo usa `MetricService`). `okr-domain` suma `plannedExecutionProgress(projects, at)` (RN-P9: planificado de gestión del objetivo, con los mismos pesos todo-o-nada).

@@ -1,5 +1,5 @@
 import type { OrgUnitKind } from '@gestion-publica/shared-types/core';
-import type { MetricKind } from '@gestion-publica/shared-types/metrics';
+import type { ExpectedCurveMode, MetricKind, SemaphoreColor } from '@gestion-publica/shared-types/metrics';
 
 /**
  * Diccionario único de etiquetas de UI (ADR-0006 D2, SPEC §5).
@@ -51,4 +51,37 @@ export const NO_AXIS_LABEL = 'Sin eje';
 export const INDICATOR_KIND_LABELS: Record<MetricKind, { label: string; hint: string }> = {
   output: { label: 'Producto', hint: 'lo que se entrega (km, obras, cantidad)' },
   outcome: { label: 'Resultado', hint: 'el cambio que se busca (alfabetización, calidad)' },
+};
+
+/** Semáforo del desvío contra lo esperado (RN-P9). Adelantado cuenta como "En tiempo". */
+export const SEMAPHORE_LABELS: Record<SemaphoreColor, string> = {
+  green: 'En tiempo',
+  yellow: 'Atención',
+  red: 'Atrasado',
+};
+
+export const DEVIATION_LABELS = {
+  deviation: 'Desvío',
+  noData: 'Sin datos',
+  noDataHint: 'Todavía no hay cargas para medir el desvío contra lo esperado.',
+} as const;
+
+/** Carga vencida (RN-P15): buckets cerrados hace más de N días sin carga. */
+export const PENDING_LOAD_LABELS = {
+  one: 'Carga pendiente',
+  many: (count: number) => `${count} cargas pendientes`,
+  hint: 'Intervalos ya cerrados que todavía no tienen carga.',
+} as const;
+
+/** Modo de la curva esperada del indicador (RN-P17). */
+export const EXPECTED_CURVE_MODE_LABELS: Record<ExpectedCurveMode, { label: string; hint: string }> = {
+  linear: { label: 'Lineal', hint: 'Va en línea recta desde la línea base hasta la meta a lo largo del período.' },
+  manual: {
+    label: 'Manual',
+    hint: 'Definís cuánto esperás acumular en cada intervalo. Los intervalos sin valor se interpolan.',
+  },
+  from_projects: {
+    label: 'Desde proyectos',
+    hint: 'Sube cuando termina cada proyecto que aporta al indicador. Todavía no está disponible: depende de los aportes de proyectos.',
+  },
 };

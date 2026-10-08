@@ -62,12 +62,15 @@ export function expectedCurve(input: ExpectedCurveInput): string {
   }
 
   // manual
-  const anchors = [
-    { ms: input.range.startsAt.getTime(), value: parseDecimal4(input.baseline) },
-    ...input.points
-      .map((p) => ({ ms: toUTCMidnight(p.bucketDate).getTime(), value: parseDecimal4(p.expectedValue) }))
-      .sort((a, b) => a.ms - b.ms),
-  ];
+  const points = input.points
+    .map((p) => ({ ms: toUTCMidnight(p.bucketDate).getTime(), value: parseDecimal4(p.expectedValue) }))
+    .sort((a, b) => a.ms - b.ms);
+  const startMs = input.range.startsAt.getTime();
+  // Un punto en el inicio del período (o antes) reemplaza al ancla (inicio, base).
+  const anchors =
+    points[0] !== undefined && points[0].ms <= startMs
+      ? points
+      : [{ ms: startMs, value: parseDecimal4(input.baseline) }, ...points];
 
   const first = anchors[0];
   const last = anchors[anchors.length - 1];

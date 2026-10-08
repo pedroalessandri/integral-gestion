@@ -48,12 +48,22 @@ const MESSAGES: Record<string, string> = {
   MetricInUseByObjective:
     'No se puede eliminar el indicador porque mide un objetivo. Quitalo primero de los objetivos.',
   InvalidBucketDate: 'Esa fecha no es un inicio de intervalo válido para la frecuencia del indicador. Elegí otra.',
+  IndicatorTargetPointsInvalid:
+    'Los puntos de la curva manual no son válidos. Cada punto tiene que caer en el inicio de un intervalo del período y el último tiene que ser igual a la meta.',
+  ExpectedCurveModeNotAvailable:
+    'La curva "Desde proyectos" todavía no está disponible. Elegí Lineal o Manual.',
   OwnerNotMember: 'La persona responsable tiene que ser miembro de la organización.',
   MandateRangeInvalid: 'El fin del mandato tiene que ser posterior al inicio.',
 };
 
+/** Códigos cuyo detalle (qué punto falló y por qué) vale la pena mostrar junto al mensaje fijo. */
+const CODES_WITH_DETAIL = new Set(['IndicatorTargetPointsInvalid']);
+
 export function describeApiError(info: ApiErrorInfo): string {
-  if (info.code && MESSAGES[info.code]) return MESSAGES[info.code] as string;
+  if (info.code && MESSAGES[info.code]) {
+    const fixed = MESSAGES[info.code] as string;
+    return CODES_WITH_DETAIL.has(info.code) && info.message ? `${fixed} Detalle: ${info.message}` : fixed;
+  }
   if (info.status === 403) return 'No tenés permisos para realizar esta acción.';
   if (info.status === 404) return 'No se encontró el recurso. Puede que lo hayan eliminado; recargá la página.';
   if (info.status === 400 && info.message) return `Revisá los datos: ${info.message}`;

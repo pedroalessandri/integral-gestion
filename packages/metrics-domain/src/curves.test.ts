@@ -46,6 +46,16 @@ describe('expectedCurve manual', () => {
     const rev = expectedCurve({ ...base, mode: 'manual', points: [...points].reverse(), at: d('2026-09-01') });
     expect(rev).toBe(at('2026-09-01'));
   });
+  it('un punto en el inicio del período manda sobre la base en ese instante', () => {
+    const pts = [
+      { bucketDate: d('2026-01-01'), expectedValue: '18' },
+      { bucketDate: d('2026-07-01'), expectedValue: '30' },
+    ];
+    const at2 = (s: string) => expectedCurve({ ...base, mode: 'manual', points: pts, at: d(s) });
+    expect(at2('2026-01-01')).toBe('18');
+    expect(at2('2025-12-01')).toBe('18');
+    expect(at2('2026-07-01')).toBe('30');
+  });
   it('sin puntos devuelve la base', () => {
     expect(expectedCurve({ ...base, mode: 'manual', points: [], at: d('2026-06-01') })).toBe('0');
   });
