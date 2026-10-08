@@ -18,12 +18,6 @@
 - Origen: C13 (2026-10-08). Actualizado en C15 (2026-10-08): la curva manual quedó hecha.
 - Actualización (C18, 2026-10-08): hecho en `feature/plan-f7-aportes` el indicador "Kilómetros de ciclovía habilitados" con `execution_feeds_indicator` + curva `from_projects` y aportes pendientes de "Ciclovía de la Av. Costanera" (8) y "Bicisendas escolares" (4), que no alcanzan la meta (20). Falta el proyecto `from_indicator` (depende de habilitarlo en `ProjectService`).
 
-### [F] Habilitar la curva `from_projects` (RN-P17) cuando existan los aportes
-- Por qué: C15 rechaza `expectedCurveMode = 'from_projects'` con 422 `ExpectedCurveModeNotAvailable`, porque la curva escalonada necesita `ProjectContribution` (C17) y sin pasos queda plana en la base. `IndicatorStatusService` ya tiene la rama (`steps: []`).
-- Posible solución: en C17, cargar los pasos (`endsAt` del proyecto y `contributionValue`) en `IndicatorStatusService`, validar que sea `kind = output` con `linkMode = execution_feeds_indicator` y quitar el 422 de `assertCurveModeAvailable`.
-- Origen: C15 (2026-10-08).
-- Actualización (C17, 2026-10-08): hecho en la rama `feature/plan-f7-aportes` (pasos de la curva desde `ProjectContribution` + `endsAt` planificado vía `PROJECT_LINK_READER`, 422 solo si no es `output` + `execution_feeds_indicator`). Mover a Completados al mergear.
-
 ### [F] Reconciliar los aportes de proyectos si el oyente falla (consistencia eventual)
 - Por qué: el aporte se aplica con el evento `project.completed` / `project.reopened`, post-commit (ADR-0009 D5). Si el oyente de `metrics` falla (DB caída, deploy en el medio), `okr` ya confirmó el avance del proyecto y el indicador queda sin la carga automática (o sin su compensación) hasta el próximo cambio del proyecto. Solo se loguea. `ProjectContributionApplier.reconcileProject` ya es idempotente y reconcilia contra el estado actual del proyecto, así que se puede reintentar sin riesgo.
 - Posible solución: un job (cron del módulo `metrics`) o un endpoint admin que recorra los `ProjectContribution` cuyo estado (`appliedEntryId`) no coincide con el avance del proyecto (100 % sin aplicar / aplicado y no al 100 %) y llame a `reconcileProject`.
@@ -150,6 +144,7 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [F] Curva `from_projects` (RN-P17) habilitada con los aportes de proyectos (`ProjectContribution`, carga automática al 100 % y UI de aportes) — mergeado el 8 octubre 2026
 - [B] Validar `:orgId` del path contra el tenant del request (`OrgParamGuard` en org-units, members, modules, strategic-plan y metrics) — mergeado el 7 octubre 2026
 - [F] Módulo 2 "Indicadores en OKRs" completo (backend + frontend): `progress_mode` en KR, vínculo métrica↔KR con progreso automático (interpolación baseline→target), hook de recálculo, contexto a nivel objetivo, y la Pantalla 3 (badge automático, barra sin slider, sin-datos, editar/desvincular). Seed de demo + smoke checklist en docs/features/indicadores-smoke-checklist.md — mergeado el 10 julio 2026
 - [F] Módulo 1 "Indicadores de gestión" completo (backend + frontend): schema `metrics`, feature-gating por org (ModuleEnabledGuard), package `metrics-domain`, ABM + carga periódica con curva esperado-vs-real, nav gated y tab "Módulos" en Configuración — mergeado el 9 julio 2026

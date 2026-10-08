@@ -33,6 +33,7 @@ Formato:
   - ✅ OK a `sourceProjectTitle` en `MetricEntryDto` como ítem de TODO.md.
 - Seed demo (pedido de Pedro, commit aparte): el indicador "Kilómetros de ciclovía habilitados" usa `execution_feeds_indicator` + curva `from_projects`, con aportes pendientes de "Ciclovía de la Av. Costanera" (8 km) y "Bicisendas escolares" (4 km); la suma (12) no llega a la meta (20), así se ve el aviso. Probado en DB descartable `gp_seed` (migrada, seed corrido dos veces, ya borrada).
 - Smoke de Pedro: **postergado** (2026-10-08). Pasos: en "Ciclovía de la Av. Costanera" subir "Obra civil y señalización" al 100 % → aporte Aplicado y carga "Automática" +8 en el indicador; bajarla → "Compensación" −8. Requiere volver a correr el seed en la DB que se use.
+- Fase 7 mergeada por Pedro (PR #21, 2026-10-08) con el smoke pendiente. El merge tomó la rama en `496de14`: el reset del diálogo y el seed con aportes entraron después, en el PR de cierre `chore/cierre-fase-7`.
 
 ## 2026-10-08 · C17 · backend-dev · feature/plan-f7-aportes
 - Hecho:
