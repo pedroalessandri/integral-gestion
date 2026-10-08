@@ -106,6 +106,36 @@
 - Por qué: `GET`/`POST orgs/:orgId/periods` y `GET periods/:id` solo tienen un TODO(ADR-0004): sin `TenantGuard`, sin `PermissionsGuard` y sin tenant scoping. `OrgParamGuard` (fix de `:orgId`) no alcanza ahí porque sin `TenantGuard` no hay org en el contexto. Lo mismo vale para los guards de `OrganizationController` (`orgs/:id`, operaciones de superadmin).
 - Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.
 - Origen: fix de `:orgId` (2026-10-07).
+- Actualización (C20, 2026-10-08): **crítico**. También están abiertos `POST periods/:id/open|close` (se puede cerrar el período de otra org y trabar todas sus escrituras) y todo el ABM de `orgs` (crear, editar, desactivar). `closePeriod` busca por id con `prisma.raw` sin org. Va en C20b.
+
+### [B] Vincular una métrica existente a un objetivo propio la captura o traba a otras unidades (C20 #2, alta)
+- Por qué: `ObjectiveIndicatorService.create` con `metricId` no exige poder escribir la métrica. Un usuario de la unidad B vincula una métrica sin objetivos (solo central) y pasa a poder cargarla y editarla; o vincula una métrica de la unidad A y desde ahí ni A ni B pueden cargarla (la regla exige todas las unidades).
+- Posible solución: exigir `assertCanWriteMetric` (o alcance central) para vincular una métrica existente. Va en C20b.
+- Origen: C20 (2026-10-08).
+
+### [B] Controllers de indicadores y aportes sin `ModuleEnabledGuard`; métrica inline sin `metrics:write` (C20 #3, media)
+- Por qué: `ObjectiveIndicatorController` y `ProjectContributionController` (módulo `metrics`) no usan `@RequiresModule`. `POST okr/objectives/:id/indicators` con `metric` inline crea una `Metric` con solo `okr:write`, aunque la org tenga el módulo deshabilitado.
+- Posible solución: `ModuleEnabledGuard` en esos controllers o exigir `metrics:write` con `metric` inline.
+- Origen: C20 (2026-10-08).
+
+### [B] Borrar un objetivo deja vivos proyectos, indicadores y aportes (C20 #4, media)
+- Por qué: `ObjectiveService.softDelete` solo cuenta KRs. Los proyectos huérfanos pueden seguir disparando cargas automáticas (sospecha) y la métrica deja de contar ese objetivo en `assertCanWriteMetric`. Amplía el ítem "Borrar un objetivo no da de baja sus ObjectiveIndicator".
+- Posible solución: 409 si hay hijos vivos, o cascada con audit y compensación; `findLiveProject` y el applier verifican el objetivo vivo.
+- Origen: C20 (2026-10-08).
+
+### [B] `@Body()` sin `ValidationPipe` en KR y rebalance; no hay pipe global (C20 #5, media)
+- Por qué: `key-result.controller.ts` y `objective.controller.ts` (rebalance) reciben el body sin validar; un body malformado da 500 en vez de 400. Sin mass assignment (los services eligen campos).
+- Posible solución: `ValidationPipe({ whitelist, forbidNonWhitelisted, transform })` global en `main.ts`.
+- Origen: C20 (2026-10-08).
+
+### [B] Hallazgos bajos de la revisión de seguridad C20
+- `PermissionsGuard` deja pasar sin `@Permissions` (fail-open): exigir `@Permissions` o `@Public` explícito.
+- `ownerUserId` de tareas y KRs sin validar membresía (500 vs. 200 sirve de oráculo de ids).
+- Mover un objetivo de unidad deja proyectos fuera del subárbol nuevo (RN-P4).
+- Server actions de web interpolan ids en la URL sin `encodeURIComponent`.
+- `pg_advisory_xact_lock(hashtext(objectiveId))` sin prefijo de org.
+- `DevAuthMiddleware` activo si falta `NODE_ENV`: fallar el arranque si falta o si `AUTH0_*` es placeholder.
+- Origen: C20 (2026-10-08). Prioridad: baja salvo que Pedro diga otra cosa.
 
 ### [F] Serie del indicador con base y meta del indicador (`GET okr/indicators/:id/series`)
 - Por qué: `GET metrics/:id/series` arma la curva esperada con la base y la meta de la `Metric`, pero para el objetivo mandan las del `ObjectiveIndicator` (ADR-0009 D8). C12 redibuja la recta esperada en el front (`features/indicators/chart-data.ts`) sobre las fechas que devuelve la API. Además el resumen (`expectedToDate`, `deviationPct`) sale con la base/meta de la métrica, así que la pestaña no lo muestra. El desvío de resultado (RN-P9) y la curva `manual`/`from_projects` (F6) necesitan el cálculo en el backend.

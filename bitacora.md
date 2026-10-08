@@ -15,6 +15,31 @@ Formato:
 
 ---
 
+## 2026-10-08 · C20 · security-reviewer · feature/plan-f8-alcance
+- Hecho: revisión de seguridad de solo lectura de `git diff 2085245..HEAD` (Fases 2–8, 304 archivos): controllers, guards, services de core/okr/metrics/planning, DTOs, listeners, puertos, migraciones SQL, `$queryRaw`/`$executeRaw`, `prisma-tenant-extension` y server actions de web. Veredicto: **el diff de las Fases 2–8 no tiene bloqueantes propios**; hay 1 crítico preexistente fuera del rango y 1 alto dentro del rango → **C20b**.
+- Hallazgos:
+
+  | # | Sev. | Archivo | Resumen |
+  |---|---|---|---|
+  | 1 | **Crítica** (preexistente) | `core/controllers/period.controller.ts`, `organization.controller.ts` | Sin `TenantGuard`/`PermissionsGuard`/superadmin (solo el `AuthGuard` global). `POST periods/<id de otra org>/close` cierra su período y traba todas sus escrituras; `POST orgs/:id/deactivate` deja afuera a toda la org; `GET/POST orgs` enumera y crea orgs. `closePeriod` busca con `prisma.raw` por id sin org (verificado). |
+  | 2 | Alta | `metrics/services/objective-indicator.service.ts:144-165` | Vincular una métrica existente no exige poder escribirla: un usuario de la unidad B captura una métrica central, o traba la carga de una métrica de la unidad A. |
+  | 3 | Media | `objective-indicator.controller.ts`, `project-contribution.controller.ts` | Sin `ModuleEnabledGuard`; métrica inline creada con solo `okr:write`. |
+  | 4 | Media | `okr/services/objective.service.ts:385-425` | Borrar un objetivo deja vivos proyectos, indicadores y aportes. |
+  | 5 | Media (preexistente) | `key-result.controller.ts`, `objective.controller.ts:109` | `@Body()` sin `ValidationPipe`; no hay pipe global. |
+  | 6–10 | Baja | varios | `PermissionsGuard` fail-open; `ownerUserId` de tarea/KR sin validar; mover objetivo deja proyectos fuera del subárbol; URLs sin `encodeURIComponent` en web; advisory lock sin prefijo de org. |
+
+- Checklist: tenant scoping PASS (modelos nuevos en `TENANT_SCOPED_MODELS`, SQL crudo con tagged templates y org en el WHERE, ids ajenos → 404); endpoints PASS salvo #1/#3/#6; alcance por unidad PASS salvo #2/#4/#8 (anti-escalada en invitar, rol, quitar y `setScope` OK; AuthContext desde `request.authContext`); eventos post-commit PASS (el applier reconcilia contra el estado real, idempotente, sin camino HTTP); validación PASS con matices (#5; `organizationId`, `origin`, `appliedEntryId` no asignables); audit PASS (solo INSERT, también en migraciones); fuga en errores PASS (`details` solo en `IndicatorHasLinkedProjects`, misma org); secretos PASS.
+- Observaciones: `DevAuthMiddleware` activo si falta `NODE_ENV`; `core:org-unit:vision:write` en `org-user` con alcance `null` permite editar la visión de cualquier unidad (coherente con RN-P19); `seed-demo.ts` no debe correr en producción.
+- Commit: este commit (`docs: revisión de seguridad de las Fases 2–8 (C20)`)
+- Verificación: revisión estática (el subagente no ejecutó código). Hallazgo #1 verificado a mano: `period.controller.ts` sin `@UseGuards` (solo TODO(ADR-0004)) y `PeriodService.closePeriod` con `prisma.raw.period.findUnique({ where: { id } })`. Sin cambios de código ni de DB en esta corrida.
+- Pendiente / desvíos:
+  - **C20b** (crítico + alto): guards y scoping de `PeriodController` y `OrganizationController` (+ e2e "usuario sin membresía → 403") y exigir poder escribir la métrica al vincularla. Recomendación: hacerla en esta misma rama antes del merge de la Fase 8.
+  - #3–#10 y observaciones quedan en TODO.md.
+  - El PR #22 (seed y reset del diálogo de la Fase 7) no estaba en main y quedó fuera de la revisión (bajo riesgo).
+- Preguntas abiertas:
+  - `PeriodController` con `TenantGuard` cambia la política de acceso (el front tiene que mandar el header de org): ya estaba anotado en TODO.md como decisión de Pedro.
+  - ¿C20b en esta rama antes del merge, o mergear la Fase 8 y hacer C20b aparte?
+
 ## 2026-10-08 · C19 · backend-dev · feature/plan-f8-alcance
 - Hecho:
   - **Puerto `ORG_UNIT_SCOPE`** (`common/contracts/org-unit-scope.port.ts`), implementado por `core` (`OrgUnitScopeService`, en el `CoreContractsModule` global): `assertCanWriteInUnit`, `assertCentralScope` y `assertCanWriteInAllUnits`, con 403 `OrgUnitScopeForbidden`. Superadmin y alcance `null` pasan sin consultar; con alcance en una unidad se resuelven sus descendientes con CTE recursiva sobre `core.org_unit` (org + `deleted_at IS NULL`), cacheada por request (`WeakMap` sobre el `AuthContext`). Default deny sin membresía. RN-P21: RBAC ∧ alcance, en un servicio reutilizable, nunca en controllers.
