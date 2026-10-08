@@ -8,6 +8,7 @@ import type {
   MetricDetailDto,
   MetricDirection,
   MetricFrequency,
+  MetricKind,
   MetricSeriesDto,
   MetricSummaryDto,
   MetricUnit,
@@ -50,6 +51,9 @@ type MetricRow = {
   unit: string;
   direction: string;
   frequency: string;
+  kind: string;
+  source: string | null;
+  description: string | null;
   baselineValue: { toString(): string };
   targetValue: { toString(): string };
   deletedAt: Date | null;
@@ -115,6 +119,9 @@ export class MetricService {
             unit: dto.unit,
             direction: dto.direction,
             frequency: dto.frequency,
+            kind: dto.kind,
+            source: dto.source ?? null,
+            description: dto.description ?? null,
             baselineValue: dto.baselineValue ?? '0',
             targetValue: dto.targetValue,
           },
@@ -132,6 +139,9 @@ export class MetricService {
               unit: metric.unit,
               direction: metric.direction,
               frequency: metric.frequency,
+              kind: metric.kind,
+              source: metric.source,
+              description: metric.description,
               baselineValue: metric.baselineValue.toString(),
               targetValue: metric.targetValue.toString(),
               periodId: metric.periodId,
@@ -163,6 +173,9 @@ export class MetricService {
           where: { id },
           data: {
             ...(dto.name !== undefined && { name: dto.name }),
+            ...(dto.kind !== undefined && { kind: dto.kind }),
+            ...(dto.source !== undefined && { source: dto.source }),
+            ...(dto.description !== undefined && { description: dto.description }),
             ...(dto.baselineValue !== undefined && { baselineValue: dto.baselineValue }),
             ...(dto.targetValue !== undefined && { targetValue: dto.targetValue }),
           },
@@ -174,6 +187,18 @@ export class MetricService {
         if (dto.name !== undefined) {
           before['name'] = existing.name;
           after['name'] = dto.name;
+        }
+        if (dto.kind !== undefined) {
+          before['kind'] = existing.kind;
+          after['kind'] = dto.kind;
+        }
+        if (dto.source !== undefined) {
+          before['source'] = existing.source;
+          after['source'] = dto.source;
+        }
+        if (dto.description !== undefined) {
+          before['description'] = existing.description;
+          after['description'] = dto.description;
         }
         if (dto.baselineValue !== undefined) {
           before['baselineValue'] = existing.baselineValue.toString();
@@ -363,6 +388,9 @@ export class MetricService {
       unit: metric.unit as MetricUnit,
       direction: metric.direction as MetricDirection,
       frequency: metric.frequency as MetricFrequency,
+      kind: metric.kind as MetricKind,
+      source: metric.source,
+      description: metric.description,
       baselineValue: baseline,
       targetValue: target,
       lastValue,

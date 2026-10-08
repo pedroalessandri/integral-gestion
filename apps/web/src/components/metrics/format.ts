@@ -37,6 +37,9 @@ export const FREQUENCY_LABELS: Record<MetricFrequency, string> = {
   weekly: 'Semanal',
   biweekly: 'Quincenal',
   monthly: 'Mensual',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  annual: 'Anual',
 };
 
 /** es-AR date label for a bucket / ISO date (day + short month). */

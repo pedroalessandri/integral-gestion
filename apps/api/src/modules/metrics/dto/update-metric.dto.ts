@@ -1,4 +1,5 @@
-import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import type { MetricKind } from '@gestion-publica/shared-types/metrics';
 import { DECIMAL_STRING_RE, DECIMAL_STRING_MESSAGE } from './create-metric.dto.js';
 
 /**
@@ -12,6 +13,22 @@ export class UpdateMetricDto {
   @MinLength(1)
   @MaxLength(200)
   name?: string;
+
+  @IsOptional()
+  @IsIn(['output', 'outcome'])
+  kind?: MetricKind;
+
+  /** null clears the value. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  source?: string | null;
+
+  /** null clears the value. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string | null;
 
   @IsOptional()
   @Matches(DECIMAL_STRING_RE, { message: `baselineValue ${DECIMAL_STRING_MESSAGE}` })

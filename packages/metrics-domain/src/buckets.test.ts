@@ -82,3 +82,88 @@ describe('isValidBucketDate', () => {
     expect(isValidBucketDate(new Date('2026-03-01T00:00:00Z'), q2, 'monthly')).toBe(false);
   });
 });
+
+describe('buildBuckets: quarterly / semiannual / annual (RN-P15)', () => {
+  const year2026 = {
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: new Date('2026-12-31T00:00:00Z'),
+  };
+
+  it('quarterly: Jan/Apr/Jul/Oct on a calendar year', () => {
+    expect(buildBuckets(year2026, 'quarterly').map(iso)).toEqual([
+      '2026-01-01',
+      '2026-04-01',
+      '2026-07-01',
+      '2026-10-01',
+    ]);
+  });
+
+  it('quarterly: first bucket is the period start when mid-quarter', () => {
+    const range = {
+      startsAt: new Date('2026-02-15T00:00:00Z'),
+      endsAt: new Date('2026-10-01T00:00:00Z'),
+    };
+    expect(buildBuckets(range, 'quarterly').map(iso)).toEqual([
+      '2026-02-15',
+      '2026-04-01',
+      '2026-07-01',
+      '2026-10-01',
+    ]);
+  });
+
+  it('semiannual: Jan/Jul', () => {
+    expect(buildBuckets(year2026, 'semiannual').map(iso)).toEqual(['2026-01-01', '2026-07-01']);
+  });
+
+  it('semiannual: multi-year range rolls over the year boundary', () => {
+    const range = {
+      startsAt: new Date('2026-07-01T00:00:00Z'),
+      endsAt: new Date('2027-12-31T00:00:00Z'),
+    };
+    expect(buildBuckets(range, 'semiannual').map(iso)).toEqual([
+      '2026-07-01',
+      '2027-01-01',
+      '2027-07-01',
+    ]);
+  });
+
+  it('annual: Jan 1 of every year', () => {
+    const range = {
+      startsAt: new Date('2026-01-01T00:00:00Z'),
+      endsAt: new Date('2028-12-31T00:00:00Z'),
+    };
+    expect(buildBuckets(range, 'annual').map(iso)).toEqual([
+      '2026-01-01',
+      '2027-01-01',
+      '2028-01-01',
+    ]);
+  });
+
+  it('annual: period starting mid-year; next bucket is next Jan 1', () => {
+    const range = {
+      startsAt: new Date('2026-12-31T00:00:00Z'),
+      endsAt: new Date('2027-01-01T00:00:00Z'),
+    };
+    expect(buildBuckets(range, 'annual').map(iso)).toEqual(['2026-12-31', '2027-01-01']);
+  });
+
+  it('quarterly: end-of-year edge (Nov 30 start → Jan 1 next year)', () => {
+    const range = {
+      startsAt: new Date('2026-11-30T00:00:00Z'),
+      endsAt: new Date('2027-04-01T00:00:00Z'),
+    };
+    expect(buildBuckets(range, 'quarterly').map(iso)).toEqual([
+      '2026-11-30',
+      '2027-01-01',
+      '2027-04-01',
+    ]);
+  });
+
+  it('isValidBucketDate honours the new frequencies', () => {
+    expect(isValidBucketDate(new Date('2026-07-01T00:00:00Z'), year2026, 'semiannual')).toBe(true);
+    expect(isValidBucketDate(new Date('2026-04-01T00:00:00Z'), year2026, 'semiannual')).toBe(false);
+    expect(isValidBucketDate(new Date('2026-04-01T00:00:00Z'), year2026, 'quarterly')).toBe(true);
+    expect(isValidBucketDate(new Date('2026-05-01T00:00:00Z'), year2026, 'quarterly')).toBe(false);
+    expect(isValidBucketDate(new Date('2026-07-01T00:00:00Z'), year2026, 'annual')).toBe(false);
+  });
+});

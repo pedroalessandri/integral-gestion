@@ -438,6 +438,9 @@ type MetricCreatedEvent = BaseEvent<
       unit: string;
       direction: string;
       frequency: string;
+      kind: string;
+      source: string | null;
+      description: string | null;
       baselineValue: string;
       targetValue: string;
       periodId: string;
@@ -449,8 +452,22 @@ type MetricUpdatedEvent = BaseEvent<
   'metric.updated',
   'metrics.metric',
   {
-    before: Partial<{ name: string; baselineValue: string; targetValue: string }>;
-    after: Partial<{ name: string; baselineValue: string; targetValue: string }>;
+    before: Partial<{
+      name: string;
+      kind: string;
+      source: string | null;
+      description: string | null;
+      baselineValue: string;
+      targetValue: string;
+    }>;
+    after: Partial<{
+      name: string;
+      kind: string;
+      source: string | null;
+      description: string | null;
+      baselineValue: string;
+      targetValue: string;
+    }>;
   }
 >;
 

@@ -15,6 +15,19 @@ Formato:
 
 ---
 
+## 2026-10-08 · C10 · backend-dev · feature/plan-f4-indicadores
+- Hecho: migración `20261008000001_metric_kind_source_frequencies` (escrita a mano, aplicada con `migrate deploy` porque `migrate dev` es interactivo): `chk_metric_frequency` suma `quarterly`, `semiannual` y `annual` (RN-P15); columnas `kind VARCHAR(10) NOT NULL DEFAULT 'output'` con `chk_metric_kind` (`output`|`outcome`), `source VARCHAR(500)` y `description VARCHAR(2000)` nullable. `metrics-domain/buckets.ts`: buckets trimestrales (ene/abr/jul/oct), semestrales (ene/jul) y anuales; si el período arranca a mitad de bucket, el primer bucket empieza en la fecha de inicio. Tipo `MetricKind`. DTOs: `kind` obligatorio en el create; `source` y `description` opcionales; en el update los tres son opcionales y `source`/`description` aceptan `null`; `frequency` sigue fuera del update (RN-P16, lo rechaza `forbidNonWhitelisted`); el filtro del listado acepta las 6 frecuencias. `MetricSummaryDto` y los payloads de audit `metric.created`/`metric.updated` llevan los campos nuevos. En web, solo las 3 etiquetas nuevas de `FREQUENCY_LABELS` (`Record` exhaustivo).
+- Commit: este commit (`feat(metrics): frecuencias trimestral, semestral y anual, y tipo, fuente y descripción del indicador`)
+- Verificación: `pnpm --filter metrics-domain test` → 6 archivos, 41 tests OK (9 nuevos de buckets); `pnpm --filter api test` → 33 archivos, 314 tests OK; `pnpm typecheck --force` → 5/5 OK; `psql \d metrics.metric` → columnas y CHECKs presentes, migración registrada como aplicada.
+- Pendiente / desvíos:
+  - **El alta de indicadores desde la web da 400 hasta C12**: `kind` es obligatorio y `metric-form-dialog.tsx` no lo manda. C12 tiene que sumar tipo, fuente y descripción al form. El PR de la fase se abre en C12, así que esto no llega a `main` roto.
+  - Sin las frecuencias nuevas en web, aunque compila: `parseFrequency` en `app/(app)/metrics/page.tsx` y los filtros de `components/metrics/metric-filters.tsx` (para C12).
+  - Largos máximos de `source` (500) y `description` (2000): elegidos por el agente, la SPEC no los fija.
+  - No se corrieron los e2e de `apps/api/test` ni hay tests de web.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ `kind` por defecto `output` en las métricas existentes: las métricas previas son descartables, así que no hace falta clasificarlas en C13.
+  - ✅ Pasar `kind` de `output` a `outcome` se bloquea (422) si la métrica ya alimenta un indicador con aportes. Queda en RN-P12 de la SPEC y como paso de C11 (`execution_feeds_indicator`) y C17 (`ProjectContribution`), porque esas tablas todavía no existen.
+
 ## 2026-10-08 · Fix · Claude · fix/web-server-actions-async, chore/ci-workflow
 - Hecho: el deploy de producción en Vercel del merge de la Fase 3 (PR #12) falló con `Server Actions must be async functions`: `features/projects/project-actions.ts` es `'use server'` y exportaba arrow functions no `async`. Producción quedó en el deploy del PR #11 sin que se notara. Fix: las 11 acciones pasan a `export async function` (PR #13). Se agrega CI (`.github/workflows/ci.yml`, PR #14): install, `prisma:generate`, build de `packages/*`, `pnpm typecheck`, `pnpm lint`, `pnpm test` y `pnpm --filter web build`, en cada PR y en `main`. Para que `pnpm lint` pase se borró un mock sin usar en `task.service.spec.ts`.
 - Commit: `38dae55` (PR #13), `0a3a2ae` (PR #14)

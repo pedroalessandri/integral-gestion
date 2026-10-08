@@ -161,6 +161,7 @@ Si el agente se traba (más de 2 horas, o vueltas sin avance): Ctrl+C, revisar `
   2. ABM (crear con métrica existente o nueva en un solo paso).
   3. Hook: carga de `MetricEntry` → recálculo del indicador → `resultProgressCachedBp` del objetivo.
   4. Aplicar los pesos opcionales.
+  5. RN-P12: el update de `Metric` rechaza `kind` `output` → `outcome` (422) si algún `ObjectiveIndicator` de la métrica es `execution_feeds_indicator`.
 - Verificación: typecheck + test + `psql`.
 
 ### C12 — UI de indicadores (frontend-dev)
@@ -218,6 +219,7 @@ Si el agente se traba (más de 2 horas, o vueltas sin avance): Ctrl+C, revisar `
   2. Hook "el proyecto llega al 100%" → `MetricEntry` automático; "baja del 100%" → entry compensatorio.
   3. Modo de curva `from_projects` habilitado.
   4. Tests de integración del ida y vuelta.
+  5. RN-P12: extender el bloqueo de `kind` `output` → `outcome` a métricas cuyos indicadores tengan `ProjectContribution`.
 
 ### C18 — UI de aportes (frontend-dev)
 - Sección "Aporta a indicador" en la ficha de proyecto, distinción visual de las cargas automáticas y aviso "los aportes no alcanzan la meta".

@@ -423,8 +423,14 @@ model Metric {
   unit           String    @db.VarChar(10)
   /// 'increasing' | 'decreasing' — CHECK constraint in migration
   direction      String    @db.VarChar(10)
-  /// 'weekly' | 'biweekly' | 'monthly' — CHECK constraint in migration. Immutable after creation (RN-M2).
+  /// 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'semiannual' | 'annual' — CHECK constraint in migration. Immutable after creation (RN-M2).
   frequency      String    @db.VarChar(10)
+  /// 'output' | 'outcome' — CHECK constraint in migration (RN-P12).
+  kind           String    @default("output") @db.VarChar(10)
+  /// Fuente del dato.
+  source         String?   @db.VarChar(500)
+  /// Fórmula / definición del indicador.
+  description    String?   @db.VarChar(2000)
   /// Starting value of the expected linear curve. Default 0.
   baselineValue  Decimal   @default(0) @map("baseline_value") @db.Decimal(18, 4)
   /// Period target value.

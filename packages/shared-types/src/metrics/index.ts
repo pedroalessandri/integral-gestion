@@ -2,6 +2,7 @@ export type {
   MetricUnit,
   MetricDirection,
   MetricFrequency,
+  MetricKind,
   MetricPeriodDto,
   MetricSummaryDto,
   MetricDetailDto,
