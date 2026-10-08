@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal } from 'lucide-react';
+import { Lock, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,6 +32,9 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import type { MetricEntryDto, MetricUnit } from '@gestion-publica/shared-types/metrics';
+import { AutomaticEntryBadge } from '@/features/contributions/components/automatic-entry-badge';
+import { automaticEntryInfo } from '@/features/contributions/contributions';
+import { AUTOMATIC_ENTRY_LABELS } from '@/lib/labels';
 import { formatMetricValue, formatBucketLabel } from './format';
 import { updateEntryAction, deleteEntryAction } from './actions';
 
@@ -41,9 +44,13 @@ interface Props {
   entries: MetricEntryDto[];
   unit: MetricUnit;
   readOnly: boolean;
+  /** Título del proyecto por id, para mostrar el origen de las cargas automáticas (aportes de proyectos). */
+  projectTitles?: ReadonlyMap<string, string>;
 }
 
-export function EntryHistoryTable({ orgId, metricId, entries, unit, readOnly }: Props) {
+const NO_PROJECT_TITLES: ReadonlyMap<string, string> = new Map();
+
+export function EntryHistoryTable({ orgId, metricId, entries, unit, readOnly, projectTitles = NO_PROJECT_TITLES }: Props) {
   if (entries.length === 0) {
     return (
       <div
@@ -80,7 +87,9 @@ export function EntryHistoryTable({ orgId, metricId, entries, unit, readOnly }: 
           </tr>
         </thead>
         <tbody>
-          {entries.map((entry) => (
+          {entries.map((entry) => {
+            const automatic = automaticEntryInfo(entry, projectTitles);
+            return (
             <tr key={entry.id} style={{ borderBottom: '1px solid var(--color-neutral-100)' }}>
               <Td className="whitespace-nowrap" style={{ color: 'var(--color-neutral-500)' }}>
                 {new Date(entry.createdAt).toLocaleDateString('es-AR')}
@@ -92,17 +101,37 @@ export function EntryHistoryTable({ orgId, metricId, entries, unit, readOnly }: 
               <Td className="text-right font-mono" style={{ color: 'var(--color-neutral-500)' }}>
                 {formatMetricValue(entry.cumulativeAfter, unit)}
               </Td>
-              <Td style={{ color: 'var(--color-neutral-600)' }}>{entry.comment ?? '—'}</Td>
+              <Td style={{ color: 'var(--color-neutral-600)' }}>
+                {automatic ? (
+                  <span className="flex flex-col gap-1">
+                    <AutomaticEntryBadge info={automatic} />
+                    {entry.comment && <span className="text-xs">{entry.comment}</span>}
+                  </span>
+                ) : (
+                  (entry.comment ?? '—')
+                )}
+              </Td>
               <Td className="whitespace-nowrap" style={{ color: 'var(--color-neutral-500)' }}>
                 {entry.createdBy?.displayName ?? '—'}
               </Td>
               {!readOnly && (
                 <Td className="text-right">
-                  <EntryRowActions orgId={orgId} metricId={metricId} entry={entry} />
+                  {automatic ? (
+                    <span
+                      className="inline-flex h-7 w-7 items-center justify-center"
+                      title={AUTOMATIC_ENTRY_LABELS.readOnly}
+                    >
+                      <Lock className="h-3.5 w-3.5 text-neutral-400" aria-hidden />
+                      <span className="sr-only">{AUTOMATIC_ENTRY_LABELS.readOnly}</span>
+                    </span>
+                  ) : (
+                    <EntryRowActions orgId={orgId} metricId={metricId} entry={entry} />
+                  )}
                 </Td>
               )}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

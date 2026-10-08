@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Lock as LockIcon } from 'lucide-react';
 import { getActiveOrgId } from '@/lib/active-org';
 import { loadOrgMembersAction } from '@/components/objectives/actions';
+import { listIndicatorsAction } from '@/features/indicators';
+import { listProjectContributionsAction } from '@/features/contributions';
 import {
   ProjectDetailPanel,
   getObjectiveAction,
@@ -29,10 +31,12 @@ export default async function ProjectDetailPage({
   const orgId = await getActiveOrgId();
   if (!orgId) notFound();
 
-  const [objectiveResult, projectResult, tasksResult] = await Promise.all([
+  const [objectiveResult, projectResult, tasksResult, indicatorsResult, contributionsResult] = await Promise.all([
     getObjectiveAction(orgId, id),
     getProjectAction(orgId, projectId),
     listProjectTasksAction(orgId, projectId),
+    listIndicatorsAction(orgId, id),
+    listProjectContributionsAction(orgId, projectId),
   ]);
 
   if (!projectResult.ok && projectResult.status === 404) notFound();
@@ -86,6 +90,11 @@ export default async function ProjectDetailPage({
         project={project}
         tasks={tasksResult.data}
         ownerName={ownerName}
+        indicators={indicatorsResult.ok ? indicatorsResult.data : []}
+        contributions={contributionsResult.ok ? contributionsResult.data : []}
+        contributionsError={
+          !indicatorsResult.ok ? indicatorsResult.error : !contributionsResult.ok ? contributionsResult.error : null
+        }
         readOnly={isReadOnly}
       />
     </div>

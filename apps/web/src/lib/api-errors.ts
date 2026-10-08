@@ -9,6 +9,8 @@ export interface ApiErrorInfo {
   /** Código de dominio extraído del prefijo del mensaje, o null si no hay. */
   code: string | null;
   message: string;
+  /** Contexto estructurado opcional del 422 (p. ej. `{ projects }` de `IndicatorHasLinkedProjects`). */
+  details?: Record<string, unknown>;
 }
 
 const CODE_PREFIX = /^([A-Z][A-Za-z0-9]+):\s*/;
@@ -20,10 +22,17 @@ export function parseApiErrorBody(status: number, body: unknown): ApiErrorInfo {
       : undefined;
   const message = Array.isArray(raw) ? raw.map(String).join('. ') : typeof raw === 'string' ? raw : '';
   const match = CODE_PREFIX.exec(message);
+  const rawDetails =
+    typeof body === 'object' && body !== null && 'details' in body ? (body as { details: unknown }).details : undefined;
+  const details =
+    typeof rawDetails === 'object' && rawDetails !== null && !Array.isArray(rawDetails)
+      ? (rawDetails as Record<string, unknown>)
+      : undefined;
   return {
     status,
     code: match?.[1] ?? null,
     message: match ? message.slice(match[0].length) : message,
+    ...(details && { details }),
   };
 }
 

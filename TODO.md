@@ -8,6 +8,10 @@
 
 ## 🟡 Prioridad media — próximas semanas
 
+### [F] `MetricEntryDto` sin el título del proyecto de origen de las cargas automáticas
+- Por qué: la UI muestra "Aporte del proyecto X" en el historial a partir de los aportes vivos del indicador (`GET indicators/:id/contributions`). Si el aporte ya no existe (proyecto borrado y compensado), o en la vista standalone de métricas (`/metrics/[id]`, sin indicador), la carga automática solo dice "Aporte de un proyecto" (el título queda en el comentario).
+- Posible solución: sumar `sourceProjectTitle: string | null` a `MetricEntryDto` (C17 ya tiene `sourceProjectId`).
+
 ### [F] Seed demo: sumar `from_projects`, aportes de proyecto y vínculos de gestión cuando existan (F7)
 - Por qué: el seed de C13 solo usa lo que existe hoy. La SPEC §6 punto 4 pide un indicador `output` con aportes de proyectos y curva `from_projects`. La curva manual ya está (C15: el `outcome` semestral "Viajes diarios en bicicleta" usa `IndicatorTargetPoint`); falta `ProjectContribution` y `from_projects` (C17), y un proyecto `from_indicator`.
 - Posible solución: extender `apps/api/src/database/seed-demo.ts` en la corrida C17.

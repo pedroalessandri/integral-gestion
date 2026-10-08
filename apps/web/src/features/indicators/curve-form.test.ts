@@ -67,7 +67,7 @@ describe('helpers', () => {
     expect(formatBucketDate('2027-07-01')).toBe('01/07/2027');
   });
   it('from_projects se edita como lineal hasta que esté disponible', () => {
-    expect(toEditableCurveMode('from_projects')).toBe('linear');
+    expect(toEditableCurveMode('from_projects')).toBe('from_projects');
     expect(toEditableCurveMode('manual')).toBe('manual');
   });
 });

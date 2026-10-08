@@ -15,6 +15,22 @@ Formato:
 
 ---
 
+## 2026-10-08 · C18 · frontend-dev · feature/plan-f7-aportes
+- Hecho:
+  - **"Aporta a indicador"** en la ficha de proyecto (`features/contributions`: server actions, hook `useProjectContributions`, helpers puros y componentes). Lista los aportes con indicador, valor y estado Aplicado/Pendiente (ícono + texto). Permite agregar, editar y quitar; el selector ofrece solo indicadores del mismo objetivo `output` + `execution_feeds_indicator` a los que el proyecto todavía no aporta. Un aporte aplicado tiene editar y quitar deshabilitados con la explicación (se libera cuando el proyecto baja del 100 %). Valor decimal ≠ 0 sin validar el signo, sin `number`.
+  - **Cargas automáticas**: badge "Automática" (y "Compensación" si es negativa) con el proyecto de origen y sin acciones (candado con texto para lectores de pantalla), en `entry-history-table.tsx`.
+  - **Aviso "los aportes no alcanzan la meta"** en la tarjeta del indicador cuando `contributions.coversTarget === false` (total, valor proyectado y meta).
+  - **Curva "Desde proyectos"** habilitada en el editor solo para `output` + `execution_feeds_indicator` (si no, deshabilitada con la razón). El gráfico la arma con `expectedCurve({ mode: 'from_projects' })` de `metrics-domain` y los pasos de `GET indicators/:id/contributions` (1 request por indicador vinculado), con muestras a ambos lados de cada `endsAt` para que se vea el escalón.
+  - **422 `IndicatorHasLinkedProjects`**: `describeApiError` arma el mensaje con `details.projects` (`ApiErrorInfo` ahora lleva `details`). Mensajes en español para todos los códigos de aportes en el diccionario de etiquetas.
+- Commit: este commit (`feat(web): aportes de proyectos a indicadores, cargas automáticas y curva desde proyectos`)
+- Verificación: `pnpm typecheck --force` 7/7; `pnpm lint --force` 0 errores (2 warnings preexistentes en web, 1 en api); `turbo run test --force` 12/12 (web 77 tests, 28 nuevos; api 475); `pnpm --filter web build` OK. No se probó contra la API levantada: lo cubre el smoke de Pedro.
+- Pendiente / desvíos:
+  - **Campo de vínculo con la gestión (`linkMode`) en el diálogo del indicador**, fuera del alcance de C18 pero necesario: sin él ningún indicador podía ser `execution_feeds_indicator`. Ofrece "Independiente" y "Los proyectos aportan al indicador" (deshabilitada si no es Producto); `indicator_feeds_execution` solo se muestra, deshabilitada, si ya la tiene. En edición `linkMode` viaja solo si cambió.
+  - El título del proyecto de una carga automática sale de los aportes vivos del indicador; si el aporte ya no existe o en `/metrics/[id]` dice "Aporte de un proyecto". TODO.md: sumar `sourceProjectTitle` a `MetricEntryDto` (media).
+  - Sin Testing Library en web (igual que C16): helpers cubiertos con vitest y componentes con `renderToStaticMarkup`.
+- Preguntas abiertas:
+  - Si en el diálogo se pasa el tipo de Producto a Resultado con vínculo `execution_feeds_indicator` o curva `from_projects` ya elegidos, la UI muestra un error de validación y no resetea esos campos. ¿Se prefiere el reset automático?
+
 ## 2026-10-08 · C17 · backend-dev · feature/plan-f7-aportes
 - Hecho:
   - **Aportes** (migración `20261008000004_project_contribution`, escrita a mano + `migrate deploy`): `metrics.project_contribution` (`contribution_value NUMERIC(18,4)` ≠ 0, único `(project_id, objective_indicator_id)`, `applied_entry_id`, FKs RESTRICT) con scoping de tenant. `metric_entry` suma `origin` (`manual` | `project_contribution`) y `source_project_id`, con un CHECK que los ata. ABM en `okr/indicators/:id/contributions`, `okr/projects/:id/contributions` y `okr/contributions/:id` (`TenantGuard` + `PermissionsGuard`, `okr:read` / `okr:write`), con audit `project_contribution.*`. 422 tipados: métrica no `output`, indicador no `execution_feeds_indicator`, proyecto inexistente, de otro objetivo o `from_indicator` hacia ese indicador (puerto nuevo `PROJECT_LINK_READER`, lo implementa `okr`); 409 `ContributionAlreadyExists`.

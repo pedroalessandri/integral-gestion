@@ -78,3 +78,37 @@ describe('withIndicatorExpectedCurve', () => {
     expect(withIndicatorExpectedCurve(empty, { ...input, mode: 'linear' })).toBe(empty);
   });
 });
+
+describe('withIndicatorExpectedCurve: from_projects', () => {
+  const fp = (steps: Array<{ endsAt: string; contributionValue: string }> | undefined) =>
+    withIndicatorExpectedCurve(series, {
+      mode: 'from_projects',
+      baselineValue: '10',
+      targetValue: '20',
+      targetPoints: [],
+      period,
+      ...(steps && { steps }),
+    });
+  it('sin pasos disponibles deja la serie de la API', () => {
+    expect(fp(undefined)).toBe(series);
+  });
+  it('dibuja la escalera: sube en el endsAt de cada proyecto y no antes', () => {
+    const out = fp([
+      { endsAt: '2027-03-31T00:00:00.000Z', contributionValue: '4' },
+      { endsAt: '2027-09-30T00:00:00.000Z', contributionValue: '6' },
+    ]);
+    const at = (iso: string) => out.expected.find((p) => p.date === iso)?.value;
+    expect(Number(at('2027-01-01T00:00:00.000Z'))).toBe(10);
+    expect(Number(at('2027-03-30T23:59:59.999Z'))).toBe(10);
+    expect(Number(at('2027-03-31T00:00:00.000Z'))).toBe(14);
+    expect(Number(at('2027-09-30T00:00:00.000Z'))).toBe(20);
+    expect(Number(at('2027-12-31T00:00:00.000Z'))).toBe(20);
+    const times = out.expected.map((p) => new Date(p.date).getTime());
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+  });
+  it('un paso fuera del período no agrega puntos de muestreo', () => {
+    const out = fp([{ endsAt: '2028-03-31T00:00:00.000Z', contributionValue: '4' }]);
+    expect(out.expected).toHaveLength(series.expected.length);
+    expect(values(out).every((v) => v === 10)).toBe(true);
+  });
+});

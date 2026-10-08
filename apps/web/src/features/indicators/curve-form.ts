@@ -10,8 +10,8 @@ import type {
 } from '@gestion-publica/shared-types/metrics';
 import { scaleDecimal } from './decimal';
 
-/** Modos que el editor permite elegir hoy. `from_projects` se rechaza en la API hasta C17 (RN-P17). */
-export type EditableCurveMode = Exclude<ExpectedCurveMode, 'from_projects'>;
+/** Modos que el editor permite elegir. `from_projects` solo con `output` + `execution_feeds_indicator` (RN-P17). */
+export type EditableCurveMode = ExpectedCurveMode;
 
 /** Período del objetivo (ISO-8601). Los buckets de carga y de la curva salen de él y de la frecuencia. */
 export interface CurvePeriod {
@@ -23,7 +23,7 @@ export interface CurvePeriod {
 export type PointValues = Record<string, string>;
 
 export function toEditableCurveMode(mode: ExpectedCurveMode): EditableCurveMode {
-  return mode === 'manual' ? 'manual' : 'linear';
+  return mode;
 }
 
 /**

@@ -1,4 +1,6 @@
+import type { LinkedProjectRefDto } from '@gestion-publica/shared-types/metrics';
 import type { ApiErrorInfo } from '@/lib/api-errors';
+import { CONTRIBUTION_ERROR_MESSAGES, LINKED_PROJECT_LINK_LABELS } from '@/lib/labels';
 
 /** Mensajes en español para los 409/422 tipados de Estructura, Plan y asignación de objetivos. */
 const MESSAGES: Record<string, string> = {
@@ -50,8 +52,7 @@ const MESSAGES: Record<string, string> = {
   InvalidBucketDate: 'Esa fecha no es un inicio de intervalo válido para la frecuencia del indicador. Elegí otra.',
   IndicatorTargetPointsInvalid:
     'Los puntos de la curva manual no son válidos. Cada punto tiene que caer en el inicio de un intervalo del período y el último tiene que ser igual a la meta.',
-  ExpectedCurveModeNotAvailable:
-    'La curva "Desde proyectos" todavía no está disponible. Elegí Lineal o Manual.',
+  ...CONTRIBUTION_ERROR_MESSAGES,
   OwnerNotMember: 'La persona responsable tiene que ser miembro de la organización.',
   MandateRangeInvalid: 'El fin del mandato tiene que ser posterior al inicio.',
 };
@@ -59,7 +60,26 @@ const MESSAGES: Record<string, string> = {
 /** Códigos cuyo detalle (qué punto falló y por qué) vale la pena mostrar junto al mensaje fijo. */
 const CODES_WITH_DETAIL = new Set(['IndicatorTargetPointsInvalid']);
 
+/** Proyectos de `details.projects` del 422 `IndicatorHasLinkedProjects`, descartando lo que no tenga la forma esperada. */
+export function linkedProjectsFromDetails(details: Record<string, unknown> | undefined): LinkedProjectRefDto[] {
+  const raw = details?.projects;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((p): LinkedProjectRefDto[] => {
+    if (typeof p !== 'object' || p === null) return [];
+    const { id, title, link } = p as Record<string, unknown>;
+    if (typeof id !== 'string' || typeof title !== 'string') return [];
+    return [{ id, title, link: link === 'source_indicator' ? 'source_indicator' : 'contribution' }];
+  });
+}
+
 export function describeApiError(info: ApiErrorInfo): string {
+  if (info.code === 'IndicatorHasLinkedProjects') {
+    const fixed = MESSAGES.IndicatorHasLinkedProjects as string;
+    const projects = linkedProjectsFromDetails(info.details);
+    if (projects.length === 0) return fixed;
+    const list = projects.map((p) => `"${p.title}" (${LINKED_PROJECT_LINK_LABELS[p.link]})`).join(', ');
+    return `${fixed} Proyectos vinculados: ${list}.`;
+  }
   if (info.code && MESSAGES[info.code]) {
     const fixed = MESSAGES[info.code] as string;
     return CODES_WITH_DETAIL.has(info.code) && info.message ? `${fixed} Detalle: ${info.message}` : fixed;

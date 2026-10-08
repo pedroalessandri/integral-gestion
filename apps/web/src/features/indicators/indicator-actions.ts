@@ -9,12 +9,14 @@ import type {
   MetricSeriesDto,
   MetricSummaryDto,
   ObjectiveIndicatorDto,
+  ProjectContributionDto,
   ObjectiveStatusDto,
   SetObjectiveIndicatorWeightsDto,
   UpdateObjectiveIndicatorDto,
 } from '@gestion-publica/shared-types/metrics';
 import { apiFetch } from '@/lib/api-client';
 import { readApiError } from '@/lib/api-errors';
+import { listIndicatorContributionsAction } from '@/features/contributions/contribution-actions';
 import { failure, unexpectedFailure, type ActionResult } from '@/features/planning/error-messages';
 
 const OKR = '/api/v1/okr';
@@ -123,22 +125,33 @@ export interface IndicatorExtras {
   /** Puntos de la curva manual (vacío si la curva no es manual). `null` si no se pudieron cargar. */
   targetPoints: IndicatorTargetPointDto[] | null;
   pointsError: string | null;
+  /**
+   * Aportes de proyectos al indicador (pasos de la curva `from_projects` y origen de las cargas automáticas).
+   * Solo se piden si es `execution_feeds_indicator`; `null` si no corresponde o no se pudieron cargar.
+   */
+  contributions: ProjectContributionDto[] | null;
+  contributionsError: string | null;
 }
 
 export async function getIndicatorExtrasAction(
   orgId: string,
-  indicator: Pick<ObjectiveIndicatorDto, 'id' | 'expectedCurveMode'>,
+  indicator: Pick<ObjectiveIndicatorDto, 'id' | 'expectedCurveMode' | 'linkMode'>,
 ): Promise<IndicatorExtras> {
-  const [status, points] = await Promise.all([
+  const [status, points, contributions] = await Promise.all([
     request<IndicatorStatusDto>(orgId, `${OKR}/indicators/${indicator.id}/status`),
     indicator.expectedCurveMode === 'manual'
       ? requestItems<IndicatorTargetPointDto>(orgId, `${OKR}/indicators/${indicator.id}/target-points`)
       : Promise.resolve<ActionResult<IndicatorTargetPointDto[]>>({ ok: true, data: [] }),
+    indicator.linkMode === 'execution_feeds_indicator'
+      ? listIndicatorContributionsAction(orgId, indicator.id)
+      : Promise.resolve<ActionResult<ProjectContributionDto[] | null>>({ ok: true, data: null }),
   ]);
   return {
     status: status.ok ? status.data : null,
     statusError: status.ok ? null : status.error,
     targetPoints: points.ok ? points.data : null,
     pointsError: points.ok ? null : points.error,
+    contributions: contributions.ok ? contributions.data : null,
+    contributionsError: contributions.ok ? null : contributions.error,
   };
 }
