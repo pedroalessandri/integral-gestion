@@ -91,19 +91,6 @@
 - Posible solución: puerto en `common/contracts` (implementa `metrics`, inyecta `okr`) que da de baja los indicadores del objetivo en la misma transacción, con su `objective_indicator.deleted`.
 - Origen: C11 (2026-10-08).
 
-### [B] `PeriodController` sin `TenantGuard` ni permisos: cualquier usuario autenticado lista o crea períodos de cualquier org
-- Por qué: `GET`/`POST orgs/:orgId/periods` y `GET periods/:id` solo tienen un TODO(ADR-0004): sin `TenantGuard`, sin `PermissionsGuard` y sin tenant scoping. `OrgParamGuard` (fix de `:orgId`) no alcanza ahí porque sin `TenantGuard` no hay org en el contexto. Lo mismo vale para los guards de `OrganizationController` (`orgs/:id`, operaciones de superadmin).
-- Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.
-- Origen: fix de `:orgId` (2026-10-07).
-- Actualización (C20, 2026-10-08): **crítico**. También están abiertos `POST periods/:id/open|close` (se puede cerrar el período de otra org y trabar todas sus escrituras) y todo el ABM de `orgs` (crear, editar, desactivar). `closePeriod` busca por id con `prisma.raw` sin org. Va en C20b.
-- Actualización (C20b): hecho en feature/plan-f8-alcance; mover a Completados al mergear.
-
-### [B] Vincular una métrica existente a un objetivo propio la captura o traba a otras unidades (C20 #2, alta)
-- Por qué: `ObjectiveIndicatorService.create` con `metricId` no exige poder escribir la métrica. Un usuario de la unidad B vincula una métrica sin objetivos (solo central) y pasa a poder cargarla y editarla; o vincula una métrica de la unidad A y desde ahí ni A ni B pueden cargarla (la regla exige todas las unidades).
-- Posible solución: exigir `assertCanWriteMetric` (o alcance central) para vincular una métrica existente. Va en C20b.
-- Actualización (C20b): hecho en feature/plan-f8-alcance; mover a Completados al mergear.
-- Origen: C20 (2026-10-08).
-
 ### [B] Controllers de indicadores y aportes sin `ModuleEnabledGuard`; métrica inline sin `metrics:write` (C20 #3, media)
 - Por qué: `ObjectiveIndicatorController` y `ProjectContributionController` (módulo `metrics`) no usan `@RequiresModule`. `POST okr/objectives/:id/indicators` con `metric` inline crea una `Metric` con solo `okr:write`, aunque la org tenga el módulo deshabilitado.
 - Posible solución: `ModuleEnabledGuard` en esos controllers o exigir `metrics:write` con `metric` inline.
@@ -171,6 +158,7 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [B] Guards y tenant scoping en `PeriodController` y `OrganizationController` (C20 crítico) y vincular una métrica existente exige poder escribirla (C20 alto) — mergeado el 9 octubre 2026
 - [F] Unidad obligatoria al invitar (`orgUnitId: string | null`, selector en el front) — mergeado el 8 octubre 2026
 - [F] Curva `from_projects` (RN-P17) habilitada con los aportes de proyectos (`ProjectContribution`, carga automática al 100 % y UI de aportes) — mergeado el 8 octubre 2026
 - [F] Alcance de unidad para `Metric` (alta standalone solo central; edición/borrado como las cargas) y anti-escalada al cambiar rol / quitar miembros — mergeado el 8 octubre 2026
