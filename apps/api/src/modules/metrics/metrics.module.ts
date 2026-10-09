@@ -9,6 +9,8 @@ import { MetricEntryService } from './services/metric-entry.service.js';
 import { MetricLinkService } from './services/metric-link.service.js';
 import { ObjectiveIndicatorService } from './services/objective-indicator.service.js';
 import { IndicatorStatusService } from './services/indicator-status.service.js';
+import { PlanningGanttService } from './services/planning-gantt.service.js';
+import { PlanningTreeService } from './services/planning-tree.service.js';
 import { ProjectContributionService } from './services/project-contribution.service.js';
 import { ProjectContributionApplier } from './services/project-contribution-applier.service.js';
 import { ProjectLifecycleListener } from './listeners/project-lifecycle.listener.js';
@@ -16,6 +18,8 @@ import { MetricController } from './controllers/metric.controller.js';
 import { MetricEntryController } from './controllers/metric-entry.controller.js';
 import { MetricLinkController } from './controllers/metric-link.controller.js';
 import { ObjectiveIndicatorController } from './controllers/objective-indicator.controller.js';
+import { PlanningGanttController } from './controllers/planning-gantt.controller.js';
+import { PlanningTreeController } from './controllers/planning-tree.controller.js';
 import { ProjectContributionController } from './controllers/project-contribution.controller.js';
 
 /**
@@ -33,6 +37,8 @@ import { ProjectContributionController } from './controllers/project-contributio
     MetricLinkController,
     ObjectiveIndicatorController,
     ProjectContributionController,
+    PlanningTreeController,
+    PlanningGanttController,
   ],
   providers: [
     MetricService,
@@ -40,6 +46,8 @@ import { ProjectContributionController } from './controllers/project-contributio
     MetricLinkService,
     ObjectiveIndicatorService,
     IndicatorStatusService,
+    PlanningTreeService,
+    PlanningGanttService,
     ProjectContributionService,
     ProjectContributionApplier,
     ProjectLifecycleListener,

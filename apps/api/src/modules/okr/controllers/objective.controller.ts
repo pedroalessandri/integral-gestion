@@ -54,6 +54,10 @@ export class ObjectiveController {
     return this.objectiveService.list(requireOrgId(user), periodId);
   }
 
+  /**
+   * @deprecated Gantt Objetivo -> KR -> Tarea (camino legacy). Lo reemplaza GET /okr/planning-gantt
+   * (Objetivo -> Proyecto -> Tarea). Se elimina en el contract (F10).
+   */
   @Get('gantt')
   @Permissions('okr:read')
   listGantt(

@@ -306,6 +306,10 @@ importers:
         version: 3.2.4(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.1)(yaml@2.8.3)
 
   packages/okr-domain:
+    dependencies:
+      '@gestion-publica/deviation-domain':
+        specifier: workspace:*
+        version: link:../deviation-domain
     devDependencies:
       '@gestion-publica/config-eslint':
         specifier: workspace:*

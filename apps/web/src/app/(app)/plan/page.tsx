@@ -1,9 +1,17 @@
 import { getActiveOrgId } from '@/lib/active-org';
 import { LABELS } from '@/lib/labels';
+import { listPeriodsAction } from '@/components/objectives/actions';
+import { PeriodSelector } from '@/components/periods/period-selector';
+import { buildAxisBoards, getPlanningTreeAction, resolvePeriodId } from '@/features/planning-tree';
 import { getStrategicPlanAction, listAxesAction, StrategicPlanPanel } from '@/features/strategic-plan';
 
-export default async function PlanPage() {
+export default async function PlanPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ periodId?: string }>;
+}) {
   const orgId = await getActiveOrgId();
+  const { periodId: requestedPeriodId } = await searchParams;
 
   if (!orgId) {
     return (
@@ -21,6 +29,12 @@ export default async function PlanPage() {
   }
 
   const [planResult, axesResult] = await Promise.all([getStrategicPlanAction(orgId), listAxesAction(orgId)]);
+  const periods = (await listPeriodsAction({ orgId })).periods ?? [];
+  const periodId = resolvePeriodId(requestedPeriodId?.trim() || null, periods);
+  const period = periods.find((p) => p.id === periodId) ?? null;
+  // Un solo request trae todos los ejes con sus dos lecturas y el desglose por unidad (SPEC §5.2).
+  const boardResult =
+    periodId && planResult.ok && planResult.data ? await getPlanningTreeAction(orgId, { periodId }) : null;
   const loadError = !planResult.ok ? planResult.error : !axesResult.ok ? axesResult.error : null;
 
   return (
@@ -31,12 +45,21 @@ export default async function PlanPage() {
           {LABELS.plan.vision} y {LABELS.axis.plural.toLowerCase()} que ordenan los{' '}
           {LABELS.objective.plural.toLowerCase()}.
         </p>
+        <div className="mt-2">
+          <PeriodSelector periods={periods} currentPeriodId={periodId ?? undefined} baseHref="/plan" />
+        </div>
       </div>
       <StrategicPlanPanel
         orgId={orgId}
         plan={planResult.ok ? planResult.data : null}
         axes={axesResult.ok ? axesResult.data : []}
         loadError={loadError}
+        board={{
+          periodCode: period?.code ?? null,
+          periodId,
+          axes: boardResult?.ok ? buildAxisBoards(boardResult.data) : null,
+          error: boardResult && !boardResult.ok ? boardResult.error : null,
+        }}
       />
     </div>
   );

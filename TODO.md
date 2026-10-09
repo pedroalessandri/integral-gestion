@@ -27,6 +27,7 @@
 - Por qué: C16 muestra el semáforo de cada lectura y el badge "carga pendiente" en la ficha del objetivo y en la tarjeta del indicador, pero el listado `/objectives` no los tiene: `ObjectiveSummaryDto` no trae `pendingBucketsCount` ni el estado, y pedir `GET okr/objectives/:id/status` por fila sería un N+1 de requests por render.
 - Posible solución (contrato faltante, backend): sumar a los ítems de `GET okr/objectives` un `status` con `{ result: { semaphore, deviationBp, pendingBucketsCount }, execution: { semaphore, deviationBp } }`, o un `GET okr/objectives/status?periodId=` en bloque. Después, en web, usar `SemaphoreBadge` y `PendingLoadBadge` (ya existen en `components/`) en la fila.
 - Origen: C16 (2026-10-08).
+- Actualización (C21): el listado `/objectives` ya muestra semáforo de cada lectura y el badge "carga pendiente" usando `objectives[]` de `GET okr/planning-tree?periodId=` (un solo request por render, sin N+1). Sin contrato nuevo en backend.
 
 ### [F] Umbrales del semáforo configurables por organización
 - Por qué: RN-P9 fija 10 y 25 puntos por defecto y dice que serán configurables por org en una fase posterior. Hoy son la constante `DEFAULT_SEMAPHORE_THRESHOLDS` de `deviation-domain`.
@@ -91,23 +92,16 @@
 - Posible solución: puerto en `common/contracts` (implementa `metrics`, inyecta `okr`) que da de baja los indicadores del objetivo en la misma transacción, con su `objective_indicator.deleted`.
 - Origen: C11 (2026-10-08).
 
-### [B] `PeriodController` sin `TenantGuard` ni permisos: cualquier usuario autenticado lista o crea períodos de cualquier org
-- Por qué: `GET`/`POST orgs/:orgId/periods` y `GET periods/:id` solo tienen un TODO(ADR-0004): sin `TenantGuard`, sin `PermissionsGuard` y sin tenant scoping. `OrgParamGuard` (fix de `:orgId`) no alcanza ahí porque sin `TenantGuard` no hay org en el contexto. Lo mismo vale para los guards de `OrganizationController` (`orgs/:id`, operaciones de superadmin).
-- Posible solución: `TenantGuard` + `OrgParamGuard` + `PermissionsGuard` con `core:period:manage` (lo que dice el TODO de ADR-0004); el front tiene que mandar el header. Cambia la política de acceso: decisión de Pedro.
-- Origen: fix de `:orgId` (2026-10-07).
-- Actualización (C20, 2026-10-08): **crítico**. También están abiertos `POST periods/:id/open|close` (se puede cerrar el período de otra org y trabar todas sus escrituras) y todo el ABM de `orgs` (crear, editar, desactivar). `closePeriod` busca por id con `prisma.raw` sin org. Va en C20b.
-- Actualización (C20b): hecho en feature/plan-f8-alcance; mover a Completados al mergear.
-
-### [B] Vincular una métrica existente a un objetivo propio la captura o traba a otras unidades (C20 #2, alta)
-- Por qué: `ObjectiveIndicatorService.create` con `metricId` no exige poder escribir la métrica. Un usuario de la unidad B vincula una métrica sin objetivos (solo central) y pasa a poder cargarla y editarla; o vincula una métrica de la unidad A y desde ahí ni A ni B pueden cargarla (la regla exige todas las unidades).
-- Posible solución: exigir `assertCanWriteMetric` (o alcance central) para vincular una métrica existente. Va en C20b.
-- Actualización (C20b): hecho en feature/plan-f8-alcance; mover a Completados al mergear.
-- Origen: C20 (2026-10-08).
-
 ### [B] Controllers de indicadores y aportes sin `ModuleEnabledGuard`; métrica inline sin `metrics:write` (C20 #3, media)
 - Por qué: `ObjectiveIndicatorController` y `ProjectContributionController` (módulo `metrics`) no usan `@RequiresModule`. `POST okr/objectives/:id/indicators` con `metric` inline crea una `Metric` con solo `okr:write`, aunque la org tenga el módulo deshabilitado.
 - Posible solución: `ModuleEnabledGuard` en esos controllers o exigir `metrics:write` con `metric` inline.
 - Origen: C20 (2026-10-08).
+
+### [B] El throttler nombrado `ai` (10 req/min) parece aplicar a todas las rutas, no solo a las de IA
+- Por qué: `ThrottlerModule.forRoot` define `default` (100/min) y `ai` (10/min); en `@nestjs/throttler` v6 todos los throttlers aplican a cada ruta salvo `@SkipThrottle({ ai: true })`. En el e2e de C21, el 11º request en un minuto a `GET okr/planning-tree` desde la misma IP dio 429 (la clave incluye ruta + tracker). Si se confirma en runtime, el front (filtros del árbol, refrescos) se topa con 10 requests/min por ruta y usuario.
+- Posible solución: `skipIf` / `@SkipThrottle({ ai: true })` por defecto y dejar `ai` solo en `AiController`, o mover `ai` a un `ThrottlerModule` propio del módulo de IA.
+- Origen: C21 (2026-10-09).
+- Actualización (C21, 2026-10-09): confirmado y corregido en `feature/plan-f9-tableros` (`config/throttler.config.ts`: `ai` sin límite por defecto; el `@Throttle({ ai })` de `AiController` pone los 10/min; test con 15 requests a una ruta común y 429 en la 11.ª de IA). Mover a Completados al mergear.
 
 ### [B] Borrar un objetivo deja vivos proyectos, indicadores y aportes (C20 #4, media)
 - Por qué: `ObjectiveService.softDelete` solo cuenta KRs. Los proyectos huérfanos pueden seguir disparando cargas automáticas (sospecha) y la métrica deja de contar ese objetivo en `assertCanWriteMetric`. Amplía el ítem "Borrar un objetivo no da de baja sus ObjectiveIndicator".
@@ -171,6 +165,7 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [B] Guards y tenant scoping en `PeriodController` y `OrganizationController` (C20 crítico) y vincular una métrica existente exige poder escribirla (C20 alto) — mergeado el 9 octubre 2026
 - [F] Unidad obligatoria al invitar (`orgUnitId: string | null`, selector en el front) — mergeado el 8 octubre 2026
 - [F] Curva `from_projects` (RN-P17) habilitada con los aportes de proyectos (`ProjectContribution`, carga automática al 100 % y UI de aportes) — mergeado el 8 octubre 2026
 - [F] Alcance de unidad para `Metric` (alta standalone solo central; edición/borrado como las cargas) y anti-escalada al cambiar rol / quitar miembros — mergeado el 8 octubre 2026

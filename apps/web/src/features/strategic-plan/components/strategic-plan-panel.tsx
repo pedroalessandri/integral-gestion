@@ -6,7 +6,9 @@ import type { AxisDto, StrategicPlanDto } from '@gestion-publica/shared-types/pl
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/empty-state';
-import { LABELS } from '@/lib/labels';
+import { LABELS, PLANNING_TREE_LABELS } from '@/lib/labels';
+import { AxisBoardLink, AxisBoardSection } from '@/features/planning-tree/components/axis-board';
+import type { AxisBoard } from '@/features/planning-tree/planning-tree-view';
 import { useStrategicPlan } from '../useStrategicPlan';
 import { PlanFormDialog } from './plan-form-dialog';
 import { AxisFormDialog } from './axis-form-dialog';
@@ -18,6 +20,13 @@ interface Props {
   plan: StrategicPlanDto | null;
   axes: AxisDto[];
   loadError?: string | null;
+  /** Tablero por eje (SPEC §5.2). `axes = null` = no hay datos (sin período o error). */
+  board?: {
+    periodId: string | null;
+    periodCode: string | null;
+    axes: Record<string, AxisBoard> | null;
+    error: string | null;
+  };
 }
 
 type DialogState =
@@ -29,7 +38,7 @@ type DialogState =
 const dateFmt = new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeZone: 'UTC' });
 const formatDate = (iso: string) => dateFmt.format(new Date(iso));
 
-export function StrategicPlanPanel({ orgId, plan, axes, loadError }: Props) {
+export function StrategicPlanPanel({ orgId, plan, axes, loadError, board }: Props) {
   const s = useStrategicPlan(orgId);
   const [dialog, setDialog] = useState<DialogState>(null);
   const editingAxisId = dialog?.type === 'axis' && dialog.axis ? dialog.axis.id : '';
@@ -115,6 +124,22 @@ export function StrategicPlanPanel({ orgId, plan, axes, loadError }: Props) {
           </Button>
         </div>
 
+        {board && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-neutral-600">
+              {board.periodCode
+                ? `${PLANNING_TREE_LABELS.boardTitle}: ${PLANNING_TREE_LABELS.boardSubtitle(board.periodCode)}`
+                : PLANNING_TREE_LABELS.boardNoPeriod}
+            </p>
+            {board.periodId && <AxisBoardLink periodId={board.periodId} />}
+          </div>
+        )}
+        {board?.error && (
+          <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {PLANNING_TREE_LABELS.loadError} {board.error}
+          </div>
+        )}
+
         {axes.length === 0 ? (
           <EmptyState
             icon={Compass}
@@ -123,7 +148,7 @@ export function StrategicPlanPanel({ orgId, plan, axes, loadError }: Props) {
             action={<Button onClick={() => open({ type: 'axis', axis: null })}>Crear el primer eje</Button>}
           />
         ) : (
-          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-3 lg:grid-cols-2">
             {axes.map((axis) => (
               <li key={axis.id} className="rounded-xl border border-neutral-200 bg-white p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -154,6 +179,7 @@ export function StrategicPlanPanel({ orgId, plan, axes, loadError }: Props) {
                     ? '1 objetivo estratégico'
                     : `${axis.objectiveCount} objetivos estratégicos`}
                 </Badge>
+                {board?.axes && <AxisBoardSection axisId={axis.id} board={board.axes[axis.id]} />}
               </li>
             ))}
           </ul>

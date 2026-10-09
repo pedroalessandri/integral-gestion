@@ -15,6 +15,14 @@ export interface ObjectiveProgressReading {
   plannedExecutionProgressBp: number;
 }
 
+/** Lectura de un objetivo dentro de un lote, con lo mínimo para ubicarlo en el árbol de planificación. */
+export interface ObjectiveProgressBatchItem extends ObjectiveProgressReading {
+  id: string;
+  title: string;
+  orgUnitId: string | null;
+  axisId: string | null;
+}
+
 /** Implementa `okr`, inyecta `metrics`. */
 export interface ObjectiveProgressReader {
   /** Lecturas del objetivo vivo de la organización, o `null` si no existe, está borrado o es de otra org. */
@@ -23,6 +31,17 @@ export interface ObjectiveProgressReader {
     objectiveId: string,
     at: Date,
   ): Promise<ObjectiveProgressReading | null>;
+
+  /**
+   * Lecturas de TODOS los objetivos vivos de un período de la organización, en un número constante de queries
+   * (no una por objetivo). Mismo resultado por objetivo que `readObjectiveProgress`. Orden estable
+   * (`createdAt` asc, `id`). Un período de otra org o inexistente devuelve lista vacía.
+   */
+  readPeriodObjectivesProgress(
+    organizationId: string,
+    periodId: string,
+    at: Date,
+  ): Promise<ObjectiveProgressBatchItem[]>;
 }
 
 export const OBJECTIVE_PROGRESS_READER = Symbol('OBJECTIVE_PROGRESS_READER');

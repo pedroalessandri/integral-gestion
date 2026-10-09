@@ -137,3 +137,15 @@
 - **Posible solución**: helper compartido de bootstrap de org/objetivo para los e2e, registrar el middleware de request-id en el harness y reparar o borrar los specs viejos.
 - **Prioridad**: media.
 - **Actualización (C17, 2026-10-08)**: `ObjectiveIndicatorService` y el publicador de eventos de proyecto toman el `requestId` del request real (`requestContextStorage`) con el del `AuthContext` solo de respaldo, así que los audits de los oyentes de C17 (y `objective.result_progress_changed` cuando el origen es un aporte) funcionan en el harness. `project-contribution.e2e-spec.ts` (DB real) está al día; para evitar el 429 del throttler global reemplaza `ThrottlerStorage`.
+
+### Resolución de período, eje y subárbol duplicada entre `PlanningTreeService` y `PlanningGanttService` (C22)
+- **Qué**: los dos services de `metrics` repiten ~25 líneas: período por defecto (el abierto), validación del eje contra el plan activo y subárbol de la unidad del filtro.
+- **Por qué importa**: si cambia una regla de filtro (p. ej. ejes de planes archivados), hay que acordarse de tocar los dos.
+- **Posible solución**: extraer un helper `resolvePlanningFilters(orgId, query)` compartido.
+- **Prioridad**: baja.
+
+### `components/gantt/gantt-chart.tsx` quedó sin usos (C22)
+- **Qué**: la vista ejecutiva usa `features/executive-gantt` (Objetivo → Proyecto → Tarea). El chart viejo depende de `ObjectiveGanttDto` (deprecated, Objetivo → KR → Tarea) y ya nadie lo importa; `gantt-axis`, `gantt-bar`, `gantt-row` y `executive-view-toggle` siguen en uso.
+- **Por qué importa**: código muerto atado al modelo de KR.
+- **Posible solución**: borrarlo en C24 (limpieza del front), junto con `GET objectives/gantt` y `ObjectiveGanttDto` en C23.
+- **Prioridad**: baja (se resuelve en la Fase 10).

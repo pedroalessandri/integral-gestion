@@ -21,6 +21,9 @@
     "test:watch": "vitest",
     "lint": "eslint src"
   },
+  "dependencies": {
+    "@gestion-publica/deviation-domain": "workspace:*"
+  },
   "devDependencies": {
     "@gestion-publica/config-eslint": "workspace:*",
     "@gestion-publica/config-tsconfig": "workspace:*",

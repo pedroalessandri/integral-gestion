@@ -44,6 +44,9 @@ export interface KeyResultGanttDto {
 
 /**
  * Gantt projection of an Objective with its nested Key Results (and their tasks).
+ *
+ * @deprecated Camino KR legacy. Lo reemplaza `PlanningGanttDto` (GET /okr/planning-gantt, Objetivo -> Proyecto ->
+ * Tarea). Se elimina en el contract de la transición (F10, ADR-0009 D6).
  * Dates are derived at read time from min/max of KR dates that have tasks.
  */
 export interface ObjectiveGanttDto {

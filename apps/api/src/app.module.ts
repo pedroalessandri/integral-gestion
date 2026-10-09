@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { validateEnv } from './config/env.validation.js';
+import { THROTTLERS } from './config/throttler.config.js';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { CustomThrottlerGuard } from './common/guards/throttler.guard.js';
 import { DevAuthMiddleware } from './common/middleware/dev-auth.middleware.js';
@@ -43,18 +44,7 @@ import { PlanningModule, PlanningContractsModule } from './modules/planning/inde
     }),
     // Eventos de dominio post-commit (ADR-0009 D5): solo efectos, nunca validaciones.
     EventEmitterModule.forRoot(),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60_000, // 60 seconds
-        limit: 100,
-      },
-      {
-        // Named throttler for AI endpoints — 10 req/min per user (ADR-0005 D12)
-        name: 'ai',
-        ttl: 60_000,
-        limit: 10,
-      },
-    ]),
+    ThrottlerModule.forRoot(THROTTLERS),
     AuditModule,
     AuthModule,
     CoreModule,

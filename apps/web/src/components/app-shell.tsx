@@ -77,6 +77,7 @@ export function AppShell({ user, me, initialOrgId, aiUsage, children }: AppShell
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/orgs', label: 'Organizaciones', superadminOnly: true },
     { href: '/plan', label: LABELS.plan.singular, requiresOrg: true },
+    { href: '/planning', label: LABELS.planningTree, requiresOrg: true },
     { href: '/objectives', label: 'Objetivos', requiresOrg: true },
     { href: '/objectives/executive', label: 'Vista Ejecutiva', requiresOrg: true },
     { href: '/metrics', label: 'Indicadores de gestión', requiresOrg: true, requiresModule: 'indicadores-gestion' },

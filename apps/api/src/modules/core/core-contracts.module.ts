@@ -3,9 +3,12 @@ import {
   ORG_UNIT_HIERARCHY,
   ORG_UNIT_LOOKUP,
   ORG_UNIT_SCOPE,
+  ORG_UNIT_TREE_READER,
   type OrgUnitHierarchy,
   type OrgUnitLookup,
   type OrgUnitRef,
+  type OrgUnitTreeReader,
+  type OrgUnitTreeRow,
 } from '../../common/contracts/index.js';
 import { OrgUnitScopeService } from './services/org-unit-scope.service.js';
 import { PrismaService } from '../auth/prisma/prisma.service.js';
@@ -53,6 +56,20 @@ export class PrismaOrgUnitHierarchy implements OrgUnitHierarchy {
   }
 }
 
+/** Implementación de `ORG_UNIT_TREE_READER`: todas las unidades vivas de la org, en una query. */
+@Injectable()
+export class PrismaOrgUnitTreeReader implements OrgUnitTreeReader {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async listLiveOrgUnits(organizationId: string): Promise<OrgUnitTreeRow[]> {
+    const rows = await this.prisma.raw.orgUnit.findMany({
+      where: { organizationId, deletedAt: null },
+      select: { id: true, parentId: true, kind: true, name: true, order: true },
+    });
+    return rows.map((r) => ({ ...r, kind: r.kind as OrgUnitTreeRow['kind'] }));
+  }
+}
+
 /** Submódulo @Global de contratos de `core`: solo lo importa AppModule. */
 @Global()
 @Module({
@@ -60,7 +77,8 @@ export class PrismaOrgUnitHierarchy implements OrgUnitHierarchy {
     { provide: ORG_UNIT_LOOKUP, useClass: PrismaOrgUnitLookup },
     { provide: ORG_UNIT_HIERARCHY, useClass: PrismaOrgUnitHierarchy },
     { provide: ORG_UNIT_SCOPE, useClass: OrgUnitScopeService },
+    { provide: ORG_UNIT_TREE_READER, useClass: PrismaOrgUnitTreeReader },
   ],
-  exports: [ORG_UNIT_LOOKUP, ORG_UNIT_HIERARCHY, ORG_UNIT_SCOPE],
+  exports: [ORG_UNIT_LOOKUP, ORG_UNIT_HIERARCHY, ORG_UNIT_SCOPE, ORG_UNIT_TREE_READER],
 })
 export class CoreContractsModule {}
