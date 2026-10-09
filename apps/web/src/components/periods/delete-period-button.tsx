@@ -32,7 +32,7 @@ export function DeletePeriodButton({ orgId, periodId, periodCode }: DeletePeriod
     setLoading(true);
     setError(null);
 
-    const result = await deletePeriodAction({ periodId });
+    const result = await deletePeriodAction({ orgId, periodId });
 
     setLoading(false);
 

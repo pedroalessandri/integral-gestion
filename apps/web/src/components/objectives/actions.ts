@@ -414,8 +414,7 @@ export async function listPeriodsAction(input: {
   try {
     const res = await apiFetch(`/api/v1/orgs/${input.orgId}/periods`, { orgId: input.orgId });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
+      return { error: describeApiError(await readApiError(res)) };
     }
     const data: unknown = await res.json();
     const items = Array.isArray(data) ? (data as PeriodItem[]) : ((data as { items?: PeriodItem[] }).items ?? []);
@@ -426,15 +425,16 @@ export async function listPeriodsAction(input: {
 }
 
 export async function closePeriodAction(input: {
+  orgId: string;
   periodId: string;
 }): Promise<{ error?: string; result?: unknown }> {
   try {
     const res = await apiFetch(`/api/v1/periods/${input.periodId}/close`, {
       method: 'POST',
+      orgId: input.orgId,
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
+      return { error: describeApiError(await readApiError(res)) };
     }
     return { result: await res.json() };
   } catch (err) {
@@ -443,15 +443,16 @@ export async function closePeriodAction(input: {
 }
 
 export async function activatePeriodAction(input: {
+  orgId: string;
   periodId: string;
 }): Promise<{ error?: string; result?: unknown }> {
   try {
     const res = await apiFetch(`/api/v1/periods/${input.periodId}/open`, {
       method: 'POST',
+      orgId: input.orgId,
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
+      return { error: describeApiError(await readApiError(res)) };
     }
     return { result: await res.json() };
   } catch (err) {
@@ -473,8 +474,7 @@ export async function createPeriodAction(input: {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
+      return { error: describeApiError(await readApiError(res)) };
     }
     return { period: await res.json() };
   } catch (err) {
@@ -483,15 +483,16 @@ export async function createPeriodAction(input: {
 }
 
 export async function deletePeriodAction(input: {
+  orgId: string;
   periodId: string;
 }): Promise<{ error?: string }> {
   try {
     const res = await apiFetch(`/api/v1/periods/${input.periodId}`, {
       method: 'DELETE',
+      orgId: input.orgId,
     });
     if (!res.ok && res.status !== 204) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
+      return { error: describeApiError(await readApiError(res)) };
     }
     return {};
   } catch (err) {

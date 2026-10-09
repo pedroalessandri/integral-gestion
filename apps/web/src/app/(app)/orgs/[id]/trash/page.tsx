@@ -18,7 +18,7 @@ export default async function OrgTrashPage({ params }: { params: Promise<{ id: s
   // Attempt to load org name for the breadcrumb
   let orgName = orgId;
   try {
-    const res = await apiFetch(`/api/v1/orgs/${orgId}`);
+    const res = await apiFetch(`/api/v1/orgs/${orgId}`, { orgId });
     if (res.ok) {
       const org: Org = await res.json();
       orgName = org.name;

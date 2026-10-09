@@ -15,6 +15,26 @@ Formato:
 
 ---
 
+## 2026-10-08 · C20b · backend-dev · feature/plan-f8-alcance
+- Hecho (crítico #1 y alto #2 de C20; Pedro aprobó hacerlo en esta rama y que el front mande el header de org):
+  - **`PeriodController`**: `TenantGuard` + `PermissionsGuard` en la clase y `OrgParamGuard` en `orgs/:orgId/periods`. Lecturas (`GET orgs/:orgId/periods`, `GET periods/:id`): solo membresía (el selector de período lo usan todos los roles). Mutaciones (crear, open, close, delete): `core:period:manage` + alcance central (`ORG_UNIT_SCOPE.assertCentralScope`). `PeriodService.findOwnedPeriod` resuelve con `{ id, organizationId, deletedAt: null }` → 404 si es de otra org; sin org en el contexto, 403 sin consultar. El cierre automático (cron) sigue filtrando por la org del período.
+  - **`OrganizationController`**: `GET/POST orgs`, `activate` y `deactivate` solo superadmin (`SuperadminOnlyGuard`). `GET orgs/:id`: miembro de esa org (`TenantGuard` + `OrgIdParamGuard` nuevo, que exige `:id` = org del header). `PATCH orgs/:id`: `TenantGuard` + `OrgIdParamGuard` + `core:org-unit:manage` + alcance central (ver preguntas).
+  - **#2**: vincular una métrica existente a un objetivo exige `assertCanWriteMetric` además del alcance sobre la unidad del objetivo (métrica sin objetivos → central; con objetivos → todas sus unidades). Los vínculos de contexto y KR legacy no entran en ese cálculo, así que no capturan ni traban la escritura.
+  - **Front**: las acciones de períodos (cerrar, activar, borrar) mandan `x-organization-id` y muestran 403/404 en español; `orgs/[id]/trash` y `orgs/[id]/members` mandan el header en `GET orgs/:id`.
+- Commit: este commit (`fix(core): guards y tenant scoping en períodos y organizaciones; vincular métricas exige poder escribirlas`)
+- Verificación:
+  - `turbo run typecheck --force` 7/7; `turbo run lint --force` 0 errores (warnings preexistentes); `turbo run test --force` 12/12 (api 508, web 82); `pnpm --filter web build` OK.
+  - E2E en DB descartable `gp_c20b_e2e` (ya borrada), corrido por el subagente: `security-c20b` 2/2 (sin membresía → 403 en orgs y períodos; miembro de A sobre B → 404/403 y el período de B sigue abierto; org-user y admin de unidad no cierran; central y superadmin sí; audit `period.closed`; #2 con 403 para la unidad B y OK para central) + `org-unit-scope` 3/3, `indicator-curves` 3/3, `project-contribution` 3/3.
+  - Verificado a mano: ya no quedan búsquedas de período por id sin org en `PeriodService`.
+- Pendiente / desvíos:
+  - `PATCH orgs/:id` no quedó solo superadmin: lo usa el formulario de contexto de la org (misión, visión, valores) del org-admin. Va con `core:org-unit:manage` + alcance central.
+  - Superadmin necesita el header y la org activa para `GET orgs/:id`: sobre una org inactiva, `trash` y `members` no muestran el nombre (caso borde).
+  - Un vínculo métrica-KR legacy de otra unidad puede trabar el borrado de la métrica (RN-O7); baja gravedad y desaparece con el contract (F10).
+  - TODO.md: los dos ítems llevan "Actualización (C20b)"; se mueven a Completados al mergear. #3–#10 siguen en TODO.md.
+- Preguntas abiertas:
+  - ¿`PATCH orgs/:id` así (org-admin central con `core:org-unit:manage`) o solo superadmin adaptando el formulario? Con esto un org-admin central puede cambiar el nombre de su org (ya podía antes, sin guard).
+- Nota: Pedro confirmó (2026-10-08) que `core:org-unit:vision:write` en `org-user` está bien, también con alcance `null`.
+
 ## 2026-10-08 · C20 · security-reviewer · feature/plan-f8-alcance
 - Hecho: revisión de seguridad de solo lectura de `git diff 2085245..HEAD` (Fases 2–8, 304 archivos): controllers, guards, services de core/okr/metrics/planning, DTOs, listeners, puertos, migraciones SQL, `$queryRaw`/`$executeRaw`, `prisma-tenant-extension` y server actions de web. Veredicto: **el diff de las Fases 2–8 no tiene bloqueantes propios**; hay 1 crítico preexistente fuera del rango y 1 alto dentro del rango → **C20b**.
 - Hallazgos:

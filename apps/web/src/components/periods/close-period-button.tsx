@@ -32,7 +32,7 @@ export function ClosePeriodButton({ orgId, periodId, openPeriodCode }: ClosePeri
   function handleConfirm() {
     setError(null);
     startTransition(async () => {
-      const res = await closePeriodAction({ periodId });
+      const res = await closePeriodAction({ orgId, periodId });
       if (res.error) {
         setError(res.error);
         return;

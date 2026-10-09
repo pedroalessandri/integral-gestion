@@ -28,7 +28,7 @@ const ROLE_COLORS: Record<string, string> = {
 export default async function MembersPage({ params }: MembersPageProps) {
   const { id: orgId } = await params;
 
-  const orgRes = await apiFetch(`/api/v1/orgs/${orgId}`);
+  const orgRes = await apiFetch(`/api/v1/orgs/${orgId}`, { orgId });
   if (orgRes.status === 404) notFound();
   const org = orgRes.ok ? (await orgRes.json() as { name?: string }) : null;
 

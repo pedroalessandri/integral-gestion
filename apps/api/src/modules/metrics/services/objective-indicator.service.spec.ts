@@ -140,6 +140,7 @@ const projectLinks = {
   findLiveProject: vi.fn(),
 };
 const metricService = {
+  assertCanWriteMetric: vi.fn(async () => undefined),
   insertMetric: vi.fn(async (_tx: unknown, orgId: string, periodId: string, input: Row) => {
     const row: Row = {
       id: `m-new-${++seq}`,
@@ -309,6 +310,20 @@ describe('create con métrica existente', () => {
       period: { id: 'period-1', code: '2027', status: 'closed' },
     });
     await expect(build().create('obj-1', ORG, { metricId: 'm-1' }, authCtx)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('C20b #2: sin poder escribir la métrica existente -> 403 y no crea el indicador', async () => {
+    metricService.assertCanWriteMetric.mockRejectedValueOnce(new ForbiddenException('OrgUnitScopeForbidden'));
+    await expect(build().create('obj-1', ORG, { metricId: 'm-1' }, authCtx)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(metricService.assertCanWriteMetric).toHaveBeenCalledWith('m-1', ORG, authCtx);
+    expect(indicators.filter((i) => i['metricId'] === 'm-1' && i['id'] !== 'ind-1').length).toBe(0);
+  });
+
+  it('C20b #2: una métrica inline nueva no pasa por assertCanWriteMetric', async () => {
+    metricService.assertCanWriteMetric.mockClear();
+    const inline = { name: 'N', unit: 'number', frequency: 'monthly', kind: 'output' } as const;
+    await build().create('obj-1', ORG, { metric: inline, targetValue: '100', direction: 'increasing' }, authCtx);
+    expect(metricService.assertCanWriteMetric).not.toHaveBeenCalled();
   });
 
   it('base == meta -> 422', async () => {
