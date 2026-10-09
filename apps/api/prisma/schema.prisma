@@ -43,7 +43,6 @@ model Organization {
   memberships             UserOrganizationRole[]
   modules                 OrganizationModule[]
   objectives              Objective[]
-  keyResults              KeyResult[]
   tasks                   Task[]
   projects                Project[]
   aiSettings              OrganizationAiSettings?
@@ -51,7 +50,6 @@ model Organization {
   aiUsageCounters         UsageCounter[]
   metrics                 Metric[]
   metricEntries           MetricEntry[]
-  metricKrLinks           MetricKrLink[]
   objectiveIndicators     ObjectiveIndicator[]
   indicatorTargetPoints   IndicatorTargetPoint[]
   projectContributions    ProjectContribution[]
@@ -106,7 +104,6 @@ model User {
 
   memberships     UserOrganizationRole[]
   ownedObjectives Objective[]            @relation("ObjectiveOwner")
-  ownedKeyResults KeyResult[]            @relation("KrOwner")
   ownedTasks      Task[]                 @relation("TaskOwner")
   ownedProjects   Project[]              @relation("ProjectOwner")
   aiPromptLogs    PromptLog[]
@@ -278,12 +275,10 @@ model Objective {
   title                     String    @db.VarChar(200)
   description               String?   @db.Text
   ownerUserId               String?   @map("owner_user_id")
-  /// Unidad (ministry | area, RN-P3). Nullable hasta la fase migrate (ADR-0009 D6); el service valida kind y org.
-  orgUnitId                 String?   @map("org_unit_id")
+  /// Unidad (ministry | area, RN-P3). El service valida kind y org.
+  orgUnitId                 String    @map("org_unit_id")
   /// Eje (N2) del plan activo; opcional (RN-P2).
   axisId                    String?   @map("axis_id")
-  /// Deprecado (camino KR legacy; se elimina en el contract, ADR-0009 D6).
-  progressCachedBp          Int       @default(0) @map("progress_cached_bp")
   /// Avance de resultado (desde indicadores, RN-P8). Nunca se combina con el de gestión.
   resultProgressCachedBp    Int       @default(0) @map("result_progress_cached_bp")
   /// Avance de gestión (desde proyectos, RN-P8). Nunca se combina con el de resultado.
@@ -295,9 +290,8 @@ model Objective {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   period       Period       @relation(fields: [periodId], references: [id], onDelete: Restrict)
   owner        User?        @relation("ObjectiveOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  orgUnit      OrgUnit?     @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
+  orgUnit      OrgUnit      @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
   axis         Axis?        @relation(fields: [axisId], references: [id], onDelete: Restrict)
-  keyResults   KeyResult[]
   projects     Project[]
 
   @@index([organizationId, periodId], map: "idx_objective_org_period")
@@ -306,34 +300,6 @@ model Objective {
   @@index([orgUnitId], map: "idx_objective_org_unit")
   @@index([axisId], map: "idx_objective_axis")
   @@map("objective")
-  @@schema("okr")
-}
-
-model KeyResult {
-  id               String    @id @default(cuid())
-  objectiveId      String    @map("objective_id")
-  organizationId   String    @map("organization_id")
-  title            String    @db.VarChar(200)
-  description      String?   @db.Text
-  ownerUserId      String?   @map("owner_user_id")
-  weightBp         Int       @map("weight_bp")
-  progressCachedBp Int       @default(0) @map("progress_cached_bp")
-  /// 'manual' (progress from tasks) | 'automatic' (progress from a linked Metric) — CHECK constraint in migration. Default 'manual' (M2).
-  progressMode     String    @default("manual") @map("progress_mode") @db.VarChar(10)
-  deletedAt        DateTime? @map("deleted_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-
-  objective    Objective    @relation(fields: [objectiveId], references: [id], onDelete: Restrict)
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  owner        User?        @relation("KrOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  tasks        Task[]
-  // metric_kr_link references key_result via a cross-schema FK added in raw SQL
-  // (no @relation — mirrors the audit.event → core.* pattern).
-
-  @@index([objectiveId], map: "idx_kr_objective")
-  @@index([ownerUserId], map: "idx_kr_owner_user")
-  @@map("key_result")
   @@schema("okr")
 }
 
@@ -355,8 +321,6 @@ model Project {
   /// FK a metrics.objective_indicator por SQL crudo (migración 20261008000002); sin relación en Prisma (convención cross-schema).
   sourceObjectiveIndicatorId String?   @map("source_objective_indicator_id")
   progressCachedBp           Int       @default(0) @map("progress_cached_bp")
-  /// Idempotencia de la migración KR -> Project (ADR-0009 D6). Unique parcial en la migración SQL.
-  legacyKeyResultId          String?   @map("legacy_key_result_id")
   deletedAt                  DateTime? @map("deleted_at")
   createdAt                  DateTime  @default(now()) @map("created_at")
   updatedAt                  DateTime  @updatedAt @map("updated_at")
@@ -367,8 +331,6 @@ model Project {
   owner        User?        @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   tasks        Task[]
 
-  // Partial unique uq_project_legacy_key_result ON (legacy_key_result_id) WHERE legacy_key_result_id IS NOT NULL
-  // cannot be expressed in Prisma — added manually in migration SQL (ADR-0009 D6).
   @@index([organizationId, objectiveId], map: "idx_project_org_objective")
   @@index([objectiveId], map: "idx_project_objective")
   @@index([orgUnitId], map: "idx_project_org_unit")
@@ -380,15 +342,13 @@ model Project {
 
 model Task {
   id             String    @id @default(cuid())
-  /// Camino KR legacy. Exactamente uno entre keyResultId y projectId (CHECK chk_task_parent_xor).
-  keyResultId    String?   @map("key_result_id")
-  /// Proyecto (N5). Exactamente uno entre keyResultId y projectId.
-  projectId      String?   @map("project_id")
+  /// Proyecto (N5).
+  projectId      String    @map("project_id")
   organizationId String    @map("organization_id")
   title          String    @db.VarChar(200)
   description    String?   @db.Text
   ownerUserId    String?   @map("owner_user_id")
-  /// Opcional (RN-P6, todo-o-nada entre hermanos). Obligatorio en el camino KR (CHECK chk_task_kr_weight).
+  /// Opcional (RN-P6, todo-o-nada entre hermanos).
   weightBp       Int?      @map("weight_bp")
   progressBp     Int       @default(0) @map("progress_bp")
   /// Scheduled start date for this task. Must be >= parent Period.startsAt.
@@ -399,12 +359,10 @@ model Task {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  keyResult    KeyResult?   @relation(fields: [keyResultId], references: [id], onDelete: Restrict)
-  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   owner        User?        @relation("TaskOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
 
-  @@index([keyResultId], map: "idx_task_kr")
   @@index([projectId], map: "idx_task_project")
   @@index([ownerUserId], map: "idx_task_owner_user")
   @@map("task")
@@ -445,7 +403,6 @@ model Metric {
   organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   period              Period                   @relation(fields: [periodId], references: [id], onDelete: Restrict)
   entries             MetricEntry[]
-  krLinks             MetricKrLink[]
   objectiveContexts   MetricObjectiveContext[]
   objectiveIndicators ObjectiveIndicator[]
 
@@ -455,36 +412,6 @@ model Metric {
   @@index([organizationId, periodId], map: "idx_metric_org_period")
   @@index([deletedAt], map: "idx_metric_deleted_at")
   @@map("metric")
-  @@schema("metrics")
-}
-
-// ─────────────────────────────────────────────────────────────
-// Módulo 2 "Indicadores en OKRs" — Metric ↔ KR link + objective context.
-// FKs to okr.* are cross-schema and added via raw SQL in the migration.
-// Per docs/features/indicadores-okr.md.
-// ─────────────────────────────────────────────────────────────
-
-model MetricKrLink {
-  id              String   @id @default(cuid())
-  metricId        String   @map("metric_id")
-  /// A KR has at most one link (unique). FK to okr.key_result via raw SQL.
-  keyResultId     String   @unique @map("key_result_id")
-  organizationId  String   @map("organization_id")
-  /// Snapshot at link time (default: metric's current accumulated value). Editable (D-O4).
-  baselineValue   Decimal  @map("baseline_value") @db.Decimal(18, 4)
-  targetValue     Decimal  @map("target_value") @db.Decimal(18, 4)
-  /// 'increasing' | 'decreasing' — inherited from the Metric at link time, editable. CHECK in migration.
-  direction       String   @db.VarChar(10)
-  createdByUserId String   @map("created_by_user_id")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  metric       Metric       @relation(fields: [metricId], references: [id], onDelete: Restrict)
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-
-  @@index([metricId], map: "idx_mkl_metric")
-  @@index([organizationId], map: "idx_mkl_org")
-  @@map("metric_kr_link")
   @@schema("metrics")
 }
 
@@ -508,15 +435,13 @@ model ObjectiveIndicator {
   linkMode          String    @default("independent") @map("link_mode") @db.VarChar(30)
   /// Avance de este indicador (bp). Alimenta Objective.resultProgressCachedBp.
   progressCachedBp  Int       @default(0) @map("progress_cached_bp")
-  /// Idempotencia de la migración KR -> indicador (ADR-0009 D6). Unique parcial en la migración SQL.
-  legacyKeyResultId String?   @map("legacy_key_result_id")
   deletedAt         DateTime? @map("deleted_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  metric       Metric                 @relation(fields: [metricId], references: [id], onDelete: Restrict)
-  targetPoints IndicatorTargetPoint[]
+  organization  Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  metric        Metric                 @relation(fields: [metricId], references: [id], onDelete: Restrict)
+  targetPoints  IndicatorTargetPoint[]
   contributions ProjectContribution[]
 
   @@index([organizationId, objectiveId], map: "idx_objective_indicator_org_objective")
@@ -657,7 +582,7 @@ model PromptLog {
   userId         String   @map("user_id")
   /// 'draft' | 'validate' — CHECK constraint in migration
   operationType  String   @map("operation_type") @db.VarChar(16)
-  /// 'objective' | 'key_result' — CHECK constraint in migration
+  /// 'objective' (el valor histórico 'key_result' sigue permitido por el CHECK de la migración; ADR-0009 D9)
   entityType     String   @map("entity_type") @db.VarChar(32)
   /// 'anthropic' | 'openai'
   provider       String   @db.VarChar(16)

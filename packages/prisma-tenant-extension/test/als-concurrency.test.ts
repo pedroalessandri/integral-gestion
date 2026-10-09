@@ -113,9 +113,9 @@ describe('Scenario 2 — nested async work', () => {
       await new Promise((r) => setTimeout(r, 0));
 
       await interceptAllOperations(alsProvider, {
-        model: 'KeyResult',
+        model: 'Project',
         operation: 'findFirst',
-        args: { where: { id: 'kr-1' } },
+        args: { where: { id: 'proj-1' } },
         query: async (args) => {
           const where = args['where'] as Record<string, unknown>;
           observedOrgId = where['organizationId'] as string;

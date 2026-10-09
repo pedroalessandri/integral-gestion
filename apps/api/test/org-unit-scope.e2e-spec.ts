@@ -171,7 +171,7 @@ describe.skipIf(!process.env['DATABASE_URL'])('C19 — alcance por unidad', () =
     expect(move.status).toBe(403);
     expect((await request(httpServer).post('/api/v1/okr/objectives').set(hA).send({ title: 'En A', orgUnitId: a1 })).status).toBe(201);
     expect((await request(httpServer).post('/api/v1/okr/objectives').set(hA).send({ title: 'En B', orgUnitId: b })).status).toBe(403);
-    expect((await request(httpServer).post('/api/v1/okr/objectives').set(hA).send({ title: 'Sin unidad' })).status).toBe(403);
+    expect((await request(httpServer).post('/api/v1/okr/objectives').set(hA).send({ title: 'Sin unidad' })).status).toBe(400); // la unidad es obligatoria (F10)
     expect((await request(httpServer).delete(`/api/v1/okr/objectives/${objB}`).set(hA)).status).toBe(403);
     // Alcance central: edita cualquier unidad.
     expect((await patch(hC, objB)).status).toBe(200);

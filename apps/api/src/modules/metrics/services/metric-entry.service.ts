@@ -16,7 +16,6 @@ import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 import { MetricService } from './metric.service.js';
-import { MetricLinkService } from './metric-link.service.js';
 import { ObjectiveIndicatorService } from './objective-indicator.service.js';
 
 type PeriodInclude = {
@@ -63,7 +62,6 @@ export class MetricEntryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditEmitter: AuditEventEmitterService,
-    private readonly metricLinkService: MetricLinkService,
     private readonly objectiveIndicatorService: ObjectiveIndicatorService,
     private readonly metricService: MetricService,
   ) {}
@@ -126,9 +124,6 @@ export class MetricEntryService {
     // F4 (ADR-0009 D5): después del commit, aviso a `okr` del nuevo avance de resultado.
     await this.objectiveIndicatorService.publishProgressChanged(events);
 
-    // M2 hook: after commit, recompute any automatic KR linked to this metric.
-    await this.metricLinkService.recalcLinkedKrs(metricId, orgId, authContext);
-
     return this.toDtoWithCumulative(metric, created);
   }
 
@@ -188,9 +183,6 @@ export class MetricEntryService {
     // F4 (ADR-0009 D5): después del commit, aviso a `okr` del nuevo avance de resultado.
     await this.objectiveIndicatorService.publishProgressChanged(events);
 
-    // M2 hook: after commit, recompute any automatic KR linked to this metric.
-    await this.metricLinkService.recalcLinkedKrs(metricId, orgId, authContext);
-
     return this.toDtoWithCumulative(metric, updated);
   }
 
@@ -229,9 +221,6 @@ export class MetricEntryService {
     );
     // F4 (ADR-0009 D5): después del commit, aviso a `okr` del nuevo avance de resultado.
     await this.objectiveIndicatorService.publishProgressChanged(events);
-
-    // M2 hook: deleting an entry changes the accumulated value → recompute KRs.
-    await this.metricLinkService.recalcLinkedKrs(metricId, orgId, authContext);
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────

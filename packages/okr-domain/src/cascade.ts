@@ -1,4 +1,4 @@
-import type { IndicatorInput, OptionalWeightInput, ProjectInput, ProjectTaskInput, TaskInput } from './types';
+import type { IndicatorInput, OptionalWeightInput, ProjectInput, ProjectTaskInput } from './types';
 import { weightMode } from './invariants';
 
 /**
@@ -93,32 +93,6 @@ export function aggregateProgressBp(
     0,
   );
   return Math.trunc(numerator / BP_MAX);
-}
-
-/**
- * Compute a Key Result's progress from its tasks (legacy KR path).
- *
- * RN-07: empty tasks array returns 0.
- *
- * @throws RangeError if any weightBp or progressBp is outside [0, 10000] or non-integer.
- * @throws WeightSumInvariantError if weights do not sum to 10000.
- */
-export function computeKrProgress(tasks: TaskInput[]): number {
-  return aggregateProgressBp(tasks, 'task');
-}
-
-/**
- * Compute an Objective's progress from its Key Results' computed progress values (legacy KR path).
- *
- * RN-08: empty krs array returns 0.
- *
- * @throws RangeError if any weightBp or progressBp is outside [0, 10000] or non-integer.
- * @throws WeightSumInvariantError if weights do not sum to 10000.
- */
-export function computeObjectiveProgress(
-  krs: Array<{ weightBp: number; progressBp: number }>,
-): number {
-  return aggregateProgressBp(krs, 'kr');
 }
 
 /**

@@ -17,6 +17,7 @@
 - **Posible solución**: extraer el acumulado a una función pura en `packages/metrics-domain` (p. ej. `accumulate(baseline, increments)`) y que ambos services la usen; o mover el embed del `metricLink` a un paso de composición fuera de okr. Ver docs/features/indicadores-okr.md D-O1.
 - **Prioridad**: baja. Ambos caminos están cubiertos por tests; el riesgo es drift si se edita la fórmula.
 - **Actualización (C11, 2026-10-08)**: `metrics-domain` ya tiene `accumulatedValue(baseline, increments)` (lo usa `ObjectiveIndicatorService`); falta migrar `MetricLinkService` y `ObjectiveService` a esa función.
+- **Actualización (C23)**: `ObjectiveService.loadAutomaticLinks` y `MetricLinkService` (parte KR) se eliminaron; el duplicado ya no existe. `MetricLinkService.currentCumulative` (contexto métrica-objetivo) todavía repite la acumulación y puede migrarse a `accumulatedValue`.
 
 ### `apps/web` sin script `typecheck` ni Vitest (C06)
 - **Qué**: `apps/web/package.json` solo tiene `dev`, `build`, `start` y `lint`. `pnpm typecheck` (turbo) no corre sobre web y `pnpm --filter web typecheck` falla ("None of the selected packages has a typecheck script"). Tampoco hay runner de tests, así que los helpers puros de C06 (`features/*/tree.ts`, `plan-form.ts`, `objective-assignment.ts`, `lib/api-errors.ts`) no tienen tests.
@@ -74,6 +75,7 @@
 - **Por qué importa**: la regla "validación en el controller" no se cumple en esos endpoints; llegan valores sin validar al service.
 - **Posible solución**: `ValidationPipe({ transform: true, whitelist: true })` en esos controllers (o `APP_PIPE` global) y revisar que el front no mande campos extra. KR se elimina o se reescriben en F10, así que puede resolverse ahí.
 - **Prioridad**: baja.
+- **Actualización (C23)**: `KeyResultController` se eliminó en el contract; queda sin sentido. Los controllers restantes de okr ya usan `ValidationPipe` local.
 
 ### e2e de core rotas en `POST /orgs` (preexistente)
 - **Qué**: `core-member.e2e-spec.ts` y `core-module-enablement.e2e-spec.ts` fallan las 6 en el setup: `POST /api/v1/orgs` no devuelve `organization.id` (`Cannot read properties of undefined (reading 'id')`). Pasa igual en `main` (e0072c3), así que no lo introdujo el fix de `:orgId`. Las e2e corren contra la DB de `DATABASE_URL` de dev.
@@ -99,7 +101,8 @@
 - **Qué**: `pnpm --filter api lint` falla con 1 error: `mockKeyResultFindFirst` asignada pero nunca usada en `apps/api/src/modules/okr/services/task.service.spec.ts:61`. Existe en `main` (no lo introdujo la corrida de indicadores M1). Hay además un warning preexistente de `eslint-disable` sin uso en `ai/providers/openai.provider.ts:12`.
 - **Por qué importa**: `pnpm --filter api lint` sale con exit 1 por este error ajeno; enmascara errores de lint nuevos en corridas del api.
 - **Posible solución**: borrar el mock sin usar (o prefijarlo con `_`) y quitar el `eslint-disable` sobrante. Corrida trivial.
-- **Prioridad**: baja. No afecta typecheck, tests ni build (todos verdes).
+- **Prioridad**: baja.
+- **Actualización (C23)**: `task.service.spec.ts` se borró (era todo del camino KR) y `pnpm lint` pasa sin errores; queda solo el warning de `openai.provider.ts:12`. No afecta typecheck, tests ni build (todos verdes).
 - **Resolución (2026-10-08)**: se borró el mock sin usar para que `pnpm lint` pase en CI. El warning de `openai.provider.ts` sigue (es warning, no falla).
 
 ### Lint preexistente: eslint-module-utils/resolve
@@ -124,6 +127,7 @@
 - **Por qué importa**: con PA-1 respondida (no hay datos reales) no debería pasar; queda como red de seguridad.
 - **Posible solución**: ninguna hasta que aparezca un caso real. Se elimina junto con el script en el contract (F10).
 - **Prioridad**: baja.
+- **Actualización (C23)**: `migrate-to-planning.ts`, `planning-migration.ts` y los scripts `migrate:planning*` se eliminaron; sin sentido.
 
 ### `deviationBp` de `metrics-domain` es solo un adaptador (C15)
 - **Qué**: el desvío y el semáforo viven en `packages/deviation-domain` (decisión de Pedro en C14). `metrics-domain` conserva `deviationBp(strings)` como adaptador que parsea decimales y delega, porque lo usa `MetricService` (resumen de la serie) y `metrics-domain` ya depende del paquete nuevo.
@@ -149,3 +153,4 @@
 - **Por qué importa**: código muerto atado al modelo de KR.
 - **Posible solución**: borrarlo en C24 (limpieza del front), junto con `GET objectives/gantt` y `ObjectiveGanttDto` en C23.
 - **Prioridad**: baja (se resuelve en la Fase 10).
+- **Actualización (C23)**: `GET objectives/gantt` y `ObjectiveGanttDto`/`KeyResultGanttDto` ya se borraron del backend y shared-types; queda borrar `gantt-chart.tsx` en C24 (hoy rompe el typecheck de web).

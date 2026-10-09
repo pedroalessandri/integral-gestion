@@ -285,16 +285,6 @@ export class MetricService {
     await this.assertCanWriteMetric(id, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(existing.period));
 
-    // RN-O7: a metric with active KR links cannot be deleted — unlink first.
-    const activeLinks = await this.prisma.scoped.metricKrLink.count({
-      where: { metricId: id, organizationId: orgId },
-    });
-    if (activeLinks > 0) {
-      throw new ConflictException(
-        `No se puede eliminar el indicador: tiene ${activeLinks} vínculo(s) activo(s) con Key Results. Desvinculá primero.`,
-      );
-    }
-
     // ADR-0009 D2: una métrica que mide un objetivo no se borra; quitá primero el indicador del objetivo.
     const objectiveIndicators = await this.findLiveObjectiveIndicators(id, orgId);
     if (objectiveIndicators.length > 0) {
@@ -507,7 +497,6 @@ export class MetricService {
       lastValue,
       expectedToDate: expectedAt(new Date(), range, baseline, target),
       progressPct: Math.trunc(progressBp({ actual: lastValue, baseline, target }) / 100),
-      linkedKrCount: 0,
       period: {
         id: metric.period.id,
         code: metric.period.code,

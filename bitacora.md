@@ -15,6 +15,23 @@ Formato:
 
 ---
 
+## 2026-10-09 · C23 · backend-dev · feature/plan-f10-contract
+- Hecho (contract, ADR-0009 D6 y D9):
+  - **Migración** `20261009000001_contract_drop_key_result` (a mano): primero verifica que no haya `okr.objective.org_unit_id` ni `okr.task.project_id` NULL (vivos o borrados) y si los hay aborta con `RAISE EXCEPTION` y los conteos, sin borrar datos. Después: drop de `metrics.metric_kr_link`, de `okr.task.key_result_id` (con sus CHECK, índices y FK), de `okr.key_result`, de `okr.objective.progress_cached_bp` y de `legacy_key_result_id` (+ índices parciales) en `okr.project` y `metrics.objective_indicator`; `objective.org_unit_id` y `task.project_id` NOT NULL. No toca `audit.event`.
+  - **API**: fuera endpoints `/key-results*`, tareas bajo KR, `GET objectives/gantt`, `GET objectives/:id/cascade`, `POST objectives/:id/rebalance-weights`, vínculo métrica↔KR (`MetricLinkService` queda solo con el contexto métrica-objetivo), hooks de recálculo de KR, `computeAutomaticKrProgressBp` y lógica de cascada de KR de `okr-domain`. Copiloto IA (D9): `entityType` solo `objective`. Borrar un objetivo con proyectos vivos da 409 (antes lo bloqueaban los KR). El borrado en cascada de un período baja por objetivos → proyectos → tareas. `startsAt`/`endsAt` del objetivo salen de sus proyectos.
+  - **Contratos**: `CreateObjectiveDto.orgUnitId` obligatorio; `ObjectiveSummaryDto`/`ObjectiveDetailDto` sin `progressCachedBp`, `status` ni `hasActiveKeyResults` (no se deriva un estado único para no fusionar lecturas); `TaskSummaryDto.projectId` obligatorio y sin `keyResultId`; `MetricSummaryDto` sin `linkedKrCount`. Se mantienen en `audit/domain-event.ts` los tipos de eventos históricos de KR (append-only).
+  - Se borró el script de migración de F5 (`migrate-to-planning`; ya corrió) y sus scripts de `package.json`. Seed sin KR. `CLAUDE.md` y `AGENTS.md`: KR y `MetricKrLink` "se eliminaron en F10".
+- Commit: este commit (`feat(okr)!: contract — eliminar KeyResult, MetricKrLink y el avance único del objetivo`)
+- Verificación: `turbo run typecheck --force` 6/7 (**web falla a propósito**: 11 errores en 8 archivos que usan KR; lo arregla C24, el siguiente commit de esta rama); `turbo run lint --force` 0 errores; `turbo run test --force` 12/12 (api 490, okr-domain 110, metrics-domain 74, web 120); `grep` de KR en `apps/api/src` y `packages/*/src` (sin tests ni eventos históricos) → 0. E2E en DB descartable migrada desde cero (subagente): `planning-tree`, `planning-gantt`, `org-unit-scope`, `security-c20b`, `project-contribution`, `indicator-curves` → 16/16; seed corrido dos veces; `psql` sin `okr.key_result` ni `metrics.metric_kr_link`.
+- Pendiente / desvíos:
+  - **La migración no se aplicó en la DB local de desarrollo**: hay 1 objetivo borrado sin unidad (`lg-o3`, org `lg-org`, `deleted_at` 2026-10-08). Probada en un clon: aborta con el conteo y no toca nada. Hace falta borrar esa fila (decisión de Pedro).
+  - El CHECK de `ai.prompt_log.entity_type` sigue admitiendo `key_result` por los logs históricos.
+  - `AGENTS.md` (líneas ~100 y ~140) todavía menciona tareas colgando de un KR legacy: se corrige en C24.
+- Preguntas abiertas:
+  - ¿Se borra `lg-o3` de la DB local para aplicar la migración?
+  - La descripción del permiso `metrics:write` ("manage KR links") y del módulo `indicadores-okr` ("vínculo de indicadores a Key Results") son datos sembrados: ¿se actualizan con una migración de catálogo o se dejan?
+  - Los tipos de eventos históricos de KR en `domain-event.ts` quedan indefinidamente (el audit es append-only). ¿OK?
+
 ## 2026-10-09 · C22 · backend-dev + frontend-dev · feature/plan-f9-tableros
 - Hecho:
   - **Endpoint** `GET okr/planning-gantt?periodId=&axisId=&orgUnitId=` (en `metrics`, junto a `planning-tree`; `TenantGuard` + `okr:read`; todos opcionales, período abierto por defecto, 404 `OpenPeriodNotFound` si no hay; `orgUnitId` filtra subárbol). Devuelve Objetivo → Proyecto → Tarea: el objetivo con unidad, eje, fechas min–max de sus proyectos y las dos lecturas por separado con desvío y semáforo (mismo cálculo por lote de C21, igual a `/status`); el proyecto con unidad, avance, `progressMode` y fechas planificadas; las tareas con `TaskGanttDto`. Objetivos sin proyectos incluidos con fechas `null`. Dos queries por lote (proyectos y tareas), sin N+1. `GET objectives/gantt` y `ObjectiveGanttDto` quedan `@deprecated` hasta el contract (F10); nada nuevo sobre KR.

@@ -24,7 +24,6 @@ const mockPrismaService = {
   runInTransaction: vi.fn().mockImplementation((fn: (tx: any) => Promise<any>) => fn(mockTx)),
 };
 const mockAuditEmitter = { emit: vi.fn().mockResolvedValue(undefined) };
-const mockMetricLinkService = { recalcLinkedKrs: vi.fn().mockResolvedValue(undefined) };
 const mockMetricService = { assertCanWriteMetric: vi.fn().mockResolvedValue(undefined) };
 const mockObjectiveIndicatorService = {
   recomputeForMetric: vi.fn().mockResolvedValue([{ objectiveId: 'obj-1' }]),
@@ -89,8 +88,6 @@ describe('MetricEntryService', () => {
       mockPrismaService as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockAuditEmitter as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      mockMetricLinkService as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockObjectiveIndicatorService as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -183,7 +180,6 @@ describe('MetricEntryService', () => {
       await expect(
         service.create('metric-1', 'org-1', { bucketDate: '2026-04-01', incrementValue: '100' }, authContext),
       ).rejects.toThrow('boom');
-      expect(mockMetricLinkService.recalcLinkedKrs).not.toHaveBeenCalled();
       expect(mockObjectiveIndicatorService.publishProgressChanged).not.toHaveBeenCalled();
     });
   });

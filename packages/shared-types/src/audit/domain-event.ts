@@ -96,7 +96,9 @@ type PeriodDeletedEvent = BaseEvent<
     after: {
       deletedAt: string;
       objectivesDeleted: number;
-      keyResultsDeleted: number;
+      projectsDeleted: number;
+      /** Solo en eventos históricos anteriores al contract (F10, ADR-0009 D6). */
+      keyResultsDeleted?: number;
       tasksDeleted: number;
     };
   }

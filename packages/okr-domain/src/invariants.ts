@@ -1,10 +1,10 @@
 /**
  * Weight-sum invariant helpers for OKR entities.
  *
- * RN-04/RN-05: the weights of all active KRs within an Objective must sum to exactly
- * 10000 bp (100%), and the weights of all active Tasks within a KR must also sum to 10000 bp.
+ * RN-04/RN-05: the weights of a weighted sibling group (indicators of an Objective, projects of an
+ * Objective, tasks of a Project) must sum to exactly 10000 bp (100%).
  *
- * RN-25: before soft-deleting a KR or Task, the projected sum (total minus the deleted item)
+ * RN-25: before soft-deleting a Project or Task, the projected sum (total minus the deleted item)
  * must be checked. If it would leave siblings with a sum ≠ 10000, the operation must be blocked
  * at the service layer.
  */

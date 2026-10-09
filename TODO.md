@@ -100,6 +100,7 @@
 - Por qué: `key-result.controller.ts` y `objective.controller.ts` (rebalance) reciben el body sin validar; un body malformado da 500 en vez de 400. Sin mass assignment (los services eligen campos).
 - Posible solución: `ValidationPipe({ whitelist, forbidNonWhitelisted, transform })` global en `main.ts`.
 - Origen: C20 (2026-10-08).
+- Actualización (C23): `key-result.controller.ts` y `rebalance` ya no existen (se eliminaron en el contract); queda sin sentido la parte de KR. Los demás controllers siguen con el `ValidationPipe` local por controller.
 
 ### [B] Hallazgos bajos de la revisión de seguridad C20
 - `PermissionsGuard` deja pasar sin `@Permissions` (fail-open): exigir `@Permissions` o `@Public` explícito.
@@ -132,6 +133,7 @@
 - Por qué: deuda flagueada en la corrida feat/objective-owner-assignment. El detail page usa un type local en lugar del DTO compartido.
 - Posible solución: importar ObjectiveCascadeDto desde @gestion-publica/shared-types y borrar el type local.
 - Nota (M2): el type local se extendió con `progressMode` + `metricLink` (referenciando `MetricKrLinkDto` del DTO compartido), pero la convergencia total al DTO sigue pendiente.
+- Actualización (C23): `ObjectiveCascadeDto`, `GET objectives/:id/cascade` y `MetricKrLinkDto` se eliminaron del backend/shared-types; la pantalla de detalle se reescribe en C24 (sin sentido tal como está planteado).
 - Estimado: corrida cortita (~10 min).
 
 ### [F] Mostrar avatar de owner en Vista Ejecutiva (Gantt)

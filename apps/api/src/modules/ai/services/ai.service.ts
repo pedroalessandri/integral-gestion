@@ -7,17 +7,12 @@ import {
   DRAFT_OBJECTIVE_SYSTEM_PROMPT,
   VALIDATE_OBJECTIVE_SYSTEM_PROMPT,
 } from '../prompts/objective-prompts.js';
-import {
-  DRAFT_KR_SYSTEM_PROMPT,
-  VALIDATE_KR_SYSTEM_PROMPT,
-} from '../prompts/key-result-prompts.js';
 
 export interface DraftInput {
   orgId: string;
   userId: string;
-  entityType: 'objective' | 'key_result';
+  entityType: 'objective';
   hint: string;
-  objectiveContext?: string;
 }
 
 export interface DraftOutput {
@@ -28,7 +23,7 @@ export interface DraftOutput {
 export interface ValidateInput {
   orgId: string;
   userId: string;
-  entityType: 'objective' | 'key_result';
+  entityType: 'objective';
   text: string;
 }
 
@@ -48,9 +43,6 @@ export interface ValidateOutput {
     timeBound: SmartCriteria;
   };
   suggestions: string[];
-  // Only present for key_result entity type
-  hasBaseline?: boolean;
-  hasTarget?: boolean;
   cachedHit: boolean;
 }
 
@@ -71,7 +63,7 @@ export class AiService {
   ) {}
 
   async draft(input: DraftInput): Promise<DraftOutput> {
-    const { orgId, userId, entityType, hint, objectiveContext } = input;
+    const { orgId, userId, entityType, hint } = input;
 
     await this.quotaService.assertWithinQuota(orgId);
 
@@ -88,7 +80,7 @@ export class AiService {
       select: { mission: true, vision: true, values: true, context: true },
     });
 
-    const userPrompt = this.buildDraftUserPrompt(entityType, hint, objectiveContext, org);
+    const userPrompt = this.buildDraftUserPrompt(hint, org);
     const promptHash = hashPrompt(`${entityType}:draft:${PROMPT_SET_VERSION}:${userPrompt}`);
 
     // Cache lookup
@@ -116,8 +108,7 @@ export class AiService {
       return { text: cached.responseText, cachedHit: true };
     }
 
-    const systemPrompt =
-      entityType === 'objective' ? DRAFT_OBJECTIVE_SYSTEM_PROMPT : DRAFT_KR_SYSTEM_PROMPT;
+    const systemPrompt = DRAFT_OBJECTIVE_SYSTEM_PROMPT;
 
     const provider = this.providerFactory.get(providerName);
     const startMs = Date.now();
@@ -172,7 +163,7 @@ export class AiService {
         error: 'Bad Request',
         code: 'AI_OFF_TOPIC',
         message:
-          'El pedido no parece relacionado con objetivos o Key Results. El copilot solo asiste en redacción SMART para OKR organizacionales.',
+          'El pedido no parece relacionado con objetivos. El copilot solo asiste en redacción SMART para OKR organizacionales.',
       });
     }
 
@@ -198,7 +189,7 @@ export class AiService {
     });
 
     const contextBlock = buildContextBlock(orgForValidate);
-    const entityLabel = entityType === 'objective' ? 'objetivo' : 'Key Result';
+    const entityLabel = 'objetivo';
     const userPrompt = contextBlock
       ? `Contexto organizacional:\n${contextBlock}\n\nTexto a validar: Analizá el siguiente ${entityLabel} OKR:\n\n"${text}"`
       : `Analizá el siguiente ${entityLabel} OKR:\n\n"${text}"`;
@@ -221,8 +212,6 @@ export class AiService {
             timeBound: { score: 0, feedback: 'No se pudo analizar.' },
           },
           suggestions: Array.isArray(rawCached.suggestions) ? rawCached.suggestions : [],
-          ...(rawCached.hasBaseline !== undefined ? { hasBaseline: Boolean(rawCached.hasBaseline) } : {}),
-          ...(rawCached.hasTarget !== undefined ? { hasTarget: Boolean(rawCached.hasTarget) } : {}),
         };
         await this.logPrompt({
           orgId,
@@ -250,8 +239,7 @@ export class AiService {
       );
     }
 
-    const systemPrompt =
-      entityType === 'objective' ? VALIDATE_OBJECTIVE_SYSTEM_PROMPT : VALIDATE_KR_SYSTEM_PROMPT;
+    const systemPrompt = VALIDATE_OBJECTIVE_SYSTEM_PROMPT;
 
     const provider = this.providerFactory.get(providerName);
     const startMs = Date.now();
@@ -307,7 +295,7 @@ export class AiService {
         error: 'Bad Request',
         code: 'AI_OFF_TOPIC',
         message:
-          'El pedido no parece relacionado con objetivos o Key Results. El copilot solo asiste en redacción SMART para OKR organizacionales.',
+          'El pedido no parece relacionado con objetivos. El copilot solo asiste en redacción SMART para OKR organizacionales.',
       });
     }
 
@@ -335,17 +323,13 @@ export class AiService {
         timeBound: { score: 0, feedback: 'No se pudo analizar.' },
       },
       suggestions: Array.isArray(raw.suggestions) ? raw.suggestions : [],
-      ...(raw.hasBaseline !== undefined ? { hasBaseline: Boolean(raw.hasBaseline) } : {}),
-      ...(raw.hasTarget !== undefined ? { hasTarget: Boolean(raw.hasTarget) } : {}),
     };
 
     return { ...parsed, cachedHit: false };
   }
 
   private buildDraftUserPrompt(
-    entityType: 'objective' | 'key_result',
     hint: string,
-    objectiveContext: string | undefined,
     org: { mission: string | null; vision: string | null; values: string | null; context: string | null } | null,
   ): string {
     const contextBlock = buildContextBlock(org);
@@ -355,12 +339,8 @@ export class AiService {
       parts.push(`Contexto organizacional:\n${contextBlock}`);
     }
 
-    if (entityType === 'key_result' && objectiveContext) {
-      parts.push(`Objetivo al que pertenece este Key Result: "${objectiveContext}"`);
-    }
-
     parts.push(
-      `Pedido del usuario: Redactá un ${entityType === 'objective' ? 'Objetivo OKR' : 'Key Result OKR'} basado en este lineamiento: ${hint}`,
+      `Pedido del usuario: Redactá un Objetivo OKR basado en este lineamiento: ${hint}`,
     );
 
     return parts.join('\n\n');

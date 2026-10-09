@@ -31,7 +31,7 @@ function requireOrgId(user: AuthContext): string {
 
 /**
  * AiController — exposes the AI copilot endpoints for drafting and validating
- * OKR Objectives and Key Results.
+ * OKR Objectives.
  *
  * Guards: TenantGuard (org scoping) + PermissionsGuard (permission check).
  * Rate limit: 10 req/min per user via named throttler 'ai' (ADR-0005 D12).
@@ -49,7 +49,7 @@ export class AiController {
 
   /**
    * POST /api/v1/ai/draft
-   * Drafts a new Objective or Key Result text based on a user hint.
+   * Drafts a new Objective text based on a user hint.
    */
   @Post('draft')
   @Permissions('ai:use')
@@ -60,13 +60,12 @@ export class AiController {
       userId: user.userId,
       entityType: body.entityType,
       hint: body.hint,
-      objectiveContext: body.objectiveContext,
     });
   }
 
   /**
    * POST /api/v1/ai/validate
-   * Returns structured SMART feedback for a given Objective or Key Result text.
+   * Returns structured SMART feedback for a given Objective text.
    */
   @Post('validate')
   @Permissions('ai:use')

@@ -89,14 +89,14 @@ describe('create operation injects into args.data', () => {
     expect(captured.args?.['data']).toEqual({ title: 'my task', organizationId: 'org-A' });
   });
 
-  it('create on KeyResult injects organizationId', async () => {
+  it('create on Project injects organizationId', async () => {
     const captured: { args?: Record<string, unknown> } = {};
     const query = mockQuery(captured);
 
     await interceptAllOperations(makeProvider('org-B'), {
-      model: 'KeyResult',
+      model: 'Project',
       operation: 'create',
-      args: { data: { title: 'kr-1' } },
+      args: { data: { title: 'proj-1' } },
       query,
     });
 
@@ -286,7 +286,7 @@ describe('superadmin bypass', () => {
     const query = mockQuery(captured);
 
     await interceptAllOperations(makeProvider('org-A', true), {
-      model: 'KeyResult',
+      model: 'Project',
       operation: 'findMany',
       args: originalArgs,
       query,
@@ -329,7 +329,7 @@ describe('MissingTenantContextError', () => {
 // ---------------------------------------------------------------------------
 
 describe('all models in TENANT_SCOPED_MODELS receive injection', () => {
-  const scopedModels = ['Objective', 'KeyResult', 'Task', 'Period', 'UserOrganizationRole', 'OrganizationModule'];
+  const scopedModels = ['Objective', 'Project', 'Task', 'Period', 'UserOrganizationRole', 'OrganizationModule'];
 
   for (const model of scopedModels) {
     it(`findMany on ${model} injects organizationId`, async () => {

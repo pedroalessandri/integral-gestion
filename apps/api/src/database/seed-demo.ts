@@ -469,13 +469,11 @@ async function wipeDemoBusinessData(organizationId: string): Promise<void> {
   await prisma.metricObjectiveContext.deleteMany({ where });
   await prisma.projectContribution.deleteMany({ where });
   await prisma.metricEntry.deleteMany({ where });
-  await prisma.metricKrLink.deleteMany({ where });
   await prisma.project.updateMany({ where, data: { sourceObjectiveIndicatorId: null } });
   await prisma.task.deleteMany({ where });
   await prisma.project.deleteMany({ where });
   await prisma.indicatorTargetPoint.deleteMany({ where });
   await prisma.objectiveIndicator.deleteMany({ where });
-  await prisma.keyResult.deleteMany({ where });
   await prisma.objective.deleteMany({ where });
   await prisma.metric.deleteMany({ where });
   await prisma.period.deleteMany({ where });

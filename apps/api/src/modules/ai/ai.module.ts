@@ -8,7 +8,7 @@ import { QuotaService } from './services/quota.service.js';
 import { AiController } from './controllers/ai.controller.js';
 
 /**
- * AiModule — AI copilot for drafting and validating OKR Objectives and Key Results.
+ * AiModule — AI copilot for drafting and validating OKR Objectives (ADR-0009 D9).
  *
  * Provides:
  *  - AnthropicProvider / OpenAiProvider (LLM adapters)

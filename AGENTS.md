@@ -81,7 +81,7 @@ Organization
              └── ProjectContribution (0..n, solo execution_feeds_indicator)
 ```
 
-Todo lleva `organization_id`. Un `Objective` pertenece a una `OrgUnit` de tipo `ministry` o `area`. `KeyResult` y `MetricKrLink` están deprecados y se eliminan en el contract (F10): no construir funcionalidad nueva sobre ellos.
+Todo lleva `organization_id`. Un `Objective` pertenece a una `OrgUnit` de tipo `ministry` o `area`. `KeyResult` y `MetricKrLink` se eliminaron en el contract (F10).
 
 ### Pesos (todo-o-nada)
 

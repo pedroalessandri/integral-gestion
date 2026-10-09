@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { progressBp, computeAutomaticKrProgressBp, objectiveIndicatorProgressBp, deviationBp } from './progress';
+import { progressBp, objectiveIndicatorProgressBp, deviationBp } from './progress';
 
 describe('progressBp — interpolation edge cases', () => {
   it('increasing metric: linear midpoint → 5000bp', () => {
@@ -28,14 +28,6 @@ describe('progressBp — interpolation edge cases', () => {
     expect(progressBp({ actual: '50', baseline: '50', target: '50' })).toBe(10_000);
     expect(progressBp({ actual: '49.9999', baseline: '50', target: '50' })).toBe(0);
     expect(progressBp({ actual: '50.0001', baseline: '50', target: '50' })).toBe(0);
-  });
-});
-
-describe('computeAutomaticKrProgressBp', () => {
-  it('is the OKR-named alias of progressBp', () => {
-    const input = { actual: '75', baseline: '0', target: '100' };
-    expect(computeAutomaticKrProgressBp(input)).toBe(progressBp(input));
-    expect(computeAutomaticKrProgressBp(input)).toBe(7_500);
   });
 });
 

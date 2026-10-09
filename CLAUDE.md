@@ -158,7 +158,7 @@ docs: actualizar estructura en CLAUDE.md
 - **Ponderación todo-o-nada por grupo de hermanos** (indicadores de un objetivo, proyectos de un objetivo, tareas de un proyecto): o todos tienen `weightBp` y suman 10000, o ninguno y se usa promedio simple. Un grupo mixto es inválido (422), no un estado tolerado.
 - **Vínculo gestión ↔ indicador** (`ObjectiveIndicator.linkMode`): `independent` (default), `execution_feeds_indicator` (proyectos con `ProjectContribution` suman al indicador al completarse; solo `kind = output`) o `indicator_feeds_execution` (un `Project` `from_indicator` toma su avance del indicador; sus tareas son informativas).
 - **Base y meta**: manda `ObjectiveIndicator`; `Metric` solo rige en la vista standalone.
-- **Transición**: expand → migrate → contract. `KeyResult` y `MetricKrLink` siguen vivos hasta el contract (F10); no construir funcionalidad nueva sobre ellos.
+- **Transición**: expand → migrate → contract. `KeyResult` y `MetricKrLink` se eliminaron en el contract (F10).
 
 ## Glosario UI ↔ código
 

@@ -4,8 +4,8 @@ export interface CreateObjectiveDto {
   description?: string;
   /** Optional owner userId. When omitted, defaults server-side to the requesting user. */
   ownerUserId?: string | null;
-  /** Unidad de tipo `ministry` o `area` de la misma org (RN-P3). 422 `OrgUnitNotFound` / `OrgUnitKindInvalid`. */
-  orgUnitId?: string;
+  /** Unidad de tipo `ministry` o `area` de la misma org (RN-P3). Obligatoria. 422 `OrgUnitNotFound` / `OrgUnitKindInvalid`. */
+  orgUnitId: string;
   /** Eje del plan activo de la misma org (RN-P2). 422 `AxisNotInActivePlan`. */
   axisId?: string;
 }

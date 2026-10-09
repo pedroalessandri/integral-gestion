@@ -3,14 +3,12 @@ export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'overdue';
 
 export interface TaskSummaryDto {
   id: string;
-  /** Camino KR legacy. `null` si la tarea cuelga de un proyecto (exactamente uno entre keyResultId y projectId). */
-  keyResultId: string | null;
-  /** Proyecto (N5). `null` si la tarea cuelga de un KR legacy. */
-  projectId: string | null;
+  /** Proyecto (N5). */
+  projectId: string;
   title: string;
   /**
-   * Integer 0..10000. `null` si el grupo de hermanos no usa pesos (RN-P6, solo tareas de proyecto):
-   * en ese caso se promedia simple. Las tareas de KR siempre tienen peso.
+   * Integer 0..10000. `null` si el grupo de hermanos no usa pesos (RN-P6):
+   * en ese caso se promedia simple.
    */
   weightBp: number | null;
   /** Integer 0..10000. Direct input per RN-06. */
@@ -30,20 +28,6 @@ export interface TaskDetailDto extends TaskSummaryDto {
   ownerUserId: string | null;
   /** ISO-8601. */
   updatedAt: string;
-}
-
-/** Request body for POST /api/v1/okr/key-results/:krId/tasks. */
-export interface CreateTaskDto {
-  title: string;
-  description?: string;
-  /** User ID of the responsible owner. */
-  ownerUserId?: string | null;
-  /** Integer 0..10000. */
-  weightBp: number;
-  /** ISO-8601. Must be >= parent Period.startsAt. */
-  startsAt: string;
-  /** ISO-8601. Must be <= parent Period.endsAt and >= startsAt. */
-  endsAt: string;
 }
 
 /**
@@ -67,7 +51,7 @@ export interface UpdateTaskDto {
   title?: string;
   description?: string | null;
   ownerUserId?: string | null;
-  /** Integer 0..10000. `null` quita el peso (solo tareas de proyecto; el grupo debe quedar sin pesos). */
+  /** Integer 0..10000. `null` quita el peso (el grupo debe quedar sin pesos). */
   weightBp?: number | null;
   /** ISO-8601. */
   startsAt?: string;

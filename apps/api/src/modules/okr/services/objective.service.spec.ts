@@ -47,65 +47,13 @@ const authCtx = {
   isSuperadmin: false,
 };
 
-function makeTask(overrides: {
-  id: string;
-  title?: string;
-  progressBp: number;
-  startsAt: Date;
-  endsAt: Date;
-  weightBp?: number;
-}) {
-  return {
-    id: overrides.id,
-    keyResultId: 'kr-x',
-    organizationId: ORG_ID,
-    title: overrides.title ?? `Task ${overrides.id}`,
-    description: null,
-    ownerUserId: null,
-    owner: null,
-    weightBp: overrides.weightBp ?? 10000,
-    progressBp: overrides.progressBp,
-    startsAt: overrides.startsAt,
-    endsAt: overrides.endsAt,
-    deletedAt: null,
-    createdAt: new Date('2026-01-01T00:00:00.000Z'),
-    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-  };
-}
-
-function makeKr(overrides: {
-  id: string;
-  objectiveId?: string;
-  title?: string;
-  progressCachedBp: number;
-  tasks: ReturnType<typeof makeTask>[];
-}) {
-  return {
-    id: overrides.id,
-    objectiveId: overrides.objectiveId ?? 'obj-x',
-    organizationId: ORG_ID,
-    title: overrides.title ?? `KR ${overrides.id}`,
-    description: null,
-    ownerUserId: null,
-    owner: null,
-    weightBp: 10000,
-    progressCachedBp: overrides.progressCachedBp,
-    deletedAt: null,
-    createdAt: new Date('2026-01-01T00:00:00.000Z'),
-    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-    tasks: overrides.tasks,
-  };
-}
-
 function makeObjective(overrides: {
   id: string;
   title?: string;
-  progressCachedBp: number;
-  keyResults: ReturnType<typeof makeKr>[];
   ownerUserId?: string | null;
   owner?: { id: string; displayName: string; email: string } | null;
   period?: typeof basePeriod;
-  orgUnitId?: string | null;
+  orgUnitId?: string;
   axisId?: string | null;
 }) {
   return {
@@ -115,16 +63,16 @@ function makeObjective(overrides: {
     title: overrides.title ?? `Objective ${overrides.id}`,
     description: null,
     ownerUserId: overrides.ownerUserId ?? null,
-    orgUnitId: overrides.orgUnitId ?? null,
+    orgUnitId: overrides.orgUnitId ?? 'unit-1',
     axisId: overrides.axisId ?? null,
     owner: overrides.owner ?? null,
-    progressCachedBp: overrides.progressCachedBp,
+    resultProgressCachedBp: 0,
+    executionProgressCachedBp: 0,
     deletedAt: null,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     period: overrides.period ?? basePeriod,
-    _count: { keyResults: overrides.keyResults.length },
-    keyResults: overrides.keyResults,
+    projects: [] as Array<{ startsAt: Date; endsAt: Date }>,
   };
 }
 
@@ -150,7 +98,6 @@ const mockPrismaService = {
         update: mockObjectiveUpdate,
         findUnique: mockObjectiveFindUnique,
       },
-      keyResult: { update: vi.fn() },
     };
     return fn(tx);
   }),
@@ -190,245 +137,13 @@ function buildService(): ObjectiveService {
 
 // ─── Suite ───────────────────────────────────────────────────────────────────
 
-describe('ObjectiveService.listGantt', () => {
-  let service: ObjectiveService;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    service = buildService();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  // ── Case 1: empty period ─────────────────────────────────────────────────
-
-  it('returns [] when the period has no objectives', async () => {
-    mockObjectiveFindMany.mockResolvedValue([]);
-
-    const result = await service.listGantt(ORG_ID, PERIOD_ID);
-
-    expect(result).toEqual([]);
-    expect(mockObjectiveFindMany).toHaveBeenCalledOnce();
-  });
-
-  // ── Case 2: full tree with two objectives ────────────────────────────────
-
-  it('returns full tree with derived dates for two objectives with KRs and tasks', async () => {
-    const task1 = makeTask({
-      id: 'task-1',
-      progressBp: 10000,
-      startsAt: new Date('2026-01-06T00:00:00.000Z'),
-      endsAt: new Date('2026-01-31T00:00:00.000Z'),
-    });
-    const task2 = makeTask({
-      id: 'task-2',
-      progressBp: 5000,
-      startsAt: new Date('2026-02-01T00:00:00.000Z'),
-      endsAt: new Date('2026-02-28T00:00:00.000Z'),
-    });
-    const kr1 = makeKr({ id: 'kr-1', objectiveId: 'obj-1', progressCachedBp: 7500, tasks: [task1, task2] });
-
-    const task3 = makeTask({
-      id: 'task-3',
-      progressBp: 3000,
-      startsAt: new Date('2026-03-01T00:00:00.000Z'),
-      endsAt: new Date('2026-03-31T00:00:00.000Z'),
-    });
-    const kr2 = makeKr({ id: 'kr-2', objectiveId: 'obj-2', progressCachedBp: 3000, tasks: [task3] });
-
-    const obj1 = makeObjective({ id: 'obj-1', progressCachedBp: 7500, keyResults: [kr1] });
-    const obj2 = makeObjective({ id: 'obj-2', progressCachedBp: 3000, keyResults: [kr2] });
-
-    mockObjectiveFindMany.mockResolvedValue([obj1, obj2]);
-
-    const result = await service.listGantt(ORG_ID, PERIOD_ID);
-
-    expect(result).toHaveLength(2);
-
-    // Objective 1
-    const r0 = result[0]!;
-    expect(r0.id).toBe('obj-1');
-    expect(r0.progressCachedBp).toBe(7500);
-    expect(r0.status).toBe('in_progress');
-    // KR dates derived from min(task1.startsAt, task2.startsAt) → task1.startsAt
-    expect(r0.keyResults[0]!.startsAt).toBe('2026-01-06T00:00:00.000Z');
-    // max(task1.endsAt, task2.endsAt) → task2.endsAt
-    expect(r0.keyResults[0]!.endsAt).toBe('2026-02-28T00:00:00.000Z');
-    // Objective dates derived from its single KR
-    expect(r0.startsAt).toBe('2026-01-06T00:00:00.000Z');
-    expect(r0.endsAt).toBe('2026-02-28T00:00:00.000Z');
-
-    // Objective 2
-    const r1 = result[1]!;
-    expect(r1.id).toBe('obj-2');
-    expect(r1.keyResults[0]!.startsAt).toBe('2026-03-01T00:00:00.000Z');
-    expect(r1.keyResults[0]!.endsAt).toBe('2026-03-31T00:00:00.000Z');
-    expect(r1.startsAt).toBe('2026-03-01T00:00:00.000Z');
-    expect(r1.endsAt).toBe('2026-03-31T00:00:00.000Z');
-  });
-
-  // ── Case 3: KR with no tasks → null dates ────────────────────────────────
-
-  it('sets KR startsAt/endsAt to null when it has no tasks', async () => {
-    const kr = makeKr({ id: 'kr-1', objectiveId: 'obj-1', progressCachedBp: 0, tasks: [] });
-    const obj = makeObjective({ id: 'obj-1', progressCachedBp: 0, keyResults: [kr] });
-    mockObjectiveFindMany.mockResolvedValue([obj]);
-
-    const [result] = await service.listGantt(ORG_ID, PERIOD_ID);
-
-    expect(result!.keyResults[0]!.startsAt).toBeNull();
-    expect(result!.keyResults[0]!.endsAt).toBeNull();
-    expect(result!.keyResults[0]!.tasks).toEqual([]);
-  });
-
-  // ── Case 4: Objective with no KRs → null dates ───────────────────────────
-
-  it('sets Objective startsAt/endsAt to null when it has no KRs', async () => {
-    const obj = makeObjective({ id: 'obj-1', progressCachedBp: 0, keyResults: [] });
-    mockObjectiveFindMany.mockResolvedValue([obj]);
-
-    const [result] = await service.listGantt(ORG_ID, PERIOD_ID);
-
-    expect(result!.startsAt).toBeNull();
-    expect(result!.endsAt).toBeNull();
-    expect(result!.keyResults).toEqual([]);
-  });
-
-  // ── Case 5: soft-deleted items are filtered out ──────────────────────────
-
-  it('applies deletedAt: null filter in Prisma query and the mock returns only active rows', async () => {
-    // The service delegates filtering to Prisma via where: { deletedAt: null }.
-    // Here we verify: (a) the call args contain the filter, (b) the mock returns
-    // only active rows and they are projected correctly.
-
-    const activeTask = makeTask({
-      id: 'task-active',
-      progressBp: 5000,
-      startsAt: new Date('2026-01-10T00:00:00.000Z'),
-      endsAt: new Date('2026-01-20T00:00:00.000Z'),
-    });
-    const kr = makeKr({ id: 'kr-1', objectiveId: 'obj-1', progressCachedBp: 5000, tasks: [activeTask] });
-    const obj = makeObjective({ id: 'obj-1', progressCachedBp: 5000, keyResults: [kr] });
-
-    mockObjectiveFindMany.mockResolvedValue([obj]);
-
-    await service.listGantt(ORG_ID, PERIOD_ID);
-
-    // Assert the Prisma call uses the correct where clause including deletedAt
-    expect(mockObjectiveFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          organizationId: ORG_ID,
-          periodId: PERIOD_ID,
-          deletedAt: null,
-        }),
-        include: expect.objectContaining({
-          keyResults: expect.objectContaining({
-            where: expect.objectContaining({ deletedAt: null }),
-            include: expect.objectContaining({
-              tasks: expect.objectContaining({ where: expect.objectContaining({ deletedAt: null }) }),
-            }),
-          }),
-        }),
-      }),
-    );
-
-    // And only the active task appears in the result
-    const result = await service.listGantt(ORG_ID, PERIOD_ID);
-    expect(result[0]!.keyResults[0]!.tasks).toHaveLength(1);
-    expect(result[0]!.keyResults[0]!.tasks[0]!.id).toBe('task-active');
-  });
-
-  // ── Case 6: Task status branches ────────────────────────────────────────
-
-  it('computes correct task statuses for pending / in_progress / done / overdue', async () => {
-    // Fix "now" so past/future dates are deterministic
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-02-15T12:00:00.000Z'));
-
-    const futureEnd = new Date('2026-03-31T00:00:00.000Z');
-    const pastEnd = new Date('2026-01-31T00:00:00.000Z');
-
-    const taskPending = makeTask({
-      id: 'task-pending',
-      progressBp: 0,
-      startsAt: new Date('2026-02-10T00:00:00.000Z'),
-      endsAt: futureEnd, // future
-    });
-    const taskInProgress = makeTask({
-      id: 'task-in-progress',
-      progressBp: 5000,
-      startsAt: new Date('2026-02-10T00:00:00.000Z'),
-      endsAt: futureEnd, // future
-    });
-    const taskDone = makeTask({
-      id: 'task-done',
-      progressBp: 10000,
-      startsAt: new Date('2026-01-05T00:00:00.000Z'),
-      endsAt: pastEnd, // past, but done
-    });
-    const taskOverdue = makeTask({
-      id: 'task-overdue',
-      progressBp: 3000, // < 10000
-      startsAt: new Date('2026-01-05T00:00:00.000Z'),
-      endsAt: pastEnd, // past and not done
-    });
-
-    const kr = makeKr({
-      id: 'kr-1',
-      objectiveId: 'obj-1',
-      progressCachedBp: 4000,
-      tasks: [taskPending, taskInProgress, taskDone, taskOverdue],
-    });
-    const obj = makeObjective({ id: 'obj-1', progressCachedBp: 4000, keyResults: [kr] });
-    mockObjectiveFindMany.mockResolvedValue([obj]);
-
-    const [result] = await service.listGantt(ORG_ID, PERIOD_ID);
-    const tasks = result!.keyResults[0]!.tasks;
-
-    const byId = (id: string) => tasks.find((t) => t.id === id)!;
-    expect(byId('task-pending').status).toBe('pending');
-    expect(byId('task-in-progress').status).toBe('in_progress');
-    expect(byId('task-done').status).toBe('done');
-    expect(byId('task-overdue').status).toBe('overdue');
-  });
-
-  // ── Case 7: Objective status from progressCachedBp ──────────────────────
-
-  it('derives Objective status from progressCachedBp (0 → pending, 5000 → in_progress, 10000 → done)', async () => {
-    const futureEnd = new Date('2026-03-31T00:00:00.000Z');
-    const futureStart = new Date('2026-02-01T00:00:00.000Z');
-
-    function makeSimpleObjective(id: string, progress: number) {
-      const task = makeTask({ id: `${id}-t`, progressBp: progress, startsAt: futureStart, endsAt: futureEnd });
-      const kr = makeKr({ id: `${id}-kr`, objectiveId: id, progressCachedBp: progress, tasks: [task] });
-      return makeObjective({ id, progressCachedBp: progress, keyResults: [kr] });
-    }
-
-    mockObjectiveFindMany.mockResolvedValue([
-      makeSimpleObjective('obj-pending', 0),
-      makeSimpleObjective('obj-in-progress', 5000),
-      makeSimpleObjective('obj-done', 10000),
-    ]);
-
-    const result = await service.listGantt(ORG_ID, PERIOD_ID);
-
-    expect(result.find((o) => o.id === 'obj-pending')!.status).toBe('pending');
-    expect(result.find((o) => o.id === 'obj-in-progress')!.status).toBe('in_progress');
-    expect(result.find((o) => o.id === 'obj-done')!.status).toBe('done');
-  });
-});
-
-// ─── Owner feature tests ──────────────────────────────────────────────────────
-
 describe('ObjectiveService — owner feature', () => {
   let service: ObjectiveService;
 
   beforeEach(() => {
     vi.clearAllMocks();
     service = buildService();
+    mockFindLiveOrgUnit.mockResolvedValue({ id: 'unit-1', kind: 'ministry' });
   });
 
   afterEach(() => {
@@ -443,15 +158,13 @@ describe('ObjectiveService — owner feature', () => {
 
     const createdRow = makeObjective({
       id: 'obj-new',
-      progressCachedBp: 0,
-      keyResults: [],
       ownerUserId: OWNER_ID,
       owner: { id: OWNER_ID, displayName: 'Jane', email: 'jane@example.com' },
       period: basePeriod,
     });
     mockObjectiveCreate.mockResolvedValue(createdRow);
 
-    const result = await service.create(ORG_ID, { title: 'Test', ownerUserId: OWNER_ID }, authCtx);
+    const result = await service.create(ORG_ID, { title: 'Test', ownerUserId: OWNER_ID, orgUnitId: 'unit-1' }, authCtx);
 
     expect(mockIsMemberOf).toHaveBeenCalledWith(ORG_ID, OWNER_ID);
     expect(mockObjectiveCreate).toHaveBeenCalledWith(
@@ -469,11 +182,11 @@ describe('ObjectiveService — owner feature', () => {
     mockIsMemberOf.mockResolvedValue(false);
 
     await expect(
-      service.create(ORG_ID, { title: 'Test', ownerUserId: 'non-member-id' }, authCtx),
+      service.create(ORG_ID, { title: 'Test', ownerUserId: 'non-member-id', orgUnitId: 'unit-1' }, authCtx),
     ).rejects.toThrow(UnprocessableEntityException);
 
     await expect(
-      service.create(ORG_ID, { title: 'Test', ownerUserId: 'non-member-id' }, authCtx),
+      service.create(ORG_ID, { title: 'Test', ownerUserId: 'non-member-id', orgUnitId: 'unit-1' }, authCtx),
     ).rejects.toThrow(/OwnerNotMember:/);
   });
 
@@ -485,15 +198,13 @@ describe('ObjectiveService — owner feature', () => {
 
     const createdRow = makeObjective({
       id: 'obj-new',
-      progressCachedBp: 0,
-      keyResults: [],
       ownerUserId: USER_ID,
       owner: { id: USER_ID, displayName: 'Requesting', email: 'req@example.com' },
       period: basePeriod,
     });
     mockObjectiveCreate.mockResolvedValue(createdRow);
 
-    await service.create(ORG_ID, { title: 'Test' }, authCtx);
+    await service.create(ORG_ID, { title: 'Test', orgUnitId: 'unit-1' }, authCtx);
 
     expect(mockIsMemberOf).toHaveBeenCalledWith(ORG_ID, USER_ID);
     expect(mockObjectiveCreate).toHaveBeenCalledWith(
@@ -508,8 +219,6 @@ describe('ObjectiveService — owner feature', () => {
   it('update: emits objective.owner_assigned when owner changes from null to a userId', async () => {
     const existing = makeObjective({
       id: 'obj-1',
-      progressCachedBp: 0,
-      keyResults: [],
       ownerUserId: null,
       owner: null,
       period: basePeriod,
@@ -536,8 +245,6 @@ describe('ObjectiveService — owner feature', () => {
   it('update: emits objective.owner_changed when owner changes from one user to another', async () => {
     const existing = makeObjective({
       id: 'obj-1',
-      progressCachedBp: 0,
-      keyResults: [],
       ownerUserId: 'user-a',
       owner: { id: 'user-a', displayName: 'Alice', email: 'alice@example.com' },
       period: basePeriod,
@@ -564,8 +271,6 @@ describe('ObjectiveService — owner feature', () => {
   it('update: emits objective.owner_unassigned when owner changes from a userId to null', async () => {
     const existing = makeObjective({
       id: 'obj-1',
-      progressCachedBp: 0,
-      keyResults: [],
       ownerUserId: OWNER_ID,
       owner: { id: OWNER_ID, displayName: 'Jane', email: 'jane@example.com' },
       period: basePeriod,
@@ -591,8 +296,6 @@ describe('ObjectiveService — owner feature', () => {
   it('update: does NOT emit an owner event when ownerUserId does not change', async () => {
     const existing = makeObjective({
       id: 'obj-1',
-      progressCachedBp: 0,
-      keyResults: [],
       ownerUserId: OWNER_ID,
       owner: { id: OWNER_ID, displayName: 'Jane', email: 'jane@example.com' },
       period: basePeriod,
@@ -617,8 +320,6 @@ describe('ObjectiveService — owner feature', () => {
   it('update: throws UnprocessableEntityException when new ownerUserId is not a member', async () => {
     const existing = makeObjective({
       id: 'obj-1',
-      progressCachedBp: 0,
-      keyResults: [],
       ownerUserId: null,
       owner: null,
       period: basePeriod,
@@ -640,8 +341,6 @@ describe('ObjectiveService — owner feature', () => {
   it('update: throws when attempting to update owner on a closed-period objective', async () => {
     const existing = makeObjective({
       id: 'obj-closed',
-      progressCachedBp: 0,
-      keyResults: [],
       ownerUserId: null,
       owner: null,
       period: closedPeriod,
@@ -662,8 +361,6 @@ describe('ObjectiveService — owner feature', () => {
   it('update: owner-specific event is emitted before objective.updated when both title and owner change', async () => {
     const existing = makeObjective({
       id: 'obj-1',
-      progressCachedBp: 0,
-      keyResults: [],
       ownerUserId: null,
       owner: null,
       period: basePeriod,
@@ -701,11 +398,11 @@ describe('ObjectiveService — owner feature', () => {
     const superadminCtx = { ...authCtx, isSuperadmin: true };
 
     await expect(
-      service.create(ORG_ID, { title: 'Test', ownerUserId: 'superadmin-id' }, superadminCtx),
+      service.create(ORG_ID, { title: 'Test', ownerUserId: 'superadmin-id', orgUnitId: 'unit-1' }, superadminCtx),
     ).rejects.toThrow(UnprocessableEntityException);
 
     await expect(
-      service.create(ORG_ID, { title: 'Test', ownerUserId: 'superadmin-id' }, superadminCtx),
+      service.create(ORG_ID, { title: 'Test', ownerUserId: 'superadmin-id', orgUnitId: 'unit-1' }, superadminCtx),
     ).rejects.toThrow(/OwnerNotMember:/);
   });
 });
@@ -725,10 +422,8 @@ describe('ObjectiveService — unidad y eje', () => {
     mockObjectiveCreate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) =>
       makeObjective({
         id: 'obj-new',
-        progressCachedBp: 0,
-        keyResults: [],
         ownerUserId: USER_ID,
-        orgUnitId: data['orgUnitId'] as string | null,
+        orgUnitId: data['orgUnitId'] as string,
         axisId: data['axisId'] as string | null,
         period: basePeriod,
       }),
@@ -753,15 +448,6 @@ describe('ObjectiveService — unidad y eje', () => {
         }),
       }),
     );
-  });
-
-  it('create: sin unidad ni eje no consulta los puertos (unidad nullable hasta la fase migrate)', async () => {
-    const result = await service.create(ORG_ID, { title: 'T' }, authCtx);
-
-    expect(mockFindLiveOrgUnit).not.toHaveBeenCalled();
-    expect(mockIsAxisInActivePlan).not.toHaveBeenCalled();
-    expect(result.orgUnitId).toBeNull();
-    expect(result.axisId).toBeNull();
   });
 
   it('create: unidad inexistente o de otra org (el puerto devuelve null) -> 422 OrgUnitNotFound', async () => {
@@ -791,7 +477,7 @@ describe('ObjectiveService — unidad y eje', () => {
   it('create: eje fuera del plan activo -> 422 AxisNotInActivePlan', async () => {
     mockIsAxisInActivePlan.mockResolvedValue(false);
 
-    await expect(service.create(ORG_ID, { title: 'T', axisId: 'axis-viejo' }, authCtx)).rejects.toThrow(
+    await expect(service.create(ORG_ID, { title: 'T', orgUnitId: 'unit-1', axisId: 'axis-viejo' }, authCtx)).rejects.toThrow(
       /AxisNotInActivePlan:/,
     );
     expect(mockObjectiveCreate).not.toHaveBeenCalled();
@@ -800,8 +486,6 @@ describe('ObjectiveService — unidad y eje', () => {
   it('update: cambia unidad y eje, valida y audita before/after', async () => {
     const existing = makeObjective({
       id: 'obj-1',
-      progressCachedBp: 0,
-      keyResults: [],
       orgUnitId: 'unit-0',
       axisId: null,
       period: basePeriod,
@@ -830,8 +514,6 @@ describe('ObjectiveService — unidad y eje', () => {
   it('update: axisId null quita el eje sin consultar el puerto', async () => {
     const existing = makeObjective({
       id: 'obj-1',
-      progressCachedBp: 0,
-      keyResults: [],
       axisId: 'axis-1',
       period: basePeriod,
     });
@@ -853,8 +535,6 @@ describe('ObjectiveService — unidad y eje', () => {
   it('update: reenviar el mismo eje no revalida ni audita (un eje de un plan reemplazado no bloquea otras ediciones)', async () => {
     const existing = makeObjective({
       id: 'obj-1',
-      progressCachedBp: 0,
-      keyResults: [],
       orgUnitId: 'unit-1',
       axisId: 'axis-1',
       period: basePeriod,
@@ -872,7 +552,7 @@ describe('ObjectiveService — unidad y eje', () => {
 
   it('update: unidad central -> 422 y no escribe', async () => {
     mockObjectiveFindFirst.mockResolvedValue(
-      makeObjective({ id: 'obj-1', progressCachedBp: 0, keyResults: [], period: basePeriod }),
+      makeObjective({ id: 'obj-1', period: basePeriod }),
     );
     mockFindLiveOrgUnit.mockResolvedValue({ id: 'root', kind: 'central' });
 
@@ -884,7 +564,7 @@ describe('ObjectiveService — unidad y eje', () => {
 
   it('update: eje fuera del plan activo -> 422 y no escribe', async () => {
     mockObjectiveFindFirst.mockResolvedValue(
-      makeObjective({ id: 'obj-1', progressCachedBp: 0, keyResults: [], period: basePeriod }),
+      makeObjective({ id: 'obj-1', period: basePeriod }),
     );
     mockIsAxisInActivePlan.mockResolvedValue(false);
 

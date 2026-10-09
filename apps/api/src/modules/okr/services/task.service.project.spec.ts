@@ -93,8 +93,8 @@ beforeEach(() => {
   scoped.task.findFirst.mockImplementation(async ({ where }: { where: { id: string } }) => {
     const row = db.task.rows.find((r) => r['id'] === where.id && r['deletedAt'] === null);
     if (!row) return null;
-    const project = row['projectId'] ? db.project.rows.find((p) => p['id'] === row['projectId']) : null;
-    return { ...row, keyResult: null, project: project ? { ...project, objective: { period: PERIOD } } : null };
+    const project = db.project.rows.find((p) => p['id'] === row['projectId']);
+    return { ...row, project: project ? { ...project, objective: { period: PERIOD } } : null };
   });
 });
 
@@ -103,7 +103,6 @@ describe('TaskService.createInProject', () => {
     const result = await build().createInProject('p1', ORG, taskDto, authCtx);
 
     expect(result.projectId).toBe('p1');
-    expect(result.keyResultId).toBeNull();
     expect(result.weightBp).toBeNull();
     expect(audit.emit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'task.created', diff: expect.objectContaining({ after: expect.objectContaining({ projectId: 'p1' }) }) }),
