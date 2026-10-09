@@ -288,3 +288,72 @@ describe('curva from_projects y aportes (RN-P12, RN-P17)', () => {
     expect(status.contributions).toEqual({ count: 0, total: '0', projectedValue: '0', coversTarget: false });
   });
 });
+
+describe('getObjectivesStatusSummaries (lote, sin N+1)', () => {
+  const reading = (id: string, extra: Row = {}) => ({
+    id,
+    title: id,
+    orgUnitId: null,
+    axisId: null,
+    resultProgressBp: 3000,
+    executionProgressBp: 4000,
+    plannedExecutionProgressBp: 5000,
+    ...extra,
+  });
+
+  it('da, por objetivo, lo mismo que getObjectiveStatus (sin el detalle por indicador)', async () => {
+    indicators.push(
+      indicator('oi-1', 'm-1'),
+      indicator('oi-2', 'm-2', { objectiveId: 'obj-2', expectedCurveMode: 'linear' }),
+    );
+    entries.push(entry('m-1', '2027-06-01', '30'));
+    const svc = build();
+
+    const single1 = await svc.getObjectiveStatus('obj-1', ORG, NOW);
+    reader.readObjectiveProgress.mockResolvedValue({ resultProgressBp: 100, executionProgressBp: 200, plannedExecutionProgressBp: 200 });
+    lookup.findLiveObjective.mockResolvedValue({ id: 'obj-2' });
+    const single2 = await svc.getObjectiveStatus('obj-2', ORG, NOW);
+
+    const batch = await svc.getObjectivesStatusSummaries(
+      ORG,
+      [reading('obj-1'), reading('obj-2', { resultProgressBp: 100, executionProgressBp: 200, plannedExecutionProgressBp: 200 })],
+      NOW,
+    );
+
+    for (const [id, single] of [['obj-1', single1], ['obj-2', single2]] as const) {
+      const { indicators: _i, ...result } = single.result;
+      void _i;
+      expect(batch.get(id)).toEqual({ result, execution: single.execution });
+    }
+    expect(batch.get('obj-1')?.result.deviationBp).toBe(-2000);
+    expect(batch.get('obj-2')?.result.deviationBp).toBeNull();
+  });
+
+  it('la cantidad de queries no depende de la cantidad de objetivos', async () => {
+    const run = async (n: number) => {
+      indicators = [];
+      metrics = [];
+      entries = [];
+      points = [];
+      const readings = [];
+      for (let i = 0; i < n; i++) {
+        metrics.push(metric(`m-${i}`));
+        indicators.push(indicator(`oi-${i}`, `m-${i}`, { objectiveId: `obj-${i}`, expectedCurveMode: 'linear' }));
+        entries.push(entry(`m-${i}`, '2027-06-01', '10'));
+        readings.push(reading(`obj-${i}`));
+      }
+      vi.clearAllMocks();
+      await build().getObjectivesStatusSummaries(ORG, readings, NOW);
+      return Object.values(scoped).reduce((acc, t) => acc + t.findMany.mock.calls.length, 0);
+    };
+    const few = await run(2);
+    const many = await run(40);
+    expect(many).toBe(few);
+  });
+
+  it('sin lecturas no consulta nada', async () => {
+    const out = await build().getObjectivesStatusSummaries(ORG, [], NOW);
+    expect(out.size).toBe(0);
+    expect(scoped.objectiveIndicator.findMany).not.toHaveBeenCalled();
+  });
+});

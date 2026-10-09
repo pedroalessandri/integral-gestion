@@ -27,3 +27,16 @@ export type { ScheduledProjectInput } from './planned';
 export { validateWeightSumInvariant, projectSumAfterDelete, weightMode } from './invariants';
 export { computeTaskStatus, computeProgressStatus } from './status';
 export type { TaskStatus, ProgressStatus } from './status';
+export {
+  aggregateObjectiveReadings,
+  aggregateObjectiveReadingsBy,
+  buildUnitAggregates,
+  unitSubtreeIds,
+} from './planning-tree';
+export type {
+  ObjectiveReadingInput,
+  ReadingAggregate,
+  OrgUnitTreeInput,
+  UnitAggregateNode,
+  UnitAggregates,
+} from './planning-tree';

@@ -4,6 +4,8 @@ import type {
   IndicatorContributionsSummaryDto,
   IndicatorStatusDto,
   MetricFrequency,
+  ObjectiveExecutionStatusDto,
+  ObjectiveResultStatusDto,
   ObjectiveStatusDto,
 } from '@gestion-publica/shared-types/metrics';
 import {
@@ -26,12 +28,31 @@ import {
   OBJECTIVE_PROGRESS_READER,
   PROJECT_LINK_READER,
   type ObjectiveLookup,
+  type ObjectiveProgressBatchItem,
   type ObjectiveProgressReader,
+  type ObjectiveProgressReading,
   type ProjectLinkReader,
 } from '../../../common/contracts/index.js';
 import { toCurvePoints, toDateOnly } from './target-points.js';
 
+/** Estado de las dos lecturas de un objetivo sin el detalle por indicador (vista de tablero). */
+export interface PlanningObjectiveStatus {
+  result: Omit<ObjectiveResultStatusDto, 'indicators'>;
+  execution: ObjectiveExecutionStatusDto;
+}
+
 type Decimalish = { toString(): string };
+
+function groupBy<T>(items: ReadonlyArray<T>, keyOf: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const key = keyOf(item);
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  return groups;
+}
 
 interface IndicatorForStatus {
   id: string;
@@ -97,6 +118,60 @@ export class IndicatorStatusService {
     })) as IndicatorForStatus[];
     const statuses = await this.buildStatuses(indicators, orgId, now);
 
+    return this.composeObjectiveStatus(objectiveId, reading, indicators, statuses, now);
+  }
+
+  /**
+   * Estado de las dos lecturas de VARIOS objetivos a la vez (tableros, árbol de planificación). Mismo cálculo que
+   * `getObjectiveStatus` por objetivo, pero con las queries en lote: una para los indicadores de todos los
+   * objetivos y las de `buildStatuses` una sola vez, sin importar cuántos objetivos haya (sin N+1).
+   * Devuelve el estado sin el detalle por indicador (`result.indicators`), que solo usa la ficha.
+   */
+  async getObjectivesStatusSummaries(
+    orgId: string,
+    readings: ReadonlyArray<ObjectiveProgressBatchItem>,
+    now: Date = new Date(),
+  ): Promise<Map<string, PlanningObjectiveStatus>> {
+    const result = new Map<string, PlanningObjectiveStatus>();
+    if (readings.length === 0) return result;
+
+    const indicators = (await this.prisma.scoped.objectiveIndicator.findMany({
+      where: { objectiveId: { in: readings.map((r) => r.id) }, organizationId: orgId, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    })) as IndicatorForStatus[];
+    const statuses = await this.buildStatuses(indicators, orgId, now);
+
+    const indicatorsByObjective = new Map<string, IndicatorForStatus[]>();
+    const statusesByObjective = new Map<string, IndicatorStatusDto[]>();
+    indicators.forEach((indicator, i) => {
+      const status = statuses[i] as IndicatorStatusDto;
+      indicatorsByObjective.set(indicator.objectiveId, [...(indicatorsByObjective.get(indicator.objectiveId) ?? []), indicator]);
+      statusesByObjective.set(indicator.objectiveId, [...(statusesByObjective.get(indicator.objectiveId) ?? []), status]);
+    });
+
+    for (const reading of readings) {
+      const full = this.composeObjectiveStatus(
+        reading.id,
+        reading,
+        indicatorsByObjective.get(reading.id) ?? [],
+        statusesByObjective.get(reading.id) ?? [],
+        now,
+      );
+      const { indicators: _detail, ...resultSummary } = full.result;
+      void _detail;
+      result.set(reading.id, { result: resultSummary, execution: full.execution });
+    }
+    return result;
+  }
+
+  /** Arma el estado del objetivo desde sus lecturas y los estados de sus indicadores (mismo orden que `indicators`). */
+  private composeObjectiveStatus(
+    objectiveId: string,
+    reading: ObjectiveProgressReading,
+    indicators: ReadonlyArray<IndicatorForStatus>,
+    statuses: ReadonlyArray<IndicatorStatusDto>,
+    now: Date,
+  ): ObjectiveStatusDto {
     const resultDeviation = aggregateDeviationBp(
       statuses.map((s, i) => ({
         weightBp: (indicators[i] as IndicatorForStatus).weightBp,
@@ -113,7 +188,7 @@ export class IndicatorStatusService {
         deviationBp: resultDeviation,
         semaphore: resultDeviation === null ? null : semaphore(resultDeviation),
         pendingBucketsCount: statuses.reduce((acc, s) => acc + s.pendingBuckets.length, 0),
-        indicators: statuses,
+        indicators: [...statuses],
       },
       execution: {
         progressBp: reading.executionProgressBp,
@@ -171,6 +246,10 @@ export class IndicatorStatusService {
     ]);
     const projectsById = new Map(liveProjects.map((p) => [p.id, p]));
 
+    const entriesByMetric = groupBy(entries, (e) => e.metricId);
+    const pointsByIndicator = groupBy(points, (p) => p.objectiveIndicatorId);
+    const contributionsByIndicator = groupBy(contributions, (c) => c.objectiveIndicatorId);
+
     const today = toUTCMidnight(now);
     return indicators.map((indicator) => {
       const metric = metricsById.get(indicator.metricId);
@@ -183,10 +262,10 @@ export class IndicatorStatusService {
         indicator,
         metric,
         range,
-        entries.filter((e) => e.metricId === metric.id),
-        toCurvePoints(points.filter((p) => p.objectiveIndicatorId === indicator.id)),
-        contributions
-          .filter((c) => c.objectiveIndicatorId === indicator.id && projectsById.has(c.projectId))
+        entriesByMetric.get(metric.id) ?? [],
+        toCurvePoints(pointsByIndicator.get(indicator.id) ?? []),
+        (contributionsByIndicator.get(indicator.id) ?? [])
+          .filter((c) => projectsById.has(c.projectId))
           .map((c) => ({
             endsAt: (projectsById.get(c.projectId) as { endsAt: Date }).endsAt,
             contributionValue: c.contributionValue.toString(),

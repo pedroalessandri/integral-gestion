@@ -1,5 +1,11 @@
 import { Global, Injectable, Module } from '@nestjs/common';
-import { ACTIVE_AXIS_LOOKUP, type ActiveAxisLookup } from '../../common/contracts/index.js';
+import {
+  ACTIVE_AXIS_LOOKUP,
+  AXIS_TREE_READER,
+  type ActiveAxisLookup,
+  type ActivePlanStructure,
+  type AxisTreeReader,
+} from '../../common/contracts/index.js';
 import { PrismaService } from '../auth/prisma/prisma.service.js';
 
 /**
@@ -23,10 +29,32 @@ export class PrismaActiveAxisLookup implements ActiveAxisLookup {
   }
 }
 
+/** Implementación de `AXIS_TREE_READER`: plan activo con sus ejes vivos (2 queries). */
+@Injectable()
+export class PrismaAxisTreeReader implements AxisTreeReader {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findActivePlanStructure(organizationId: string): Promise<ActivePlanStructure | null> {
+    const plan = await this.prisma.raw.strategicPlan.findFirst({
+      where: { organizationId, status: 'active' },
+      select: { id: true, title: true },
+    });
+    if (!plan) return null;
+    const axes = await this.prisma.raw.axis.findMany({
+      where: { organizationId, strategicPlanId: plan.id, deletedAt: null },
+      select: { id: true, name: true, order: true },
+    });
+    return { id: plan.id, title: plan.title, axes };
+  }
+}
+
 /** Submódulo @Global de contratos de `planning`: solo lo importa AppModule. */
 @Global()
 @Module({
-  providers: [{ provide: ACTIVE_AXIS_LOOKUP, useClass: PrismaActiveAxisLookup }],
-  exports: [ACTIVE_AXIS_LOOKUP],
+  providers: [
+    { provide: ACTIVE_AXIS_LOOKUP, useClass: PrismaActiveAxisLookup },
+    { provide: AXIS_TREE_READER, useClass: PrismaAxisTreeReader },
+  ],
+  exports: [ACTIVE_AXIS_LOOKUP, AXIS_TREE_READER],
 })
 export class PlanningContractsModule {}

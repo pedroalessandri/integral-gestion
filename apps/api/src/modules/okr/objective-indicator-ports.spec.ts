@@ -75,4 +75,42 @@ describe('PrismaObjectiveProgressReader', () => {
     expect(await reader.readObjectiveProgress(ORG, 'nope', at)).toBeNull();
     expect(project.findMany).not.toHaveBeenCalled();
   });
+
+  it('lote de un período: una query de objetivos (con proyectos y tareas), por organización y período, mismo planificado', async () => {
+    const objective = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: 'o1',
+          title: 'Uno',
+          orgUnitId: 'u1',
+          axisId: null,
+          resultProgressCachedBp: 3000,
+          executionProgressCachedBp: 4000,
+          projects: [{ weightBp: null, tasks: [task] }, { weightBp: null, tasks: [] }],
+        },
+        {
+          id: 'o2',
+          title: 'Dos',
+          orgUnitId: null,
+          axisId: 'ax',
+          resultProgressCachedBp: 0,
+          executionProgressCachedBp: 0,
+          projects: [],
+        },
+      ]),
+    };
+    const project = { findMany: vi.fn() };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const reader = new PrismaObjectiveProgressReader({ raw: { objective, project } } as any);
+
+    expect(await reader.readPeriodObjectivesProgress(ORG, 'p-1', at)).toEqual([
+      { id: 'o1', title: 'Uno', orgUnitId: 'u1', axisId: null, resultProgressBp: 3000, executionProgressBp: 4000, plannedExecutionProgressBp: 2500 },
+      { id: 'o2', title: 'Dos', orgUnitId: null, axisId: 'ax', resultProgressBp: 0, executionProgressBp: 0, plannedExecutionProgressBp: 0 },
+    ]);
+    expect(objective.findMany).toHaveBeenCalledTimes(1);
+    expect(objective.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: ORG, periodId: 'p-1', deletedAt: null } }),
+    );
+    expect(project.findMany).not.toHaveBeenCalled();
+  });
 });

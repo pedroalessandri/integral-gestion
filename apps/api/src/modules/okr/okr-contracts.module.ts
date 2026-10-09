@@ -9,6 +9,7 @@ import {
   type ObjectiveAxisCounter,
   type ObjectiveAxisUnassigner,
   type ObjectiveLookup,
+  type ObjectiveProgressBatchItem,
   type ObjectiveProgressReader,
   type ObjectiveProgressReading,
   type ObjectiveOrgUnitCounter,
@@ -174,6 +175,49 @@ export class PrismaObjectiveProgressReader implements ObjectiveProgressReader {
       executionProgressBp: objective.executionProgressCachedBp,
       plannedExecutionProgressBp: plannedExecutionProgress(projects, at),
     };
+  }
+
+  /**
+   * Lote de un período: 3 queries (objetivos, proyectos con sus tareas) sin importar cuántos objetivos haya.
+   * El planificado usa la misma función pura que `readObjectiveProgress`.
+   */
+  async readPeriodObjectivesProgress(
+    organizationId: string,
+    periodId: string,
+    at: Date,
+  ): Promise<ObjectiveProgressBatchItem[]> {
+    const objectives = await this.prisma.raw.objective.findMany({
+      where: { organizationId, periodId, deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        orgUnitId: true,
+        axisId: true,
+        resultProgressCachedBp: true,
+        executionProgressCachedBp: true,
+        projects: {
+          where: { organizationId, deletedAt: null },
+          select: {
+            weightBp: true,
+            tasks: {
+              where: { organizationId, deletedAt: null },
+              select: { startsAt: true, endsAt: true, weightBp: true },
+            },
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    return objectives.map((o) => ({
+      id: o.id,
+      title: o.title,
+      orgUnitId: o.orgUnitId,
+      axisId: o.axisId,
+      resultProgressBp: o.resultProgressCachedBp,
+      executionProgressBp: o.executionProgressCachedBp,
+      plannedExecutionProgressBp: plannedExecutionProgress(o.projects, at),
+    }));
   }
 }
 

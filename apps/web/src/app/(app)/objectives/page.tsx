@@ -12,6 +12,7 @@ import { ClosePeriodButton } from '@/components/periods/close-period-button';
 import { PeriodSelector } from '@/components/periods/period-selector';
 import { listPeriodsAction, getAiStatusAction, type PeriodItem } from '@/components/objectives/actions';
 import Link from 'next/link';
+import { getPlanningTreeAction, indexObjectiveReadings, ObjectiveStatusCell } from '@/features/planning-tree';
 import type { OwnerSummaryDto } from '@gestion-publica/shared-types/okr';
 
 interface ObjectiveItem {
@@ -96,6 +97,11 @@ export default async function ObjectivesPage({
     getAiStatusAction(orgId),
   ]);
 
+  // Semáforos y cargas pendientes de todos los objetivos del período en un solo request (sin N+1). Si falla, la
+  // lista se muestra igual sin esa columna poblada.
+  const treeResult = targetPeriodId ? await getPlanningTreeAction(orgId, { periodId: targetPeriodId }) : null;
+  const readingsByObjective = treeResult?.ok ? indexObjectiveReadings(treeResult.data) : null;
+
   let objectives: ObjectiveItem[] = [];
   let error: string | null = null;
   let isSuperadmin = false;
@@ -117,7 +123,7 @@ export default async function ObjectivesPage({
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-6xl">
       {/* Page header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-1">
@@ -232,6 +238,12 @@ export default async function ObjectivesPage({
                   Progreso
                 </TableHead>
                 <TableHead
+                  className="w-48 text-xs uppercase tracking-wider font-medium"
+                  style={{ color: 'var(--color-neutral-500)' }}
+                >
+                  Estado
+                </TableHead>
+                <TableHead
                   className="w-32 text-xs uppercase tracking-wider font-medium"
                   style={{ color: 'var(--color-neutral-500)' }}
                 >
@@ -248,7 +260,7 @@ export default async function ObjectivesPage({
             <TableBody>
               {objectives.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="p-0">
+                  <TableCell colSpan={6} className="p-0">
                     <EmptyState
                       icon={Target}
                       title="Sin objetivos este período"
@@ -282,6 +294,9 @@ export default async function ObjectivesPage({
                       </TableCell>
                       <TableCell>
                         <ProgressBar valueBp={obj.progressCachedBp} />
+                      </TableCell>
+                      <TableCell>
+                        {readingsByObjective && <ObjectiveStatusCell readings={readingsByObjective.get(obj.id)} />}
                       </TableCell>
                       <TableCell className="text-sm" style={{ color: 'var(--color-neutral-500)' }}>
                         {new Date(obj.createdAt).toLocaleDateString('es-AR')}

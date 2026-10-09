@@ -15,6 +15,20 @@ Formato:
 
 ---
 
+## 2026-10-09 · C21 · backend-dev + frontend-dev · feature/plan-f9-tableros
+- Hecho:
+  - **Endpoint agregado** `GET okr/planning-tree?periodId=&axisId=&orgUnitId=` (`TenantGuard` + `okr:read`; lecturas abiertas a toda la org, RN-P20). Vive en `metrics` junto al estado del objetivo; unidades y ejes por puertos nuevos `ORG_UNIT_TREE_READER` (core) y `AXIS_TREE_READER` (planning), y el progreso de los objetivos por lote en `OBJECTIVE_PROGRESS_READER`. Devuelve `objectives[]` (las dos lecturas con desvío, semáforo y cargas pendientes, iguales a `GET objectives/:id/status`) y nodos agregados para plan, ejes (con desglose por unidad), árbol de unidades (`aggregate` del subárbol + `directAggregate`), "Sin eje" y "Sin unidad". Agregación pura en `okr-domain/planning-tree.ts` (RN-P10: promedio simple de los objetivos, por lectura, nunca combinadas; `null` = sin datos). `IndicatorStatusService` pasa a calcular por lote (`getObjectivesStatusSummaries`) sin cambiar los endpoints existentes; queries fijas (~13), no crecen con los objetivos (unit test con 2 y 40).
+  - **Front**: pantalla `/planning` (árbol por Ejes o por Unidades con toggle, dos barras por nodo, semáforo, desvío y cargas pendientes, nodos colapsables, objetivos linkeados; filtros período/eje/unidad en la URL, un request por cambio). Tablero por eje en `/plan` (SPEC 5.2) y columna "Estado" en `/objectives` (semáforos y carga pendiente, cierra el ítem de TODO con un solo request). Etiquetas en `lib/labels.ts`; entrada en la nav.
+  - **Fix aparte** (`fix(api)`): el throttler `ai` limitaba **todas** las rutas de la API a 10 req/min por usuario (`@nestjs/throttler` v6 aplica todos los throttlers de `forRoot` a todas las rutas). Ahora `ai` no limita por defecto y los 10/min los pone `@Throttle({ ai })` en `AiController`. Test que falla con la config vieja y pasa con la nueva.
+- Commit: este commit (`feat(okr): árbol de planificación y tableros por eje y unidad`) + el fix del throttler.
+- Verificación: `turbo run typecheck --force` 7/7; `turbo run lint --force` 0 errores (warnings preexistentes); `turbo run test --force` 12/12 (api 525, okr-domain 120, web 110); `pnpm --filter web build` OK (`/planning`). E2E `planning-tree.e2e-spec.ts` 3/3 en DB descartable `gp_c21` (ya borrada), corrido por el subagente: 3 unidades (una vacía), 1 eje, objetivos con y sin cargas y sin eje; igualdad con `GET objectives/:id/status`; filtros; 400 sin `periodId`; aislamiento entre orgs y default deny. No se probó la pantalla contra la API levantada.
+- Pendiente / desvíos: el ítem 4 (semáforos en `/objectives`) entró en la corrida. El endpoint no lleva `ModuleEnabledGuard` (como el resto de indicadores; ítem C20 #3 en TODO.md).
+- Preguntas abiertas:
+  - La unidad agrega su **subárbol** (`aggregate`) y además expone solo los directos (`directAggregate`); la UI muestra el subárbol. ¿Está bien?
+  - Desvío y semáforo agregados: media simple por lectura con `aggregateDeviationBp`, sin contar objetivos sin cargas en resultado, umbrales 10/25. La SPEC no los define.
+  - `periodId` obligatorio en el endpoint (la UI usa el período abierto por defecto). ¿O default al abierto en la API?
+  - Los nodos "Sin eje" y "Sin unidad" se ocultan cuando tienen 0 objetivos.
+
 ## 2026-10-08 · C20b · backend-dev · feature/plan-f8-alcance
 - Hecho (crítico #1 y alto #2 de C20; Pedro aprobó hacerlo en esta rama y que el front mande el header de org):
   - **`PeriodController`**: `TenantGuard` + `PermissionsGuard` en la clase y `OrgParamGuard` en `orgs/:orgId/periods`. Lecturas (`GET orgs/:orgId/periods`, `GET periods/:id`): solo membresía (el selector de período lo usan todos los roles). Mutaciones (crear, open, close, delete): `core:period:manage` + alcance central (`ORG_UNIT_SCOPE.assertCentralScope`). `PeriodService.findOwnedPeriod` resuelve con `{ id, organizationId, deletedAt: null }` → 404 si es de otra org; sin org en el contexto, 403 sin consultar. El cierre automático (cron) sigue filtrando por la org del período.

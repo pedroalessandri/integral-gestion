@@ -8,3 +8,4 @@ export * from './rebalance.dto.js';
 export * from './list-objectives.query.js';
 export * from './project.dto.js';
 export * from './project-events.js';
+export * from './planning-tree.dto.js';
