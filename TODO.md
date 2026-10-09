@@ -23,12 +23,6 @@
 - Posible solución: un job (cron del módulo `metrics`) o un endpoint admin que recorra los `ProjectContribution` cuyo estado (`appliedEntryId`) no coincide con el avance del proyecto (100 % sin aplicar / aplicado y no al 100 %) y llame a `reconcileProject`.
 - Origen: C17 (2026-10-08).
 
-### [F] Semáforos y "carga pendiente" en el listado de objetivos (`GET okr/objectives`)
-- Por qué: C16 muestra el semáforo de cada lectura y el badge "carga pendiente" en la ficha del objetivo y en la tarjeta del indicador, pero el listado `/objectives` no los tiene: `ObjectiveSummaryDto` no trae `pendingBucketsCount` ni el estado, y pedir `GET okr/objectives/:id/status` por fila sería un N+1 de requests por render.
-- Posible solución (contrato faltante, backend): sumar a los ítems de `GET okr/objectives` un `status` con `{ result: { semaphore, deviationBp, pendingBucketsCount }, execution: { semaphore, deviationBp } }`, o un `GET okr/objectives/status?periodId=` en bloque. Después, en web, usar `SemaphoreBadge` y `PendingLoadBadge` (ya existen en `components/`) en la fila.
-- Origen: C16 (2026-10-08).
-- Actualización (C21): el listado `/objectives` ya muestra semáforo de cada lectura y el badge "carga pendiente" usando `objectives[]` de `GET okr/planning-tree?periodId=` (un solo request por render, sin N+1). Sin contrato nuevo en backend.
-
 ### [F] Umbrales del semáforo configurables por organización
 - Por qué: RN-P9 fija 10 y 25 puntos por defecto y dice que serán configurables por org en una fase posterior. Hoy son la constante `DEFAULT_SEMAPHORE_THRESHOLDS` de `deviation-domain`.
 - Posible solución: columnas o tabla de settings por org y pasar `SemaphoreThresholds` a `semaphore()` desde `IndicatorStatusService`.
@@ -97,12 +91,6 @@
 - Posible solución: `ModuleEnabledGuard` en esos controllers o exigir `metrics:write` con `metric` inline.
 - Origen: C20 (2026-10-08).
 
-### [B] El throttler nombrado `ai` (10 req/min) parece aplicar a todas las rutas, no solo a las de IA
-- Por qué: `ThrottlerModule.forRoot` define `default` (100/min) y `ai` (10/min); en `@nestjs/throttler` v6 todos los throttlers aplican a cada ruta salvo `@SkipThrottle({ ai: true })`. En el e2e de C21, el 11º request en un minuto a `GET okr/planning-tree` desde la misma IP dio 429 (la clave incluye ruta + tracker). Si se confirma en runtime, el front (filtros del árbol, refrescos) se topa con 10 requests/min por ruta y usuario.
-- Posible solución: `skipIf` / `@SkipThrottle({ ai: true })` por defecto y dejar `ai` solo en `AiController`, o mover `ai` a un `ThrottlerModule` propio del módulo de IA.
-- Origen: C21 (2026-10-09).
-- Actualización (C21, 2026-10-09): confirmado y corregido en `feature/plan-f9-tableros` (`config/throttler.config.ts`: `ai` sin límite por defecto; el `@Throttle({ ai })` de `AiController` pone los 10/min; test con 15 requests a una ruta común y 429 en la 11.ª de IA). Mover a Completados al mergear.
-
 ### [B] Borrar un objetivo deja vivos proyectos, indicadores y aportes (C20 #4, media)
 - Por qué: `ObjectiveService.softDelete` solo cuenta KRs. Los proyectos huérfanos pueden seguir disparando cargas automáticas (sospecha) y la métrica deja de contar ese objetivo en `assertCanWriteMetric`. Amplía el ítem "Borrar un objetivo no da de baja sus ObjectiveIndicator".
 - Posible solución: 409 si hay hijos vivos, o cascada con audit y compensación; `findLiveProject` y el applier verifican el objetivo vivo.
@@ -165,6 +153,8 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [B] El throttler `ai` limitaba todas las rutas de la API a 10 req/min (C21) — mergeado el 9 octubre 2026
+- [F] Semáforos y "carga pendiente" en el listado de objetivos, vía `GET okr/planning-tree` (C21) — mergeado el 9 octubre 2026
 - [B] Guards y tenant scoping en `PeriodController` y `OrganizationController` (C20 crítico) y vincular una métrica existente exige poder escribirla (C20 alto) — mergeado el 9 octubre 2026
 - [F] Unidad obligatoria al invitar (`orgUnitId: string | null`, selector en el front) — mergeado el 8 octubre 2026
 - [F] Curva `from_projects` (RN-P17) habilitada con los aportes de proyectos (`ProjectContribution`, carga automática al 100 % y UI de aportes) — mergeado el 8 octubre 2026

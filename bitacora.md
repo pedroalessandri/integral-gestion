@@ -27,7 +27,7 @@ Formato:
   - Corregí los links que armó el subagente (`#project-` no existía): ahora van a `/objectives/:id/projects/:projectId` y `#task-<id>`; test agregado.
 - Preguntas abiertas: ninguna nueva.
 - Nota: Pedro aprobó (2026-10-09) que `PATCH orgs/:id` quede para el org-admin central con `core:org-unit:manage` (pregunta abierta de C20b).
-- Fin de la Fase 9: PR abierto. Smoke de Pedro: demo completa.
+- Fin de la Fase 9: mergeada por Pedro (PR #25, 2026-10-09). Pedro difiere el smoke a uno grande al cerrar la Fase 10.
 
 ## 2026-10-09 · C21 · backend-dev + frontend-dev · feature/plan-f9-tableros
 - Hecho:
