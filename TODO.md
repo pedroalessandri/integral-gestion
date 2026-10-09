@@ -16,12 +16,7 @@
 - Por qué: el seed de C13 solo usa lo que existe hoy. La SPEC §6 punto 4 pide un indicador `output` con aportes de proyectos y curva `from_projects`. La curva manual ya está (C15: el `outcome` semestral "Viajes diarios en bicicleta" usa `IndicatorTargetPoint`); falta `ProjectContribution` y `from_projects` (C17), y un proyecto `from_indicator`.
 - Posible solución: extender `apps/api/src/database/seed-demo.ts` en la corrida C17.
 - Origen: C13 (2026-10-08). Actualizado en C15 (2026-10-08): la curva manual quedó hecha.
-
-### [F] Habilitar la curva `from_projects` (RN-P17) cuando existan los aportes
-- Por qué: C15 rechaza `expectedCurveMode = 'from_projects'` con 422 `ExpectedCurveModeNotAvailable`, porque la curva escalonada necesita `ProjectContribution` (C17) y sin pasos queda plana en la base. `IndicatorStatusService` ya tiene la rama (`steps: []`).
-- Posible solución: en C17, cargar los pasos (`endsAt` del proyecto y `contributionValue`) en `IndicatorStatusService`, validar que sea `kind = output` con `linkMode = execution_feeds_indicator` y quitar el 422 de `assertCurveModeAvailable`.
-- Origen: C15 (2026-10-08).
-- Actualización (C17, 2026-10-08): hecho en la rama `feature/plan-f7-aportes` (pasos de la curva desde `ProjectContribution` + `endsAt` planificado vía `PROJECT_LINK_READER`, 422 solo si no es `output` + `execution_feeds_indicator`). Mover a Completados al mergear.
+- Actualización (C18, 2026-10-08): hecho en `feature/plan-f7-aportes` el indicador "Kilómetros de ciclovía habilitados" con `execution_feeds_indicator` + curva `from_projects` y aportes pendientes de "Ciclovía de la Av. Costanera" (8) y "Bicisendas escolares" (4), que no alcanzan la meta (20). Falta el proyecto `from_indicator` (depende de habilitarlo en `ProjectService`).
 
 ### [F] Reconciliar los aportes de proyectos si el oyente falla (consistencia eventual)
 - Por qué: el aporte se aplica con el evento `project.completed` / `project.reopened`, post-commit (ADR-0009 D5). Si el oyente de `metrics` falla (DB caída, deploy en el medio), `okr` ya confirmó el avance del proyecto y el indicador queda sin la carga automática (o sin su compensación) hasta el próximo cambio del proyecto. Solo se loguea. `ProjectContributionApplier.reconcileProject` ya es idempotente y reconcilia contra el estado actual del proyecto, así que se puede reintentar sin riesgo.
@@ -53,12 +48,6 @@
 - Estado: el kebab de **key results** (`kr-card-actions.tsx`) ya quedó arreglado en la corrida del Módulo 2 (DropdownMenu controlado). Falta solo el de **tareas** (`task-row-actions.tsx`).
 - Posible solución: controlar el state del DropdownMenu desde el padre y forzar `setMenuOpen(false)` en el `onSelect` antes de abrir el Dialog. Patrón típico de shadcn cuando un MenuItem dispara un Dialog.
 - Estimado: corrida chica (~15-20 min).
-
-### [F] Elegir unidad al invitar + decidir alcance por defecto (hoy null = toda la org) — resolver en F8/C19
-- Por qué: `inviteByEmail` no acepta `orgUnitId`; el alcance se setea después con `PATCH orgs/:orgId/members/:userId/scope`. Hoy un miembro invitado queda con alcance `null` (toda la org, RN-P19) hasta que alguien lo cambie.
-- Origen: pregunta abierta de C04 (2026-10-07), Pedro: "alcanza por ahora".
-- Resolver en: plan.md F8/C19.
-- Estado (C19, 2026-10-08): decidido por Pedro (opción b): `orgUnitId` es obligatorio en `POST members/invite` (`string | null`, `null` = toda la org explícito; falta la propiedad → 400). Backend hecho; falta el selector de unidad en el front de invitaciones (en curso en paralelo).
 
 ### [F] Archivar o cambiar el plan activo (hoy no hay endpoint)
 - Por qué: C05 solo hace upsert del plan activo. Decisión de Pedro (2026-10-07) para cuando se agregue: 409 mientras haya ejes con objetivos; hay que definir qué pasa con `axis_id` de los objetivos al cambiar de plan.
@@ -182,7 +171,9 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
-- [F] Alcance de unidad para `Metric` (alta standalone solo central; edición/borrado como las cargas) y anti-escalada al cambiar rol / quitar miembros — C19, 8 octubre 2026 (pendiente de merge de la Fase 8)
+- [F] Unidad obligatoria al invitar (`orgUnitId: string | null`, selector en el front) — mergeado el 8 octubre 2026
+- [F] Curva `from_projects` (RN-P17) habilitada con los aportes de proyectos (`ProjectContribution`, carga automática al 100 % y UI de aportes) — mergeado el 8 octubre 2026
+- [F] Alcance de unidad para `Metric` (alta standalone solo central; edición/borrado como las cargas) y anti-escalada al cambiar rol / quitar miembros — mergeado el 8 octubre 2026
 - [B] Validar `:orgId` del path contra el tenant del request (`OrgParamGuard` en org-units, members, modules, strategic-plan y metrics) — mergeado el 7 octubre 2026
 - [F] Módulo 2 "Indicadores en OKRs" completo (backend + frontend): `progress_mode` en KR, vínculo métrica↔KR con progreso automático (interpolación baseline→target), hook de recálculo, contexto a nivel objetivo, y la Pantalla 3 (badge automático, barra sin slider, sin-datos, editar/desvincular). Seed de demo + smoke checklist en docs/features/indicadores-smoke-checklist.md — mergeado el 10 julio 2026
 - [F] Módulo 1 "Indicadores de gestión" completo (backend + frontend): schema `metrics`, feature-gating por org (ModuleEnabledGuard), package `metrics-domain`, ABM + carga periódica con curva esperado-vs-real, nav gated y tab "Módulos" en Configuración — mergeado el 9 julio 2026

@@ -59,6 +59,7 @@ Formato:
 - Preguntas abiertas:
   - `PeriodController` con `TenantGuard` cambia la política de acceso (el front tiene que mandar el header de org): ya estaba anotado en TODO.md como decisión de Pedro.
   - ¿C20b en esta rama antes del merge, o mergear la Fase 8 y hacer C20b aparte?
+- Fase 8 mergeada por Pedro (PR #23, 2026-10-08) en `ac93d2e`, antes del push de C20b: el fix de seguridad va en el PR #24. El smoke de la Fase 8 (usuario de área sin permiso de editar otra área) queda pendiente.
 
 ## 2026-10-08 · C19 · backend-dev · feature/plan-f8-alcance
 - Hecho:
@@ -99,8 +100,12 @@ Formato:
   - **Campo de vínculo con la gestión (`linkMode`) en el diálogo del indicador**, fuera del alcance de C18 pero necesario: sin él ningún indicador podía ser `execution_feeds_indicator`. Ofrece "Independiente" y "Los proyectos aportan al indicador" (deshabilitada si no es Producto); `indicator_feeds_execution` solo se muestra, deshabilitada, si ya la tiene. En edición `linkMode` viaja solo si cambió.
   - El título del proyecto de una carga automática sale de los aportes vivos del indicador; si el aporte ya no existe o en `/metrics/[id]` dice "Aporte de un proyecto". TODO.md: sumar `sourceProjectTitle` a `MetricEntryDto` (media).
   - Sin Testing Library en web (igual que C16): helpers cubiertos con vitest y componentes con `renderToStaticMarkup`.
-- Preguntas abiertas:
-  - Si en el diálogo se pasa el tipo de Producto a Resultado con vínculo `execution_feeds_indicator` o curva `from_projects` ya elegidos, la UI muestra un error de validación y no resetea esos campos. ¿Se prefiere el reset automático?
+- Preguntas abiertas (respondidas por Pedro el 2026-10-08):
+  - ✅ Al pasar el tipo de Producto a Resultado, el vínculo `execution_feeds_indicator` vuelve a `independent` y la curva `from_projects` vuelve a `linear` (también si se quita el vínculo). Aplicado en un commit aparte (`reconcileLinkAndCurve` en `indicator-form.ts`, 3 tests; web 80 tests).
+  - ✅ OK a `sourceProjectTitle` en `MetricEntryDto` como ítem de TODO.md.
+- Seed demo (pedido de Pedro, commit aparte): el indicador "Kilómetros de ciclovía habilitados" usa `execution_feeds_indicator` + curva `from_projects`, con aportes pendientes de "Ciclovía de la Av. Costanera" (8 km) y "Bicisendas escolares" (4 km); la suma (12) no llega a la meta (20), así se ve el aviso. Probado en DB descartable `gp_seed` (migrada, seed corrido dos veces, ya borrada).
+- Smoke de Pedro: **postergado** (2026-10-08). Pasos: en "Ciclovía de la Av. Costanera" subir "Obra civil y señalización" al 100 % → aporte Aplicado y carga "Automática" +8 en el indicador; bajarla → "Compensación" −8. Requiere volver a correr el seed en la DB que se use.
+- Fase 7 mergeada por Pedro (PR #21, 2026-10-08) con el smoke pendiente. El merge tomó la rama en `496de14`: el reset del diálogo y el seed con aportes entraron después, en el PR de cierre `chore/cierre-fase-7`.
 
 ## 2026-10-08 · C17 · backend-dev · feature/plan-f7-aportes
 - Hecho:
