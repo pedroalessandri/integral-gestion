@@ -9,7 +9,8 @@ import type { OrgUnitKind } from '../core/org-unit.dto.js';
  * Árbol de planificación y tableros (RN-P10, SPEC §5.2/§5.3).
  *
  * GET /okr/planning-tree?periodId=&axisId=&orgUnitId=
- *   - `periodId` (obligatorio): período cuyos objetivos se muestran (un objetivo pertenece a un solo período).
+ *   - `periodId` (opcional): período cuyos objetivos se muestran (un objetivo pertenece a un solo período). Sin él,
+ *     el período abierto de la org; si no hay ninguno abierto, 404 `OpenPeriodNotFound`.
  *   - `axisId` (opcional): solo objetivos de ese eje. 404 si el eje no es del plan activo de la organización.
  *   - `orgUnitId` (opcional): solo objetivos de esa unidad y sus descendientes; `units` queda con esa unidad como
  *     única raíz. 404 si la unidad no existe en la organización.

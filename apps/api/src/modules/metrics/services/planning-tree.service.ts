@@ -28,7 +28,8 @@ import {
 import { IndicatorStatusService } from './indicator-status.service.js';
 
 export interface PlanningTreeFilters {
-  periodId: string;
+  /** Sin período se usa el abierto de la org; si no hay ninguno abierto, 404 `OpenPeriodNotFound`. */
+  periodId?: string;
   axisId?: string;
   orgUnitId?: string;
 }
@@ -53,13 +54,23 @@ export class PlanningTreeService {
     @Inject(AXIS_TREE_READER) private readonly axisReader: AxisTreeReader,
   ) {}
 
-  async getPlanningTree(orgId: string, filters: PlanningTreeFilters, now: Date = new Date()): Promise<PlanningTreeDto> {
+  async getPlanningTree(
+    orgId: string,
+    filters: PlanningTreeFilters,
+    now: Date = new Date(),
+  ): Promise<PlanningTreeDto> {
     const period = await this.prisma.scoped.period.findFirst({
-      where: { id: filters.periodId, organizationId: orgId, deletedAt: null },
+      where: filters.periodId
+        ? { id: filters.periodId, organizationId: orgId, deletedAt: null }
+        : { organizationId: orgId, status: 'open', deletedAt: null },
       select: { id: true },
     });
     if (!period) {
-      throw new NotFoundException(`Period ${filters.periodId} not found`);
+      throw new NotFoundException(
+        filters.periodId
+          ? `Period ${filters.periodId} not found`
+          : 'OpenPeriodNotFound: la organización no tiene un período abierto',
+      );
     }
 
     const [allUnits, plan, readings] = await Promise.all([
@@ -67,7 +78,9 @@ export class PlanningTreeService {
       this.axisReader.findActivePlanStructure(orgId),
       this.progressReader.readPeriodObjectivesProgress(orgId, period.id, now),
     ]);
-    const axes = [...(plan?.axes ?? [])].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+    const axes = [...(plan?.axes ?? [])].sort(
+      (a, b) => a.order - b.order || a.name.localeCompare(b.name),
+    );
 
     if (filters.axisId !== undefined && !axes.some((a) => a.id === filters.axisId)) {
       throw new NotFoundException(`Axis ${filters.axisId} not found`);
@@ -101,7 +114,14 @@ export class PlanningTreeService {
       if (!status) continue; // inalcanzable: el servicio devuelve una entrada por cada lectura recibida
       const axisId = r.axisId !== null && axisIds.has(r.axisId) ? r.axisId : null;
       const orgUnitId = r.orgUnitId !== null && unitIds.has(r.orgUnitId) ? r.orgUnitId : null;
-      objectives.push({ id: r.id, title: r.title, orgUnitId, axisId, result: status.result, execution: status.execution });
+      objectives.push({
+        id: r.id,
+        title: r.title,
+        orgUnitId,
+        axisId,
+        result: status.result,
+        execution: status.execution,
+      });
       inputs.push({
         id: r.id,
         orgUnitId,
@@ -149,26 +169,30 @@ export class PlanningTreeService {
       };
     };
 
-    const axisNodes: PlanningAxisNodeDto[] = (filters.axisId === undefined ? axes : axes.filter((a) => a.id === filters.axisId)).map(
-      (axis) => {
-        const items = inputs.filter((i) => i.axisId === axis.id);
-        return {
-          id: axis.id,
-          name: axis.name,
-          order: axis.order,
-          aggregate: aggregateObjectiveReadings(items),
-          objectiveIds: items.map((i) => i.id),
-          units: unitBreakdown(items),
-        };
-      },
-    );
+    const axisNodes: PlanningAxisNodeDto[] = (
+      filters.axisId === undefined ? axes : axes.filter((a) => a.id === filters.axisId)
+    ).map((axis) => {
+      const items = inputs.filter((i) => i.axisId === axis.id);
+      return {
+        id: axis.id,
+        name: axis.name,
+        order: axis.order,
+        aggregate: aggregateObjectiveReadings(items),
+        objectiveIds: items.map((i) => i.id),
+        units: unitBreakdown(items),
+      };
+    });
     const withoutAxisItems = inputs.filter((i) => i.axisId === null);
 
     return {
       asOf: now.toISOString(),
       periodId: period.id,
       filters: { axisId: filters.axisId ?? null, orgUnitId: filters.orgUnitId ?? null },
-      plan: { id: plan?.id ?? null, title: plan?.title ?? null, aggregate: aggregateObjectiveReadings(inputs) },
+      plan: {
+        id: plan?.id ?? null,
+        title: plan?.title ?? null,
+        aggregate: aggregateObjectiveReadings(inputs),
+      },
       axes: axisNodes,
       withoutAxis: {
         aggregate: aggregateObjectiveReadings(withoutAxisItems),

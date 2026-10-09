@@ -13,20 +13,29 @@ import {
   type TreeNode,
 } from './planning-tree-view';
 
-const agg = (n: number, resultBp: number | null = null, execBp: number | null = null): PlanningAggregateDto => ({
+const agg = (
+  n: number,
+  resultBp: number | null = null,
+  execBp: number | null = null,
+): PlanningAggregateDto => ({
   objectivesCount: n,
   result: { progressBp: resultBp, deviationBp: null, semaphore: null, pendingBucketsCount: 0 },
   execution: { progressBp: execBp, deviationBp: null, semaphore: null },
 });
 
-const objective = (id: string, orgUnitId: string | null, axisId: string | null): PlanningObjectiveDto => ({
-  id,
-  title: `Objetivo ${id}`,
-  orgUnitId,
-  axisId,
-  result: { progressBp: 4000, deviationBp: -3000, semaphore: 'red', pendingBucketsCount: 2 },
-  execution: { progressBp: 6000, plannedBp: 5000, deviationBp: 1000, semaphore: 'green' },
-} as PlanningObjectiveDto);
+const objective = (
+  id: string,
+  orgUnitId: string | null,
+  axisId: string | null,
+): PlanningObjectiveDto =>
+  ({
+    id,
+    title: `Objetivo ${id}`,
+    orgUnitId,
+    axisId,
+    result: { progressBp: 4000, deviationBp: -3000, semaphore: 'red', pendingBucketsCount: 2 },
+    execution: { progressBp: 6000, plannedBp: 5000, deviationBp: 1000, semaphore: 'green' },
+  }) as PlanningObjectiveDto;
 
 const dto: PlanningTreeDto = {
   asOf: '2026-10-09T00:00:00.000Z',
@@ -47,7 +56,11 @@ const dto: PlanningTreeDto = {
     },
     { id: 'a2', name: 'Eje vacío', order: 2, aggregate: agg(0), objectiveIds: [], units: [] },
   ],
-  withoutAxis: { aggregate: agg(1, 4000, 6000), objectiveIds: ['o3'], units: [{ orgUnitId: null, aggregate: agg(1, 4000, 6000) }] },
+  withoutAxis: {
+    aggregate: agg(1, 4000, 6000),
+    objectiveIds: ['o3'],
+    units: [{ orgUnitId: null, aggregate: agg(1, 4000, 6000) }],
+  },
   units: [
     {
       id: 'u1',
@@ -82,7 +95,11 @@ const dto: PlanningTreeDto = {
     },
   ],
   withoutUnit: { aggregate: agg(1, 4000, 6000), objectiveIds: ['o3'] },
-  objectives: [objective('o1', 'u2', 'a1'), objective('o2', 'u3', 'a1'), objective('o3', null, null)],
+  objectives: [
+    objective('o1', 'u2', 'a1'),
+    objective('o2', 'u3', 'a1'),
+    objective('o3', null, null),
+  ],
 } as PlanningTreeDto;
 
 const labels = (nodes: TreeNode[]) => nodes.map((n) => n.label);
@@ -115,9 +132,17 @@ describe('buildAxesTree', () => {
     expect(labels(sinEje.children)).toEqual(['Sin unidad']);
   });
 
-  it('omite "Sin eje" cuando no tiene objetivos', () => {
-    const tree = buildAxesTree({ ...dto, withoutAxis: { aggregate: agg(0), objectiveIds: [], units: [] } });
-    expect(labels(tree.children)).toEqual(['Eje Salud', 'Eje vacío']);
+  it('muestra "Sin eje" aunque no tenga objetivos', () => {
+    const tree = buildAxesTree({
+      ...dto,
+      withoutAxis: { aggregate: agg(0), objectiveIds: [], units: [] },
+    });
+    expect(labels(tree.children)).toEqual(['Eje Salud', 'Eje vacío', 'Sin eje']);
+  });
+
+  it('muestra "Sin unidad" aunque no tenga objetivos', () => {
+    const tree = buildUnitsTree({ ...dto, withoutUnit: { aggregate: agg(0), objectiveIds: [] } });
+    expect(labels(tree.children)).toEqual(['Central', 'Sin unidad']);
   });
 });
 
@@ -144,7 +169,11 @@ describe('nodos objetivo', () => {
   it('llevan las dos lecturas por separado y el link a la ficha', () => {
     const o = buildUnitsTree(dto).children[0]!.children[0]!.children[0]!;
     expect(o.href).toBe('/objectives/o1');
-    expect(o.readings.result).toMatchObject({ progressBp: 4000, semaphore: 'red', pendingBucketsCount: 2 });
+    expect(o.readings.result).toMatchObject({
+      progressBp: 4000,
+      semaphore: 'red',
+      pendingBucketsCount: 2,
+    });
     expect(o.readings.execution).toMatchObject({ progressBp: 6000, semaphore: 'green' });
   });
 

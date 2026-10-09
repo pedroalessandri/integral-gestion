@@ -18,12 +18,16 @@ let httpServer: ReturnType<INestApplication['getHttpServer']>;
 
 // Un usuario por test: el rate limit (100 req/min) es por usuario y cada escenario hace decenas de requests.
 const superFor = (userId: string) => ({ 'X-Dev-User-Id': userId, 'X-Dev-Is-Superadmin': 'true' });
-const orgHeaders = (userId: string, orgId: string) => ({ ...superFor(userId), 'X-Organization-Id': orgId });
+const orgHeaders = (userId: string, orgId: string) => ({
+  ...superFor(userId),
+  'X-Organization-Id': orgId,
+});
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
 beforeAll(async () => {
-  const moduleFixture: TestingModule = await Test.createTestingModule({ imports: [AppModule] })
-    .compile();
+  const moduleFixture: TestingModule = await Test.createTestingModule({
+    imports: [AppModule],
+  }).compile();
   app = moduleFixture.createNestApplication();
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
@@ -44,7 +48,11 @@ async function bootstrapBase(suffix: string, userId: string) {
     .send({
       slug: `e2e-c21-${suffix}-${Date.now()}`,
       name: 'C21 Test Org',
-      firstPeriod: { code: `C21-${Date.now()}`, startsAt: `${year}-01-01T00:00:00.000Z`, endsAt: `${year}-12-31T00:00:00.000Z` },
+      firstPeriod: {
+        code: `C21-${Date.now()}`,
+        startsAt: `${year}-01-01T00:00:00.000Z`,
+        endsAt: `${year}-12-31T00:00:00.000Z`,
+      },
     });
   const orgId = orgRes.body.organization.id as string;
   const periodId = orgRes.body.period.id as string;
@@ -53,7 +61,9 @@ async function bootstrapBase(suffix: string, userId: string) {
   if (periodRes.body.status === 'future') {
     await request(httpServer).post(`/api/v1/periods/${periodId}/open`).set(h);
   }
-  const enabled = await request(httpServer).post(`/api/v1/orgs/${orgId}/modules/indicadores-gestion/enable`).set(h);
+  const enabled = await request(httpServer)
+    .post(`/api/v1/orgs/${orgId}/modules/indicadores-gestion/enable`)
+    .set(h);
   expect([200, 201], JSON.stringify(enabled.body)).toContain(enabled.status);
   const member = await request(httpServer)
     .post(`/api/v1/orgs/${orgId}/members`)
@@ -90,9 +100,17 @@ async function bootstrapOrg(suffix: string, userId: string) {
   const plan = await request(httpServer)
     .put(`/api/v1/orgs/${orgId}/strategic-plan`)
     .set(h)
-    .send({ title: 'Plan', vision: 'Visión', mandateStartsAt: `${year}-01-01T00:00:00.000Z`, mandateEndsAt: `${year + 3}-12-31T00:00:00.000Z` });
+    .send({
+      title: 'Plan',
+      vision: 'Visión',
+      mandateStartsAt: `${year}-01-01T00:00:00.000Z`,
+      mandateEndsAt: `${year + 3}-12-31T00:00:00.000Z`,
+    });
   expect([200, 201], JSON.stringify(plan.body)).toContain(plan.status);
-  const axis = await request(httpServer).post(`/api/v1/orgs/${orgId}/strategic-plan/axes`).set(h).send({ name: 'Movilidad' });
+  const axis = await request(httpServer)
+    .post(`/api/v1/orgs/${orgId}/strategic-plan/axes`)
+    .set(h)
+    .send({ name: 'Movilidad' });
   expect(axis.status, JSON.stringify(axis.body)).toBe(201);
 
   const objective = async (title: string, orgUnitId: string, axisId?: string) => {
@@ -131,7 +149,12 @@ describe.skipIf(!process.env['DATABASE_URL'])('C21 — árbol de planificación 
     const ind = await request(httpServer)
       .post(`/api/v1/okr/objectives/${o1}/indicators`)
       .set(h)
-      .send({ metric: { name: 'Km', unit: 'number', frequency: 'monthly', kind: 'output' }, baselineValue: '0', targetValue: '100', direction: 'increasing' });
+      .send({
+        metric: { name: 'Km', unit: 'number', frequency: 'monthly', kind: 'output' },
+        baselineValue: '0',
+        targetValue: '100',
+        direction: 'increasing',
+      });
     expect(ind.status, JSON.stringify(ind.body)).toBe(201);
     const entry = await request(httpServer)
       .post(`/api/v1/metrics/${ind.body.metricId as string}/entries`)
@@ -139,7 +162,10 @@ describe.skipIf(!process.env['DATABASE_URL'])('C21 — árbol de planificación 
       .send({ bucketDate: day(ctx.buckets[0] as Date), incrementValue: '40' });
     expect(entry.status, JSON.stringify(entry.body)).toBe(201);
 
-    const res = await request(httpServer).get('/api/v1/okr/planning-tree').query({ periodId }).set(h);
+    const res = await request(httpServer)
+      .get('/api/v1/okr/planning-tree')
+      .query({ periodId })
+      .set(h);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const tree = res.body as PlanningTreeDto;
 
@@ -169,7 +195,9 @@ describe.skipIf(!process.env['DATABASE_URL'])('C21 — árbol de planificación 
     expect(tree.axes).toHaveLength(1);
     expect(tree.axes[0]?.objectiveIds.sort()).toEqual([o1, o2].sort());
     expect(tree.axes[0]?.aggregate.result.progressBp).toBe(Math.trunc(p1 / 2));
-    expect(tree.axes[0]?.units.map((u) => u.orgUnitId).sort()).toEqual([ctx.unitA, ctx.unitB].sort());
+    expect(tree.axes[0]?.units.map((u) => u.orgUnitId).sort()).toEqual(
+      [ctx.unitA, ctx.unitB].sort(),
+    );
     expect(tree.withoutAxis.objectiveIds).toEqual([o3]);
 
     // Unidades: la central incluye a todas (también la que no tiene objetivos).
@@ -183,16 +211,27 @@ describe.skipIf(!process.env['DATABASE_URL'])('C21 — árbol de planificación 
     expect(tree.withoutUnit.aggregate.objectivesCount).toBe(0);
 
     // Filtros.
-    const byAxis = (await request(httpServer).get('/api/v1/okr/planning-tree').query({ periodId, axisId: ctx.axisId }).set(h)).body as PlanningTreeDto;
+    const byAxis = (
+      await request(httpServer)
+        .get('/api/v1/okr/planning-tree')
+        .query({ periodId, axisId: ctx.axisId })
+        .set(h)
+    ).body as PlanningTreeDto;
     expect(byAxis.objectives.map((o) => o.id).sort()).toEqual([o1, o2].sort());
     expect(byAxis.plan.aggregate.objectivesCount).toBe(2);
-    const byUnit = (await request(httpServer).get('/api/v1/okr/planning-tree').query({ periodId, orgUnitId: ctx.unitB }).set(h)).body as PlanningTreeDto;
+    const byUnit = (
+      await request(httpServer)
+        .get('/api/v1/okr/planning-tree')
+        .query({ periodId, orgUnitId: ctx.unitB })
+        .set(h)
+    ).body as PlanningTreeDto;
     expect(byUnit.units.map((u) => u.id)).toEqual([ctx.unitB]);
     expect(byUnit.objectives.map((o) => o.id).sort()).toEqual([o2, o3].sort());
 
-    // Validación: el período es obligatorio (400). Ojo con el rate limit: la ruta admite 10 requests/min por IP
-    // (ver TODO.md: el throttler nombrado `ai` aplica a todas las rutas), así que este archivo hace <= 10 en total.
-    expect((await request(httpServer).get('/api/v1/okr/planning-tree').set(h)).status).toBe(400);
+    // Sin periodId se usa el período abierto de la org (el bootstrap lo deja abierto).
+    const byDefault = await request(httpServer).get('/api/v1/okr/planning-tree').set(h);
+    expect(byDefault.status).toBe(200);
+    expect((byDefault.body as PlanningTreeDto).periodId).toBe(periodId);
     void orgId;
   });
 
@@ -202,20 +241,48 @@ describe.skipIf(!process.env['DATABASE_URL'])('C21 — árbol de planificación 
     const oa = await a.objective('Solo de A', a.unitA, a.axisId);
 
     // Cada org ve solo lo suyo.
-    const treeB = (await request(httpServer).get('/api/v1/okr/planning-tree').query({ periodId: b.periodId }).set(b.h)).body as PlanningTreeDto;
+    const treeB = (
+      await request(httpServer)
+        .get('/api/v1/okr/planning-tree')
+        .query({ periodId: b.periodId })
+        .set(b.h)
+    ).body as PlanningTreeDto;
     expect(treeB.objectives).toEqual([]);
     expect(JSON.stringify(treeB)).not.toContain(oa);
     expect(JSON.stringify(treeB)).not.toContain(a.unitA);
     expect(JSON.stringify(treeB)).not.toContain(a.axisId);
 
     // Ids de la otra org -> 404 (período, eje, unidad); un id inexistente da lo mismo que uno ajeno.
-    expect((await request(httpServer).get('/api/v1/okr/planning-tree').query({ periodId: a.periodId }).set(b.h)).status).toBe(404);
-    expect((await request(httpServer).get('/api/v1/okr/planning-tree').query({ periodId: b.periodId, axisId: a.axisId }).set(b.h)).status).toBe(404);
-    expect((await request(httpServer).get('/api/v1/okr/planning-tree').query({ periodId: b.periodId, orgUnitId: a.unitA }).set(b.h)).status).toBe(404);
+    expect(
+      (
+        await request(httpServer)
+          .get('/api/v1/okr/planning-tree')
+          .query({ periodId: a.periodId })
+          .set(b.h)
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(httpServer)
+          .get('/api/v1/okr/planning-tree')
+          .query({ periodId: b.periodId, axisId: a.axisId })
+          .set(b.h)
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(httpServer)
+          .get('/api/v1/okr/planning-tree')
+          .query({ periodId: b.periodId, orgUnitId: a.unitA })
+          .set(b.h)
+      ).status,
+    ).toBe(404);
   });
 
   it('sin autenticación no hay acceso (default deny)', async () => {
-    const status = (await request(httpServer).get('/api/v1/okr/planning-tree').query({ periodId: 'x' })).status;
+    const status = (
+      await request(httpServer).get('/api/v1/okr/planning-tree').query({ periodId: 'x' })
+    ).status;
     expect(status).toBeGreaterThanOrEqual(400);
     expect(status).toBeLessThan(500);
   });

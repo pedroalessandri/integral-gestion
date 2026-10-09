@@ -117,7 +117,10 @@ export function unitNamesById(dto: PlanningTreeDto): Map<string, string> {
   return new Map(flattenUnits(dto.units).map((u) => [u.id, u.name]));
 }
 
-function resolveObjectives(ids: string[], byId: Map<string, PlanningObjectiveDto>): PlanningObjectiveDto[] {
+function resolveObjectives(
+  ids: string[],
+  byId: Map<string, PlanningObjectiveDto>,
+): PlanningObjectiveDto[] {
   return ids.flatMap((id) => {
     const o = byId.get(id);
     return o ? [o] : [];
@@ -147,7 +150,11 @@ function axisUnitNodes(
   });
 }
 
-function unitNode(u: PlanningUnitNodeDto, parentKey: string, byId: Map<string, PlanningObjectiveDto>): TreeNode {
+function unitNode(
+  u: PlanningUnitNodeDto,
+  parentKey: string,
+  byId: Map<string, PlanningObjectiveDto>,
+): TreeNode {
   const key = `${parentKey}/u:${u.id}`;
   const children = [
     ...resolveObjectives(u.objectiveIds, byId).map((o) => objectiveNode(o, key)),
@@ -165,21 +172,31 @@ export function buildAxesTree(dto: PlanningTreeDto): TreeNode {
   const names = unitNamesById(dto);
   const axisNodes = dto.axes.map((axis) => {
     const key = `${PLAN_KEY}/a:${axis.id}`;
-    return aggregateNode(key, 'axis', axis.name, axis.aggregate, axisUnitNodes(key, axis.units, axis.objectiveIds, byId, names));
+    return aggregateNode(
+      key,
+      'axis',
+      axis.name,
+      axis.aggregate,
+      axisUnitNodes(key, axis.units, axis.objectiveIds, byId, names),
+    );
   });
   const withoutAxisKey = `${PLAN_KEY}/a:none`;
-  const withoutAxis =
-    dto.withoutAxis.aggregate.objectivesCount > 0
-      ? [
-          aggregateNode(
-            withoutAxisKey,
-            'withoutAxis',
-            L.withoutAxis,
-            dto.withoutAxis.aggregate,
-            axisUnitNodes(withoutAxisKey, dto.withoutAxis.units, dto.withoutAxis.objectiveIds, byId, names),
-          ),
-        ]
-      : [];
+  // "Sin eje" y "Sin unidad" se muestran siempre, aunque estén vacíos (decisión de Pedro, C21).
+  const withoutAxis = [
+    aggregateNode(
+      withoutAxisKey,
+      'withoutAxis',
+      L.withoutAxis,
+      dto.withoutAxis.aggregate,
+      axisUnitNodes(
+        withoutAxisKey,
+        dto.withoutAxis.units,
+        dto.withoutAxis.objectiveIds,
+        byId,
+        names,
+      ),
+    ),
+  ];
   return planNode(dto, [...axisNodes, ...withoutAxis]);
 }
 
@@ -188,18 +205,17 @@ export function buildUnitsTree(dto: PlanningTreeDto): TreeNode {
   const byId = indexObjectives(dto);
   const unitNodes = dto.units.map((u) => unitNode(u, PLAN_KEY, byId));
   const withoutKey = `${PLAN_KEY}/u:none`;
-  const withoutUnit =
-    dto.withoutUnit.aggregate.objectivesCount > 0
-      ? [
-          aggregateNode(
-            withoutKey,
-            'withoutUnit',
-            L.withoutUnit,
-            dto.withoutUnit.aggregate,
-            resolveObjectives(dto.withoutUnit.objectiveIds, byId).map((o) => objectiveNode(o, withoutKey)),
-          ),
-        ]
-      : [];
+  const withoutUnit = [
+    aggregateNode(
+      withoutKey,
+      'withoutUnit',
+      L.withoutUnit,
+      dto.withoutUnit.aggregate,
+      resolveObjectives(dto.withoutUnit.objectiveIds, byId).map((o) =>
+        objectiveNode(o, withoutKey),
+      ),
+    ),
+  ];
   return planNode(dto, [...unitNodes, ...withoutUnit]);
 }
 
@@ -213,7 +229,9 @@ export function buildTree(dto: PlanningTreeDto, view: PlanningTreeViewMode): Tre
 
 /** Claves de los nodos que se pueden colapsar (tienen hijos). */
 export function expandableKeys(root: TreeNode): string[] {
-  return [root, ...root.children.flatMap((c) => flatten(c))].filter((n) => n.children.length > 0).map((n) => n.key);
+  return [root, ...root.children.flatMap((c) => flatten(c))]
+    .filter((n) => n.children.length > 0)
+    .map((n) => n.key);
 }
 
 function flatten(node: TreeNode): TreeNode[] {

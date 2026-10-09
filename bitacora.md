@@ -23,11 +23,11 @@ Formato:
 - Commit: este commit (`feat(okr): árbol de planificación y tableros por eje y unidad`) + el fix del throttler.
 - Verificación: `turbo run typecheck --force` 7/7; `turbo run lint --force` 0 errores (warnings preexistentes); `turbo run test --force` 12/12 (api 525, okr-domain 120, web 110); `pnpm --filter web build` OK (`/planning`). E2E `planning-tree.e2e-spec.ts` 3/3 en DB descartable `gp_c21` (ya borrada), corrido por el subagente: 3 unidades (una vacía), 1 eje, objetivos con y sin cargas y sin eje; igualdad con `GET objectives/:id/status`; filtros; 400 sin `periodId`; aislamiento entre orgs y default deny. No se probó la pantalla contra la API levantada.
 - Pendiente / desvíos: el ítem 4 (semáforos en `/objectives`) entró en la corrida. El endpoint no lleva `ModuleEnabledGuard` (como el resto de indicadores; ítem C20 #3 en TODO.md).
-- Preguntas abiertas:
-  - La unidad agrega su **subárbol** (`aggregate`) y además expone solo los directos (`directAggregate`); la UI muestra el subárbol. ¿Está bien?
-  - Desvío y semáforo agregados: media simple por lectura con `aggregateDeviationBp`, sin contar objetivos sin cargas en resultado, umbrales 10/25. La SPEC no los define.
-  - `periodId` obligatorio en el endpoint (la UI usa el período abierto por defecto). ¿O default al abierto en la API?
-  - Los nodos "Sin eje" y "Sin unidad" se ocultan cuando tienen 0 objetivos.
+- Preguntas abiertas (respondidas por Pedro el 2026-10-09):
+  - ✅ La unidad agrega su subárbol (`aggregate`); `directAggregate` queda disponible.
+  - ✅ Desvío y semáforo agregados: media simple por lectura con `aggregateDeviationBp`, sin contar objetivos sin cargas en resultado, umbrales 10/25.
+  - ✅ Sin `periodId`, la API usa el período abierto de la org (404 `OpenPeriodNotFound` si no hay). Aplicado en un commit aparte, con unit tests y el e2e re-corrido en DB descartable `gp_c21b` (3/3, ya borrada).
+  - ✅ "Sin eje" y "Sin unidad" se muestran siempre, aunque estén vacíos. Aplicado en el mismo commit (web 111 tests).
 
 ## 2026-10-08 · C20b · backend-dev · feature/plan-f8-alcance
 - Hecho (crítico #1 y alto #2 de C20; Pedro aprobó hacerlo en esta rama y que el front mande el header de org):

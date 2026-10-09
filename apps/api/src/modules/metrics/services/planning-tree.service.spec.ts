@@ -27,14 +27,25 @@ function build(): PlanningTreeService {
   /* eslint-enable @typescript-eslint/no-explicit-any */
 }
 
-const unit = (id: string, parentId: string | null, kind: 'central' | 'ministry' | 'area', order = 0) => ({
+const unit = (
+  id: string,
+  parentId: string | null,
+  kind: 'central' | 'ministry' | 'area',
+  order = 0,
+) => ({
   id,
   parentId,
   kind,
   name: id,
   order,
 });
-const reading = (id: string, orgUnitId: string | null, axisId: string | null, result: number, execution: number) => ({
+const reading = (
+  id: string,
+  orgUnitId: string | null,
+  axisId: string | null,
+  result: number,
+  execution: number,
+) => ({
   id,
   title: `Obj ${id}`,
   orgUnitId,
@@ -43,14 +54,25 @@ const reading = (id: string, orgUnitId: string | null, axisId: string | null, re
   executionProgressBp: execution,
   plannedExecutionProgressBp: 0,
 });
-const status = (result: number, resultDev: number | null, execution: number, execDev: number, pending: number) => ({
+const status = (
+  result: number,
+  resultDev: number | null,
+  execution: number,
+  execDev: number,
+  pending: number,
+) => ({
   result: {
     progressBp: result,
     deviationBp: resultDev,
     semaphore: resultDev === null ? null : resultDev >= -1000 ? 'green' : 'yellow',
     pendingBucketsCount: pending,
   },
-  execution: { progressBp: execution, plannedBp: execution - execDev, deviationBp: execDev, semaphore: 'green' },
+  execution: {
+    progressBp: execution,
+    plannedBp: execution - execDev,
+    deviationBp: execDev,
+    semaphore: 'green',
+  },
 });
 
 beforeEach(() => {
@@ -76,15 +98,17 @@ beforeEach(() => {
     reading('o3', 'min-b', null, 0, 0),
     reading('o4', null, 'ax-2', 1000, 1000),
   ]);
-  statusService.getObjectivesStatusSummaries.mockImplementation(async (_org: string, rs: Array<{ id: string }>) => {
-    const all: Record<string, ReturnType<typeof status>> = {
-      o1: status(6000, -500, 1000, -200, 1),
-      o2: status(2000, -3000, 3000, -2000, 2),
-      o3: status(0, null, 0, 0, 0),
-      o4: status(1000, null, 1000, 0, 0),
-    };
-    return new Map(rs.map((r) => [r.id, all[r.id]]));
-  });
+  statusService.getObjectivesStatusSummaries.mockImplementation(
+    async (_org: string, rs: Array<{ id: string }>) => {
+      const all: Record<string, ReturnType<typeof status>> = {
+        o1: status(6000, -500, 1000, -200, 1),
+        o2: status(2000, -3000, 3000, -2000, 2),
+        o3: status(0, null, 0, 0, 0),
+        o4: status(1000, null, 1000, 0, 0),
+      };
+      return new Map(rs.map((r) => [r.id, all[r.id]]));
+    },
+  );
 });
 
 describe('getPlanningTree', () => {
@@ -141,7 +165,9 @@ describe('getPlanningTree', () => {
     expect(statusService.getObjectivesStatusSummaries).toHaveBeenCalledTimes(1);
     expect(progressReader.readPeriodObjectivesProgress).toHaveBeenCalledWith(ORG, 'p-1', NOW);
     expect(period.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ id: 'p-1', organizationId: ORG }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'p-1', organizationId: ORG }),
+      }),
     );
   });
 
@@ -163,7 +189,9 @@ describe('getPlanningTree', () => {
   });
 
   it('un eje de un plan archivado cuenta como "sin eje"', async () => {
-    progressReader.readPeriodObjectivesProgress.mockResolvedValue([reading('o3', 'min-b', 'ax-viejo', 0, 0)]);
+    progressReader.readPeriodObjectivesProgress.mockResolvedValue([
+      reading('o3', 'min-b', 'ax-viejo', 0, 0),
+    ]);
     const tree = await build().getPlanningTree(ORG, { periodId: 'p-1' }, NOW);
     expect(tree.withoutAxis.objectiveIds).toEqual(['o3']);
     expect(tree.objectives[0]?.axisId).toBeNull();
@@ -176,10 +204,28 @@ describe('getPlanningTree', () => {
     expect(tree.axes).toEqual([]);
   });
 
+  it('sin periodId usa el período abierto de la organización', async () => {
+    await build().getPlanningTree(ORG, {}, NOW);
+    expect(period.findFirst).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: { organizationId: ORG, status: 'open', deletedAt: null } }),
+    );
+  });
+
+  it('sin periodId y sin período abierto: 404 OpenPeriodNotFound', async () => {
+    period.findFirst.mockResolvedValueOnce(null);
+    await expect(build().getPlanningTree(ORG, {}, NOW)).rejects.toThrow('OpenPeriodNotFound');
+  });
+
   it('404 si el período, el eje o la unidad no existen en la organización', async () => {
     period.findFirst.mockResolvedValueOnce(null);
-    await expect(build().getPlanningTree(ORG, { periodId: 'nope' }, NOW)).rejects.toBeInstanceOf(NotFoundException);
-    await expect(build().getPlanningTree(ORG, { periodId: 'p-1', axisId: 'nope' }, NOW)).rejects.toBeInstanceOf(NotFoundException);
-    await expect(build().getPlanningTree(ORG, { periodId: 'p-1', orgUnitId: 'nope' }, NOW)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(build().getPlanningTree(ORG, { periodId: 'nope' }, NOW)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(
+      build().getPlanningTree(ORG, { periodId: 'p-1', axisId: 'nope' }, NOW),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      build().getPlanningTree(ORG, { periodId: 'p-1', orgUnitId: 'nope' }, NOW),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

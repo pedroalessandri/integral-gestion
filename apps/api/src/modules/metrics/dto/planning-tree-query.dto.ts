@@ -2,11 +2,12 @@ import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 /** Query de GET /okr/planning-tree. Contrato en `shared-types/okr/planning-tree.dto.ts`. */
 export class PlanningTreeQueryDto {
-  /** Período cuyos objetivos se muestran (obligatorio: un objetivo pertenece a un solo período). */
+  /** Período cuyos objetivos se muestran. Sin él, el período abierto de la org (decisión de Pedro, C21). */
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(64)
-  periodId!: string;
+  periodId?: string;
 
   @IsOptional()
   @IsString()
