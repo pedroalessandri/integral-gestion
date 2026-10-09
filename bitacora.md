@@ -15,6 +15,20 @@ Formato:
 
 ---
 
+## 2026-10-09 · C22 · backend-dev + frontend-dev · feature/plan-f9-tableros
+- Hecho:
+  - **Endpoint** `GET okr/planning-gantt?periodId=&axisId=&orgUnitId=` (en `metrics`, junto a `planning-tree`; `TenantGuard` + `okr:read`; todos opcionales, período abierto por defecto, 404 `OpenPeriodNotFound` si no hay; `orgUnitId` filtra subárbol). Devuelve Objetivo → Proyecto → Tarea: el objetivo con unidad, eje, fechas min–max de sus proyectos y las dos lecturas por separado con desvío y semáforo (mismo cálculo por lote de C21, igual a `/status`); el proyecto con unidad, avance, `progressMode` y fechas planificadas; las tareas con `TaskGanttDto`. Objetivos sin proyectos incluidos con fechas `null`. Dos queries por lote (proyectos y tareas), sin N+1. `GET objectives/gantt` y `ObjectiveGanttDto` quedan `@deprecated` hasta el contract (F10); nada nuevo sobre KR.
+  - **Front**: `/objectives/executive` usa el endpoint nuevo (`features/executive-gantt`): fila de objetivo con unidad, eje y las dos lecturas (semáforo y carga pendiente; la barra del objetivo es solo el rango, sin relleno, para no elegir una lectura), fila de proyecto con avance y marca "Avance del indicador" si es `from_indicator` (sus tareas, "Informativa"), "Sin proyectos" sin barra, filtros período/eje/unidad en la URL (reusa `features/planning-tree`). El proyecto linkea a su ficha y la tarea a su ancla `#task-` en ella. Ya no llama al endpoint viejo.
+- Commit: este commit (`feat(okr): vista ejecutiva Objetivo → Proyecto → Tarea`)
+- Verificación: `turbo run typecheck --force` 7/7; `turbo run lint --force` 0 errores (warnings preexistentes); `turbo run test --force` 12/12 (api 536, web 120); `pnpm --filter web build` OK (`/objectives/executive`). E2E `planning-gantt` 2/2 + `planning-tree` 3/3 en DB descartable (ya borrada), corrido por el subagente: objetivo sin proyectos, fechas derivadas, igualdad con `/status`, filtros, período por defecto, aislamiento entre orgs. No se probó la pantalla contra la API levantada.
+- Pendiente / desvíos:
+  - Se creó un chart nuevo en la feature en lugar de generalizar `components/gantt/gantt-chart.tsx` (su `GanttRow` lo usa también el Gantt de la ficha de proyecto). El chart viejo quedó sin usos: `docs/tech-debt.md` (se borra en C24).
+  - Resolución de filtros duplicada entre `PlanningTreeService` y `PlanningGanttService`: `docs/tech-debt.md`.
+  - Corregí los links que armó el subagente (`#project-` no existía): ahora van a `/objectives/:id/projects/:projectId` y `#task-<id>`; test agregado.
+- Preguntas abiertas: ninguna nueva.
+- Nota: Pedro aprobó (2026-10-09) que `PATCH orgs/:id` quede para el org-admin central con `core:org-unit:manage` (pregunta abierta de C20b).
+- Fin de la Fase 9: PR abierto. Smoke de Pedro: demo completa.
+
 ## 2026-10-09 · C21 · backend-dev + frontend-dev · feature/plan-f9-tableros
 - Hecho:
   - **Endpoint agregado** `GET okr/planning-tree?periodId=&axisId=&orgUnitId=` (`TenantGuard` + `okr:read`; lecturas abiertas a toda la org, RN-P20). Vive en `metrics` junto al estado del objetivo; unidades y ejes por puertos nuevos `ORG_UNIT_TREE_READER` (core) y `AXIS_TREE_READER` (planning), y el progreso de los objetivos por lote en `OBJECTIVE_PROGRESS_READER`. Devuelve `objectives[]` (las dos lecturas con desvío, semáforo y cargas pendientes, iguales a `GET objectives/:id/status`) y nodos agregados para plan, ejes (con desglose por unidad), árbol de unidades (`aggregate` del subárbol + `directAggregate`), "Sin eje" y "Sin unidad". Agregación pura en `okr-domain/planning-tree.ts` (RN-P10: promedio simple de los objetivos, por lectura, nunca combinadas; `null` = sin datos). `IndicatorStatusService` pasa a calcular por lote (`getObjectivesStatusSummaries`) sin cambiar los endpoints existentes; queries fijas (~13), no crecen con los objetivos (unit test con 2 y 40).
