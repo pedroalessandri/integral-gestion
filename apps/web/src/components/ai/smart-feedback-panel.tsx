@@ -8,14 +8,12 @@ import { AiErrorBlock } from './ai-error-block';
 
 interface SmartFeedbackPanelProps {
   orgId: string;
-  entityType: 'objective' | 'key_result';
   text: string;
   aiEnabled?: boolean;
 }
 
 export function SmartFeedbackPanel({
   orgId,
-  entityType,
   text,
   aiEnabled = true,
 }: SmartFeedbackPanelProps) {
@@ -31,7 +29,7 @@ export function SmartFeedbackPanel({
     setError(null);
     setFeedback(null);
 
-    const result = await validateAiAction({ orgId, entityType, text: text.trim() });
+    const result = await validateAiAction({ orgId, entityType: 'objective', text: text.trim() });
     setLoading(false);
 
     if (result.error) {

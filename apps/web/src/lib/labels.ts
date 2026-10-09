@@ -15,7 +15,13 @@ export const LABELS = {
   plan: { singular: 'Plan de gobierno', vision: 'Visión general de gobierno' },
   planningTree: 'Árbol de planificación',
   axis: { singular: 'Eje', plural: 'Ejes' },
-  unit: { singular: 'Unidad', plural: 'Unidades', structure: 'Estructura' },
+  unit: {
+    singular: 'Unidad',
+    plural: 'Unidades',
+    structure: 'Estructura',
+    choose: 'Elegí la unidad',
+    required: 'Elegí la unidad del objetivo.',
+  },
   vision: 'Visión',
   mission: 'Misión',
   objective: { singular: 'Objetivo estratégico', plural: 'Objetivos estratégicos' },
@@ -32,7 +38,7 @@ export const LABELS = {
   planningModule: 'Módulo de planificación',
   member: { singular: 'Miembro', plural: 'Miembros' },
   scope: 'Alcance',
-  keyResultsShort: 'Resultados Clave',
+  context: 'Contexto',
   weighting: {
     toggle: 'Ponderar',
     editWeights: 'Editar pesos',

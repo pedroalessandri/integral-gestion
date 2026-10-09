@@ -3,11 +3,7 @@
 import { apiFetch } from '@/lib/api-client';
 import { readApiError } from '@/lib/api-errors';
 import { describeApiError } from '@/features/planning/error-messages';
-import type {
-  MetricKrLinkDto,
-  MetricContextDto,
-  MetricDirection,
-} from '@gestion-publica/shared-types/metrics';
+import type { MetricContextDto } from '@gestion-publica/shared-types/metrics';
 
 /* ------------------------------------------------------------------ */
 /* Owner member list                                                    */
@@ -51,8 +47,8 @@ export async function createObjectiveAction(input: {
   title: string;
   description?: string;
   ownerUserId?: string | null;
-  /** Unidad ministry | area (RN-P3). */
-  orgUnitId?: string;
+  /** Unidad ministry | area (RN-P3). Obligatoria. */
+  orgUnitId: string;
   axisId?: string;
 }): Promise<{ error?: string; objective?: unknown }> {
   try {
@@ -66,58 +62,6 @@ export async function createObjectiveAction(input: {
       return { error: describeApiError(await readApiError(res)) };
     }
     return { objective: await res.json() };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
-export async function createKrAction(input: {
-  orgId: string;
-  objectiveId: string;
-  title: string;
-  ownerUserId?: string | null;
-  weightBp: number;
-}): Promise<{ error?: string; kr?: unknown }> {
-  try {
-    const { orgId, objectiveId, ...body } = input;
-    const res = await apiFetch(`/api/v1/okr/objectives/${objectiveId}/key-results`, {
-      method: 'POST',
-      orgId,
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return { kr: await res.json() };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
-export async function createTaskAction(input: {
-  orgId: string;
-  keyResultId: string;
-  title: string;
-  ownerUserId?: string | null;
-  weightBp: number;
-  /** ISO-8601. */
-  startsAt: string;
-  /** ISO-8601. */
-  endsAt: string;
-}): Promise<{ error?: string; task?: unknown }> {
-  try {
-    const { orgId, keyResultId, ...body } = input;
-    const res = await apiFetch(`/api/v1/okr/key-results/${keyResultId}/tasks`, {
-      method: 'POST',
-      orgId,
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return { task: await res.json() };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconocido' };
   }
@@ -175,60 +119,6 @@ export async function updateObjectiveAction(input: {
   }
 }
 
-export async function updateKrAction(input: {
-  orgId: string;
-  krId: string;
-  title?: string;
-  description?: string | null;
-  ownerUserId?: string | null;
-  weightBp?: number;
-}): Promise<{ error?: string; kr?: unknown }> {
-  try {
-    const { orgId, krId, ...body } = input;
-    const res = await apiFetch(`/api/v1/okr/key-results/${krId}`, {
-      method: 'PATCH',
-      orgId,
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return { kr: await res.json() };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
-export async function updateTaskAction(input: {
-  orgId: string;
-  taskId: string;
-  title?: string;
-  description?: string | null;
-  ownerUserId?: string | null;
-  weightBp?: number;
-  /** ISO-8601. */
-  startsAt?: string;
-  /** ISO-8601. */
-  endsAt?: string;
-}): Promise<{ error?: string; task?: unknown }> {
-  try {
-    const { orgId, taskId, ...body } = input;
-    const res = await apiFetch(`/api/v1/okr/tasks/${taskId}`, {
-      method: 'PATCH',
-      orgId,
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return { task: await res.json() };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
 /* ------------------------------------------------------------------ */
 /* Soft-delete actions                                                  */
 /* ------------------------------------------------------------------ */
@@ -239,44 +129,6 @@ export async function deleteObjectiveAction(input: {
 }): Promise<{ error?: string }> {
   try {
     const res = await apiFetch(`/api/v1/okr/objectives/${input.objectiveId}`, {
-      method: 'DELETE',
-      orgId: input.orgId,
-    });
-    if (!res.ok && res.status !== 204) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return {};
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
-export async function deleteKrAction(input: {
-  orgId: string;
-  krId: string;
-}): Promise<{ error?: string }> {
-  try {
-    const res = await apiFetch(`/api/v1/okr/key-results/${input.krId}`, {
-      method: 'DELETE',
-      orgId: input.orgId,
-    });
-    if (!res.ok && res.status !== 204) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return {};
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
-export async function deleteTaskAction(input: {
-  orgId: string;
-  taskId: string;
-}): Promise<{ error?: string }> {
-  try {
-    const res = await apiFetch(`/api/v1/okr/tasks/${input.taskId}`, {
       method: 'DELETE',
       orgId: input.orgId,
     });
@@ -322,32 +174,6 @@ export async function restoreObjectiveAction(input: {
   }
 }
 
-export async function restoreKrAction(input: {
-  orgId: string;
-  krId: string;
-}): Promise<{ error?: string }> {
-  try {
-    let res = await apiFetch(`/api/v1/okr/key-results/${input.krId}/restore`, {
-      method: 'POST',
-      orgId: input.orgId,
-    });
-    if (res.status === 404) {
-      res = await apiFetch(`/api/v1/okr/key-results/${input.krId}`, {
-        method: 'PATCH',
-        orgId: input.orgId,
-        body: JSON.stringify({ deletedAt: null }),
-      });
-    }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return {};
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
 export async function restoreTaskAction(input: {
   orgId: string;
   taskId: string;
@@ -369,28 +195,6 @@ export async function restoreTaskAction(input: {
       return { error: err.message ?? `HTTP ${res.status}` };
     }
     return {};
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
-export async function rebalanceKrWeightsAction(input: {
-  orgId: string;
-  objectiveId: string;
-  weights: Array<{ krId: string; weightBp: number }>;
-}): Promise<{ error?: string; cascade?: unknown }> {
-  try {
-    const { orgId, objectiveId, weights } = input;
-    const res = await apiFetch(`/api/v1/okr/objectives/${objectiveId}/rebalance-weights`, {
-      method: 'POST',
-      orgId,
-      body: JSON.stringify({ items: weights }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return { cascade: await res.json() };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Error desconocido' };
   }
@@ -501,81 +305,6 @@ export async function deletePeriodAction(input: {
 }
 
 /* ------------------------------------------------------------------ */
-/* Metric ↔ KR link actions (Módulo 2 "Indicadores en OKRs")            */
-/* ------------------------------------------------------------------ */
-
-/** PUT /key-results/:id/metric-link — create or replace the link (RN-O2). */
-export async function upsertKrMetricLinkAction(input: {
-  orgId: string;
-  krId: string;
-  metricId: string;
-  baselineValue?: string;
-  targetValue: string;
-  direction?: MetricDirection;
-}): Promise<{ error?: string; link?: MetricKrLinkDto }> {
-  try {
-    const { orgId, krId, ...body } = input;
-    const res = await apiFetch(`/api/v1/key-results/${krId}/metric-link`, {
-      method: 'PUT',
-      orgId,
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return { link: (await res.json()) as MetricKrLinkDto };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
-/** PATCH /key-results/:id/metric-link — edit baseline/target/direction (RN-O9). */
-export async function updateKrMetricLinkAction(input: {
-  orgId: string;
-  krId: string;
-  baselineValue?: string;
-  targetValue?: string;
-  direction?: MetricDirection;
-}): Promise<{ error?: string; link?: MetricKrLinkDto }> {
-  try {
-    const { orgId, krId, ...body } = input;
-    const res = await apiFetch(`/api/v1/key-results/${krId}/metric-link`, {
-      method: 'PATCH',
-      orgId,
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return { link: (await res.json()) as MetricKrLinkDto };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
-/** DELETE /key-results/:id/metric-link — unlink; KR keeps last % and reverts to manual (RN-O5). */
-export async function unlinkKrMetricAction(input: {
-  orgId: string;
-  krId: string;
-}): Promise<{ error?: string }> {
-  try {
-    const res = await apiFetch(`/api/v1/key-results/${input.krId}/metric-link`, {
-      method: 'DELETE',
-      orgId: input.orgId,
-    });
-    if (!res.ok && res.status !== 204) {
-      const err = (await res.json().catch(() => ({}))) as { message?: string };
-      return { error: err.message ?? `HTTP ${res.status}` };
-    }
-    return {};
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Error desconocido' };
-  }
-}
-
-/* ------------------------------------------------------------------ */
 /* Objective context metrics (visual-only, RN-O10)                      */
 /* ------------------------------------------------------------------ */
 
@@ -666,9 +395,8 @@ export interface AiError {
 
 export async function draftAiAction(input: {
   orgId: string;
-  entityType: 'objective' | 'key_result';
+  entityType: 'objective';
   hint: string;
-  objectiveContext?: string;
 }): Promise<{ error?: AiError; text?: string }> {
   try {
     const { orgId, ...body } = input;
@@ -692,7 +420,7 @@ export async function draftAiAction(input: {
 
 export async function validateAiAction(input: {
   orgId: string;
-  entityType: 'objective' | 'key_result';
+  entityType: 'objective';
   text: string;
 }): Promise<{ error?: AiError; feedback?: SmartFeedback }> {
   try {

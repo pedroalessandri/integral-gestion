@@ -20,8 +20,8 @@ const KNOWN_MODULES: KnownModule[] = [
   },
   {
     key: 'indicadores-okr',
-    label: 'Indicadores en OKRs',
-    description: 'Vincular indicadores a Key Results con progreso automático.',
+    label: 'Indicadores de contexto en objetivos',
+    description: 'Mostrar indicadores de contexto (solo visuales, no entran en el avance) en la ficha de cada objetivo.',
     requires: 'indicadores-gestion',
   },
 ];

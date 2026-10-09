@@ -15,6 +15,23 @@ Formato:
 
 ---
 
+## 2026-10-09 · C24 · frontend-dev · feature/plan-f10-contract
+- Hecho:
+  - `apps/web` sin KR: se borraron 11 componentes (crear/editar KR, vínculo métrica↔KR, progreso automático de KR, rebalanceo de pesos, menú de KR, `gantt-chart` viejo, `progress-ring` del número único y dos componentes de tareas huérfanos). La ficha de objetivo queda con encabezado de dos lecturas y pestañas Indicadores / Proyectos / Contexto (SPEC §5.4); el listado muestra dos barras rotuladas (Resultado / Gestión) más los semáforos por lectura; `/metrics` sin la columna y el filtro de vínculos con KR.
+  - Unidad obligatoria al crear un objetivo (selector sin opción vacía, `required`, validación antes de enviar).
+  - Copiloto IA: los paneles llaman siempre con `entityType: 'objective'`, sin `objectiveContext`.
+  - Copy sin "KR"/"Key Result" en la UI y en `lib/labels.ts` (términos del glosario). El módulo `indicadores-okr` conserva la key y en la UI se llama "Indicadores de contexto en objetivos".
+  - `TODO.md`: nuevo "[F] Adaptar copiloto de IA al modelo de planificación" (media). `AGENTS.md`: la tarea siempre pertenece a un proyecto y ejemplos sin KR. `docs/tech-debt.md`: el `gantt-chart` huérfano queda resuelto.
+- Commit: este commit (`refactor(web): limpieza del front sin KR`)
+- Verificación: `turbo run typecheck --force` 7/7; `turbo run lint --force` 0 errores (warnings preexistentes); `turbo run test --force` 12/12 (api 490, web 123); `pnpm --filter web build` OK; `grep` de KR en `apps/web/src` → 0. No se probó contra la API levantada: lo cubre el smoke grande de Pedro.
+- Pendiente / desvíos:
+  - Editar un objetivo desde el listado: `ObjectiveSummaryDto` no trae `description`, y antes se mandaba `null` y se borraba. Ahora solo se envía si el usuario la cambia; el diálogo abre con la descripción vacía.
+  - Quedan sin uso `restoreObjectiveAction`, `restoreTaskAction` y `listObjectiveContextMetricsAction` (ya lo estaban antes).
+- Preguntas abiertas:
+  - Con `orgUnitId` NOT NULL, el nodo "Sin unidad" del árbol ya no puede tener objetivos. ¿Se saca?
+  - ¿Sumar `description` a `ObjectiveSummaryDto` para editar desde el listado con el valor actual?
+- Fin de la Fase 10: PR abierto. Smoke grande de Pedro (regresión completa de las Fases 2–10).
+
 ## 2026-10-09 · C23 · backend-dev · feature/plan-f10-contract
 - Hecho (contract, ADR-0009 D6 y D9):
   - **Migración** `20261009000001_contract_drop_key_result` (a mano): primero verifica que no haya `okr.objective.org_unit_id` ni `okr.task.project_id` NULL (vivos o borrados) y si los hay aborta con `RAISE EXCEPTION` y los conteos, sin borrar datos. Después: drop de `metrics.metric_kr_link`, de `okr.task.key_result_id` (con sus CHECK, índices y FK), de `okr.key_result`, de `okr.objective.progress_cached_bp` y de `legacy_key_result_id` (+ índices parciales) en `okr.project` y `metrics.objective_indicator`; `objective.org_unit_id` y `task.project_id` NOT NULL. No toca `audit.event`.

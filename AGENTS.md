@@ -7,15 +7,15 @@ Convenciones compartidas y gotchas del dominio de planificación (módulo técni
 | Elemento | Convención | Ejemplo |
 |---|---|---|
 | Archivos (ts/tsx) | kebab-case | `cascade-calculator.ts`, `objective-card.tsx` |
-| Clases | PascalCase | `ObjectiveService`, `KeyResultRepository` |
+| Clases | PascalCase | `ObjectiveService`, `ProjectRepository` |
 | Componentes React | PascalCase + `.tsx` | `ObjectiveCard`, `CascadeTree` |
 | Funciones/variables | camelCase | `calculateObjectiveProgress` |
 | Enums | PascalCase singular | `TaskStatus`, `ObjectivePeriod` |
 | Tipos/interfaces | PascalCase, sin prefijo `I` | `Objective`, `CascadeResult` |
-| Tablas DB | snake_case plural | `objectives`, `key_results`, `tasks` |
+| Tablas DB | snake_case plural | `objectives`, `projects`, `tasks` |
 | Columnas DB | snake_case | `organization_id`, `weight_bp` |
 | Schemas Postgres | snake_case | `core`, `auth`, `okr`, `audit` |
-| Endpoints REST | kebab-case | `/api/v1/objectives/:id/key-results` |
+| Endpoints REST | kebab-case | `/api/v1/okr/objectives/:id/indicators` |
 | Variables de entorno | SCREAMING_SNAKE_CASE | `AUTH0_DOMAIN`, `DATABASE_URL` |
 | Branches git | `tipo/scope-descripcion` | `feat/okr-cascade`, `fix/auth-role-mapping` |
 
@@ -97,7 +97,7 @@ Todo lleva `organization_id`. Un `Objective` pertenece a una `OrgUnit` de tipo `
 - **Gestión** (`objective.execution_progress_cached_bp`): promedio de sus proyectos. Proyecto `from_tasks` = promedio de sus tareas; `from_indicator` = progreso de su indicador fuente.
 - Cada lectura tiene su desvío contra lo esperado (curva del indicador / avance planificado por fechas) y semáforo (umbrales default 10 y 25 puntos).
 - **Prohibido fusionarlas en un número único** (API, DB, UI). Agregación por unidad, eje y plan: promedio simple de objetivos, por lectura.
-- El flujo indicador → avance automático del KR se elimina. La cascada pura vive en `packages/okr-domain` (sin Prisma, sin Nest), testeada con Vitest + fast-check.
+- El flujo indicador → avance automático del KR ya no existe (el KR se eliminó en el contract, F10). La cascada pura vive en `packages/okr-domain` (sin Prisma, sin Nest), testeada con Vitest + fast-check.
 - Dentro de `okr` el recálculo es síncrono en la misma transacción; lo que cruza a `metrics` (o viene de ahí) va por eventos post-commit (consistencia eventual).
 
 ### Vínculo gestión ↔ indicador (`ObjectiveIndicator.linkMode`)
@@ -132,12 +132,12 @@ Todo lleva `organization_id`. Un `Objective` pertenece a una `OrgUnit` de tipo `
 
 ## Gotchas conocidos del dominio
 
-1. **Redondeo**: redondear solo al render. Si redondeás en cada nivel (task → KR → objective) acumulás error. Guardás `Decimal`, mostrás con `.toFixed(1)` o `.toFixed(2)` según contexto.
+1. **Redondeo**: redondear solo al render. Si redondeás en cada nivel (tarea → proyecto → objetivo) acumulás error. Guardás `Decimal`, mostrás con `.toFixed(1)` o `.toFixed(2)` según contexto.
 2. **Pesos que no suman 100 o grupo mixto**: es un error de validación del lado del service, no una "corrección silenciosa". El usuario verá el error explícito en la UI.
 3. **Edición de pesos con progreso existente**: cambiar el peso de un indicador/proyecto/tarea **no** altera su `progress`, pero sí cambia el progreso del padre. Hay que recalcular la rama hacia arriba.
 4. **Borrado lógico vs físico**: Objetivos/Proyectos/Tareas/Indicadores/Unidades usan soft-delete (`deleted_at`). Las queries de negocio filtran `deleted_at IS NULL`. El audit log referencia IDs que pueden estar soft-deleted.
 5. **Concurrencia**: dos usuarios actualizando tareas del mismo proyecto al mismo tiempo — usar transacción con recálculo atómico del proyecto y el objetivo. Considerar `SELECT ... FOR UPDATE` sobre el proyecto padre.
-6. **Task sin proyecto**: no existe (durante la transición puede colgar de un KR legacy). Si aparece el caso de uso de "tarea libre", es otro feature, no este.
+6. **Task sin proyecto**: no existe; `Task.projectId` es obligatorio (NOT NULL desde el contract). Toda tarea pertenece a un proyecto. Si aparece el caso de uso de "tarea libre", es otro feature, no este.
 7. **Períodos abiertos/cerrados**: un período cerrado no admite edición de avance. Regla de negocio; validar en service.
 8. **Timezone**: persistir en UTC; renderizar en `America/Argentina/Buenos_Aires`. Fechas de período se alinean al calendario local.
 9. **Currency/locale**: locale `es-AR`. Decimales con coma en UI, punto en persistencia y APIs.

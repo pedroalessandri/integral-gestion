@@ -154,3 +154,4 @@
 - **Posible solución**: borrarlo en C24 (limpieza del front), junto con `GET objectives/gantt` y `ObjectiveGanttDto` en C23.
 - **Prioridad**: baja (se resuelve en la Fase 10).
 - **Actualización (C23)**: `GET objectives/gantt` y `ObjectiveGanttDto`/`KeyResultGanttDto` ya se borraron del backend y shared-types; queda borrar `gantt-chart.tsx` en C24 (hoy rompe el typecheck de web).
+- **Actualización (C24)**: resuelto. `components/gantt/gantt-chart.tsx` se borró junto con el resto de los componentes de KR; `gantt-row` y `gantt-bar` siguen en uso por la vista ejecutiva y el Gantt de proyecto.

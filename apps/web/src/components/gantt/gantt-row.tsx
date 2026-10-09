@@ -8,9 +8,9 @@ export interface GanttRowProps {
   title: string;
   href: string;
   status: ProgressStatus | TaskStatus;
-  /** For Objectives and KRs: progressCachedBp. For Tasks: progressBp. Both 0..10000. */
+  /** For Objectives and Projects: the progress cache. For Tasks: progressBp. Both 0..10000. */
   progressBp: number;
-  /** Left padding in pixels. Objective: 0, KR: 24, Task: 48. */
+  /** Left padding in pixels. Objective: 0, Project: 24, Task: 48. */
   indentPx: number;
   /** Is this an Objective row? Determines background color. */
   isObjectiveRow: boolean;
@@ -30,7 +30,7 @@ export interface GanttRowProps {
 
   /**
    * When present, renders a chevron button before the title so the user can
-   * collapse/expand the row's children (KRs + tasks). Only used on objective
+   * collapse/expand the row's children (projects + tasks). Only used on objective
    * rows from the executive view.
    */
   collapsible?: {
