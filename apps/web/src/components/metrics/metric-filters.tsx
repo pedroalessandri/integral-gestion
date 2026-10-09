@@ -4,7 +4,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import type { MetricFrequency } from '@gestion-publica/shared-types/metrics';
 import { FREQUENCY_LABELS, isMetricFrequency } from './format';
 
-type FilterKey = 'all' | MetricFrequency | 'linked';
+type FilterKey = 'all' | MetricFrequency;
 
 const CHIPS: Array<{ key: FilterKey; label: string }> = [
   { key: 'all', label: 'Todos' },
@@ -14,12 +14,10 @@ const CHIPS: Array<{ key: FilterKey; label: string }> = [
   { key: 'quarterly', label: FREQUENCY_LABELS.quarterly },
   { key: 'semiannual', label: FREQUENCY_LABELS.semiannual },
   { key: 'annual', label: FREQUENCY_LABELS.annual },
-  { key: 'linked', label: 'Vinculados a OKRs' },
 ];
 
 /** Reads the active filter from the current searchParams. */
-function activeFilter(frequency: string | null, linked: string | null): FilterKey {
-  if (linked === 'okr') return 'linked';
+function activeFilter(frequency: string | null): FilterKey {
   return isMetricFrequency(frequency) ? frequency : 'all';
 }
 
@@ -27,14 +25,12 @@ export function MetricFilters() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const current = activeFilter(searchParams.get('frequency'), searchParams.get('linked'));
+  const current = activeFilter(searchParams.get('frequency'));
 
   function select(key: FilterKey) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('frequency');
-    params.delete('linked');
-    if (key === 'linked') params.set('linked', 'okr');
-    else if (key !== 'all') params.set('frequency', key);
+    if (key !== 'all') params.set('frequency', key);
     const qs = params.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
   }

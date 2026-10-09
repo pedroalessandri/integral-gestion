@@ -13,7 +13,7 @@ import type { AuthContext } from '@gestion-publica/shared-types/auth';
 export interface OrgUnitScope {
   /**
    * El actor puede escribir en `orgUnitId`: alcance `null`/superadmin (toda la org), o la unidad del actor
-   * y sus descendientes. `orgUnitId = null` (entidad sin unidad asignada) solo lo pasa el alcance `null`.
+   * y sus descendientes. `orgUnitId = null` (sin unidad) solo lo pasa el alcance `null`.
    */
   assertCanWriteInUnit(authContext: AuthContext, orgUnitId: string | null): Promise<void>;
   /** El actor tiene alcance `null` (toda la org) o es superadmin. N1, N2 y árbol de unidades (RN-P19). */

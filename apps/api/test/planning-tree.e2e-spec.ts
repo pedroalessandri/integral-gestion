@@ -208,7 +208,6 @@ describe.skipIf(!process.env['DATABASE_URL'])('C21 — árbol de planificación 
     expect(byId.get(ctx.unitB)?.aggregate.objectivesCount).toBe(2);
     expect(byId.get(ctx.unitEmpty)?.aggregate.objectivesCount).toBe(0);
     expect(byId.get(ctx.unitEmpty)?.aggregate.result.progressBp).toBeNull();
-    expect(tree.withoutUnit.aggregate.objectivesCount).toBe(0);
 
     // Filtros.
     const byAxis = (

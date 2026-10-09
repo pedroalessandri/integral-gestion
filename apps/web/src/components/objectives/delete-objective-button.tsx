@@ -51,7 +51,7 @@ export function DeleteObjectiveButton({ orgId, objectiveId, objectiveTitle }: Pr
         <AlertDialogHeader>
           <AlertDialogTitle>¿Eliminar objetivo?</AlertDialogTitle>
           <AlertDialogDescription>
-            El objetivo <strong>{objectiveTitle}</strong> y todos sus Resultados Clave y tareas se moverán a la
+            El objetivo <strong>{objectiveTitle}</strong> y todos sus indicadores, proyectos y tareas se moverán a la
             papelera. Esta acción se puede revertir desde la papelera de la organización.
           </AlertDialogDescription>
         </AlertDialogHeader>

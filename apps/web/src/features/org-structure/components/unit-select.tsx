@@ -8,12 +8,10 @@ interface Props {
   orgId: string;
   value: string | null;
   onChange: (unitId: string | null) => void;
-  /** false cuando el objetivo ya tiene unidad: la API no permite dejarlo sin unidad. */
-  allowEmpty?: boolean;
 }
 
-/** Selector de unidad para objetivos: solo ministerios y áreas (la central no admite objetivos). */
-export function UnitSelect({ id, orgId, value, onChange, allowEmpty = true }: Props) {
+/** Selector de unidad para objetivos (obligatoria, RN-P3): solo ministerios y áreas (la central no admite objetivos). */
+export function UnitSelect({ id, orgId, value, onChange }: Props) {
   const { units, loading, error } = useAssignableUnits(orgId);
 
   return (
@@ -23,9 +21,10 @@ export function UnitSelect({ id, orgId, value, onChange, allowEmpty = true }: Pr
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value || null)}
         disabled={loading}
+        required
         className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm disabled:opacity-50"
       >
-        {allowEmpty && <option value="">— Sin {LABELS.unit.singular.toLowerCase()} —</option>}
+        <option value="">— {LABELS.unit.choose} —</option>
         {units.map((u) => (
           <option key={u.node.id} value={u.node.id}>
             {'— '.repeat(Math.max(0, u.depth - 2))}

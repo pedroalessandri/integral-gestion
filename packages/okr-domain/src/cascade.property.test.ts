@@ -1,7 +1,7 @@
 import { describe, it } from 'vitest';
 import * as fc from 'fast-check';
-import { computeKrProgress, computeObjectiveProgress } from './cascade';
-import type { TaskInput } from './types';
+import { computeProjectProgress, computeExecutionProgress } from './cascade';
+import type { ProjectTaskInput } from './types';
 
 /**
  * Generates an array of N integers that sum to exactly `total`,
@@ -44,7 +44,7 @@ const validTasksArb = fc
         })
         .map((progresses) =>
           weights.map(
-            (w, i): TaskInput => ({
+            (w, i): ProjectTaskInput => ({
               weightBp: w,
               // biome-ignore: progressBp guaranteed by generator
               progressBp: progresses[i] ?? 0,
@@ -55,7 +55,7 @@ const validTasksArb = fc
   );
 
 /**
- * Arbitrary for a valid KR-level input: N krs with weights summing to 10000.
+ * Arbitrary for a valid project-level input: N items with weights summing to 10000.
  */
 const validKrsArb = fc
   .integer({ min: 1, max: 8 })
@@ -75,32 +75,32 @@ const validKrsArb = fc
     ),
   );
 
-describe('computeKrProgress property tests', () => {
-  it('all tasks at 100% → KR at 100% (10000 bp)', () => {
+describe('computeProjectProgress property tests', () => {
+  it('all tasks at 100% → project at 100% (10000 bp)', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 8 }).chain((n) =>
           exactSumParts(10_000, n).map((weights) =>
-            weights.map((w): TaskInput => ({ weightBp: w, progressBp: 10_000 })),
+            weights.map((w): ProjectTaskInput => ({ weightBp: w, progressBp: 10_000 })),
           ),
         ),
         (tasks) => {
-          return computeKrProgress(tasks) === 10_000;
+          return computeProjectProgress(tasks) === 10_000;
         },
       ),
     );
   });
 
-  it('all tasks at 0% → KR at 0% (0 bp)', () => {
+  it('all tasks at 0% → project at 0% (0 bp)', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 8 }).chain((n) =>
           exactSumParts(10_000, n).map((weights) =>
-            weights.map((w): TaskInput => ({ weightBp: w, progressBp: 0 })),
+            weights.map((w): ProjectTaskInput => ({ weightBp: w, progressBp: 0 })),
           ),
         ),
         (tasks) => {
-          return computeKrProgress(tasks) === 0;
+          return computeProjectProgress(tasks) === 0;
         },
       ),
     );
@@ -109,7 +109,7 @@ describe('computeKrProgress property tests', () => {
   it('result is always in [0, 10000] for any valid input', () => {
     fc.assert(
       fc.property(validTasksArb, (tasks) => {
-        const result = computeKrProgress(tasks);
+        const result = computeProjectProgress(tasks);
         return result >= 0 && result <= 10_000;
       }),
     );
@@ -123,7 +123,7 @@ describe('computeKrProgress property tests', () => {
         fc.integer({ min: 1, max: 8 }).chain((n) =>
           exactSumParts(10_000, n).chain((weights) =>
             fc.integer({ min: 0, max: 10_000 }).map((progress) => ({
-              tasks: weights.map((w): TaskInput => ({
+              tasks: weights.map((w): ProjectTaskInput => ({
                 weightBp: w,
                 progressBp: progress,
               })),
@@ -132,7 +132,7 @@ describe('computeKrProgress property tests', () => {
           ),
         ),
         ({ tasks, progress }) => {
-          const result = computeKrProgress(tasks);
+          const result = computeProjectProgress(tasks);
           // When all progress values are identical, the weighted average = that value exactly.
           return result === progress;
         },
@@ -141,7 +141,7 @@ describe('computeKrProgress property tests', () => {
   });
 });
 
-describe('computeObjectiveProgress property tests', () => {
+describe('computeExecutionProgress property tests', () => {
   it('all KRs at 100% → Objective at 100%', () => {
     fc.assert(
       fc.property(
@@ -151,7 +151,7 @@ describe('computeObjectiveProgress property tests', () => {
           ),
         ),
         (krs) => {
-          return computeObjectiveProgress(krs) === 10_000;
+          return computeExecutionProgress(krs) === 10_000;
         },
       ),
     );
@@ -166,7 +166,7 @@ describe('computeObjectiveProgress property tests', () => {
           ),
         ),
         (krs) => {
-          return computeObjectiveProgress(krs) === 0;
+          return computeExecutionProgress(krs) === 0;
         },
       ),
     );
@@ -175,7 +175,7 @@ describe('computeObjectiveProgress property tests', () => {
   it('result is always in [0, 10000] for any valid input', () => {
     fc.assert(
       fc.property(validKrsArb, (krs) => {
-        const result = computeObjectiveProgress(krs);
+        const result = computeExecutionProgress(krs);
         return result >= 0 && result <= 10_000;
       }),
     );

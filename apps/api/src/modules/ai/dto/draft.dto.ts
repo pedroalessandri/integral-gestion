@@ -1,16 +1,12 @@
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class DraftDto {
-  @IsIn(['objective', 'key_result'])
-  entityType!: 'objective' | 'key_result';
+  /** El copiloto solo asiste sobre objetivos (ADR-0009 D9). */
+  @IsIn(['objective'])
+  entityType!: 'objective';
 
   @IsString()
   @MinLength(5, { message: 'El pedido debe tener al menos 5 caracteres.' })
   @MaxLength(500)
   hint!: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  objectiveContext?: string;
 }

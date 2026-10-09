@@ -8,8 +8,8 @@
 export interface ObjectiveRef {
   id: string;
   periodId: string;
-  /** Unidad del objetivo (RN-P20): `null` si todavía no tiene unidad asignada. */
-  orgUnitId: string | null;
+  /** Unidad del objetivo (RN-P20): siempre tiene unidad (NOT NULL desde F10). */
+  orgUnitId: string;
   period: { id: string; code: string; status: 'open' | 'closed' | 'future' };
 }
 

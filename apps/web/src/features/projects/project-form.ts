@@ -33,7 +33,7 @@ export function isDateRangeValid(startsAt: string, endsAt: string): boolean {
 
 export function projectToFormValues(
   project: ProjectDetailDto | null,
-  objective: { orgUnitId: string | null; periodStartsAt: string; periodEndsAt: string },
+  objective: { orgUnitId: string; periodStartsAt: string; periodEndsAt: string },
 ): ProjectFormValues {
   return {
     title: project?.title ?? '',

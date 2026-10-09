@@ -7,28 +7,12 @@ import {
 } from '@nestjs/common';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
 import type {
-  ObjectiveCascadeDto,
   ObjectiveDetailDto,
-  ObjectiveGanttDto,
   ObjectiveSummaryDto,
-  OwnerInCascadeDto,
   OwnerSummaryDto,
   PeriodStatusDto,
 } from '@gestion-publica/shared-types/okr';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
-import type { MetricKrLinkDto } from '@gestion-publica/shared-types/metrics';
-import {
-  computeKrProgress,
-  computeObjectiveProgress,
-  validateWeightSumInvariant,
-  computeProgressStatus,
-  computeTaskStatus,
-} from '@gestion-publica/okr-domain';
-import {
-  computeAutomaticKrProgressBp,
-  formatDecimal4,
-  parseDecimal4,
-} from '@gestion-publica/metrics-domain';
 import {
   ACTIVE_AXIS_LOOKUP,
   ORG_UNIT_LOOKUP,
@@ -43,7 +27,6 @@ import { tenantContextStorage } from '../../auth/context/tenant-context-storage.
 import { PeriodService, MemberService } from '../../core/index.js';
 import type { CreateObjectiveDto } from '../dto/create-objective.dto.js';
 import type { UpdateObjectiveDto } from '../dto/update-objective.dto.js';
-import type { RebalanceKrWeightsDto } from '../dto/rebalance-kr-weights.dto.js';
 
 type ObjectiveRow = {
   id: string;
@@ -52,60 +35,29 @@ type ObjectiveRow = {
   title: string;
   description: string | null;
   ownerUserId: string | null;
-  orgUnitId: string | null;
+  orgUnitId: string;
   axisId: string | null;
   owner: { id: string; displayName: string; email: string } | null;
-  progressCachedBp: number;
   resultProgressCachedBp: number;
   executionProgressCachedBp: number;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   period: { id: string; code: string; status: string; startsAt?: Date; endsAt?: Date };
-  _count: { keyResults: number };
-  /** Derived from KR dates — only populated in cascade DTO, null otherwise. */
-  startsAt?: string | null;
-  /** Derived from KR dates — only populated in cascade DTO, null otherwise. */
-  endsAt?: string | null;
-};
-
-type KeyResultRow = {
-  id: string;
-  objectiveId: string;
-  organizationId: string;
-  title: string;
-  description: string | null;
-  ownerUserId: string | null;
-  owner: { id: string; displayName: string } | null;
-  weightBp: number;
-  progressCachedBp: number;
-  progressMode: string;
-  deletedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  tasks: TaskRow[];
-};
-
-type TaskRow = {
-  id: string;
-  keyResultId: string;
-  organizationId: string;
-  title: string;
-  description: string | null;
-  ownerUserId: string | null;
-  owner: { id: string; displayName: string } | null;
-  weightBp: number;
-  progressBp: number;
-  startsAt: Date;
-  endsAt: Date;
-  deletedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+  /** Proyectos vivos (solo sus fechas): de ahí se derivan `startsAt`/`endsAt` del objetivo. */
+  projects: Array<{ startsAt: Date; endsAt: Date }>;
 };
 
 /** Prisma include for owner on Objective rows. */
 const OBJECTIVE_OWNER_INCLUDE = {
   owner: { select: { id: true, displayName: true, email: true } },
+} as const;
+
+/** Include común de las lecturas: período, responsable y fechas de los proyectos vivos. */
+const OBJECTIVE_READ_INCLUDE = {
+  period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
+  ...OBJECTIVE_OWNER_INCLUDE,
+  projects: { where: { deletedAt: null }, select: { startsAt: true, endsAt: true } },
 } as const;
 
 @Injectable()
@@ -154,11 +106,7 @@ export class ObjectiveService {
         deletedAt: null,
         ...(periodId && { periodId }),
       },
-      include: {
-        period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
-        _count: { select: { keyResults: { where: { deletedAt: null } } } },
-        ...OBJECTIVE_OWNER_INCLUDE,
-      },
+      include: OBJECTIVE_READ_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -168,11 +116,7 @@ export class ObjectiveService {
   async getById(id: string, orgId: string): Promise<ObjectiveDetailDto> {
     const objective = await this.prisma.scoped.objective.findFirst({
       where: { id, organizationId: orgId, deletedAt: null },
-      include: {
-        period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
-        _count: { select: { keyResults: { where: { deletedAt: null } } } },
-        ...OBJECTIVE_OWNER_INCLUDE,
-      },
+      include: OBJECTIVE_READ_INCLUDE,
     });
 
     if (!objective) {
@@ -187,8 +131,8 @@ export class ObjectiveService {
     dto: CreateObjectiveDto,
     authContext: AuthContext,
   ): Promise<ObjectiveDetailDto> {
-    // RN-P20: se escribe solo en la unidad propia y descendientes. Sin unidad (null) solo alcance central.
-    await this.orgUnitScope.assertCanWriteInUnit(authContext, dto.orgUnitId ?? null);
+    // RN-P20: se escribe solo en la unidad propia y descendientes.
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, dto.orgUnitId);
 
     const period = await this.periodService.getCurrentOpenPeriod(orgId);
     if (!period) {
@@ -210,7 +154,7 @@ export class ObjectiveService {
       }
     }
 
-    if (dto.orgUnitId !== undefined) await this.assertOrgUnitAssignable(orgId, dto.orgUnitId);
+    await this.assertOrgUnitAssignable(orgId, dto.orgUnitId);
     if (dto.axisId !== undefined) await this.assertAxisAssignable(orgId, dto.axisId);
 
     return tenantContextStorage.run(authContext, () =>
@@ -222,14 +166,10 @@ export class ObjectiveService {
             title: dto.title,
             description: dto.description ?? null,
             ownerUserId: resolvedOwnerUserId ?? null,
-            orgUnitId: dto.orgUnitId ?? null,
+            orgUnitId: dto.orgUnitId,
             axisId: dto.axisId ?? null,
           },
-          include: {
-            period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
-            _count: { select: { keyResults: { where: { deletedAt: null } } } },
-            ...OBJECTIVE_OWNER_INCLUDE,
-          },
+          include: OBJECTIVE_READ_INCLUDE,
         });
 
         await this.auditEmitter.emit({
@@ -272,7 +212,7 @@ export class ObjectiveService {
     }
 
     // RN-P20: hay que poder escribir en la unidad actual y, si se mueve, también en la destino.
-    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { orgUnitId: string | null }).orgUnitId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { orgUnitId: string }).orgUnitId);
     if (dto.orgUnitId !== undefined && dto.orgUnitId !== (existing as ObjectiveRow).orgUnitId) {
       await this.orgUnitScope.assertCanWriteInUnit(authContext, dto.orgUnitId);
     }
@@ -309,11 +249,7 @@ export class ObjectiveService {
             ...(dto.orgUnitId !== undefined && { orgUnitId: dto.orgUnitId }),
             ...(dto.axisId !== undefined && { axisId: dto.axisId }),
           },
-          include: {
-            period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
-            _count: { select: { keyResults: { where: { deletedAt: null } } } },
-            ...OBJECTIVE_OWNER_INCLUDE,
-          },
+          include: OBJECTIVE_READ_INCLUDE,
         });
 
         // ── Owner-specific audit event ────────────────────────────────────────
@@ -387,21 +323,21 @@ export class ObjectiveService {
       where: { id, organizationId: orgId, deletedAt: null },
       include: {
         period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
-        _count: { select: { keyResults: { where: { deletedAt: null } } } },
+        _count: { select: { projects: { where: { deletedAt: null } } } },
       },
     });
     if (!existing) {
       throw new NotFoundException(`Objective ${id} not found`);
     }
 
-    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { orgUnitId: string | null }).orgUnitId);
+    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { orgUnitId: string }).orgUnitId);
 
     assertPeriodOpen((existing as { period: { id: string; status: 'open' | 'closed' | 'future'; code: string } }).period);
 
-    const count = (existing as { _count: { keyResults: number } })._count.keyResults;
+    const count = (existing as { _count: { projects: number } })._count.projects;
     if (count > 0) {
       throw new ConflictException(
-        `No se puede eliminar el objetivo: tiene ${count} Key Result(s) activo(s). Eliminalos primero.`,
+        `No se puede eliminar el objetivo: tiene ${count} proyecto(s) activo(s). Eliminalos primero.`,
       );
     }
 
@@ -425,252 +361,6 @@ export class ObjectiveService {
     );
   }
 
-  async getCascade(id: string, orgId: string): Promise<ObjectiveCascadeDto> {
-    const objective = await this.prisma.scoped.objective.findFirst({
-      where: { id, organizationId: orgId, deletedAt: null },
-      include: {
-        period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
-        _count: { select: { keyResults: { where: { deletedAt: null } } } },
-        ...OBJECTIVE_OWNER_INCLUDE,
-        keyResults: {
-          where: { deletedAt: null },
-          include: {
-            owner: { select: { id: true, displayName: true } },
-            tasks: {
-              where: { deletedAt: null },
-              include: {
-                owner: { select: { id: true, displayName: true } },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!objective) {
-      throw new NotFoundException(`Objective ${id} not found`);
-    }
-
-    const obj = objective as ObjectiveRow & { keyResults: KeyResultRow[] };
-    return this.buildCascadeDto(obj);
-  }
-
-  async listGantt(orgId: string, periodId: string): Promise<ObjectiveGanttDto[]> {
-    const objectives = await this.prisma.scoped.objective.findMany({
-      where: { organizationId: orgId, periodId, deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        keyResults: {
-          where: { deletedAt: null },
-          include: {
-            tasks: { where: { deletedAt: null } },
-          },
-        },
-      },
-    });
-
-    type GanttTaskRow = {
-      id: string;
-      title: string;
-      progressBp: number;
-      startsAt: Date;
-      endsAt: Date;
-    };
-    type GanttObjectiveRow = {
-      id: string;
-      title: string;
-      progressCachedBp: number;
-      keyResults: Array<{
-        id: string;
-        title: string;
-        progressCachedBp: number;
-        tasks: GanttTaskRow[];
-      }>;
-    };
-
-    return (objectives as GanttObjectiveRow[]).map(
-      (obj) => {
-        const keyResults = obj.keyResults.map((kr) => {
-          // Derive KR-level dates from tasks
-          let krStartsAt: string | null = null;
-          let krEndsAt: string | null = null;
-          if (kr.tasks.length > 0) {
-            const minStartMs = Math.min(...kr.tasks.map((t) => t.startsAt.getTime()));
-            const maxEndMs = Math.max(...kr.tasks.map((t) => t.endsAt.getTime()));
-            krStartsAt = new Date(minStartMs).toISOString();
-            krEndsAt = new Date(maxEndMs).toISOString();
-          }
-
-          const tasks = kr.tasks.map((t) => ({
-            id: t.id,
-            title: t.title,
-            status: computeTaskStatus(t.progressBp, t.endsAt),
-            progressBp: t.progressBp,
-            startsAt: t.startsAt.toISOString(),
-            endsAt: t.endsAt.toISOString(),
-          }));
-
-          return {
-            id: kr.id,
-            title: kr.title,
-            status: computeProgressStatus(kr.progressCachedBp),
-            progressCachedBp: kr.progressCachedBp,
-            startsAt: krStartsAt,
-            endsAt: krEndsAt,
-            tasks,
-          };
-        });
-
-        // Derive Objective-level dates from KRs that have dates
-        const krsWithDates = keyResults.filter(
-          (kr) => kr.startsAt !== null && kr.endsAt !== null,
-        );
-        let objectiveStartsAt: string | null = null;
-        let objectiveEndsAt: string | null = null;
-        if (krsWithDates.length > 0) {
-          const minStartMs = Math.min(
-            ...krsWithDates.map((kr) => new Date(kr.startsAt as string).getTime()),
-          );
-          const maxEndMs = Math.max(
-            ...krsWithDates.map((kr) => new Date(kr.endsAt as string).getTime()),
-          );
-          objectiveStartsAt = new Date(minStartMs).toISOString();
-          objectiveEndsAt = new Date(maxEndMs).toISOString();
-        }
-
-        return {
-          id: obj.id,
-          title: obj.title,
-          status: computeProgressStatus(obj.progressCachedBp),
-          progressCachedBp: obj.progressCachedBp,
-          startsAt: objectiveStartsAt,
-          endsAt: objectiveEndsAt,
-          keyResults,
-        };
-      },
-    );
-  }
-
-  async rebalanceKrWeights(
-    id: string,
-    orgId: string,
-    dto: RebalanceKrWeightsDto,
-    authContext: AuthContext,
-  ): Promise<ObjectiveCascadeDto> {
-    const validation = validateWeightSumInvariant(
-      dto.items.map((i) => ({ weightBp: i.weightBp })),
-    );
-    if (!validation.ok) {
-      throw new ConflictException(
-        `Los pesos deben sumar exactamente 100%. Se recibió ${(validation.actual / 100).toFixed(1)}%.`,
-      );
-    }
-
-    const existing = await this.prisma.scoped.objective.findFirst({
-      where: { id, organizationId: orgId, deletedAt: null },
-      include: {
-        period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
-        keyResults: { where: { deletedAt: null }, select: { id: true, weightBp: true } },
-      },
-    });
-    if (!existing) {
-      throw new NotFoundException(`Objective ${id} not found`);
-    }
-
-    await this.orgUnitScope.assertCanWriteInUnit(authContext, (existing as { orgUnitId: string | null }).orgUnitId);
-
-    assertPeriodOpen((existing as { period: { id: string; status: 'open' | 'closed' | 'future'; code: string } }).period);
-
-    const activeKrIds = new Set(
-      (existing as { keyResults: Array<{ id: string }> }).keyResults.map((kr) => kr.id),
-    );
-    for (const item of dto.items) {
-      if (!activeKrIds.has(item.krId)) {
-        throw new ConflictException(
-          `El Key Result ${item.krId} no es un KR activo del objetivo ${id}.`,
-        );
-      }
-    }
-    if (dto.items.length !== activeKrIds.size) {
-      throw new ConflictException(
-        `El rebalanceo debe incluir TODOS los KRs activos. Se esperaban ${activeKrIds.size} ítems, se recibieron ${dto.items.length}.`,
-      );
-    }
-
-    return tenantContextStorage.run(authContext, () =>
-      this.prisma.runInTransaction(async (tx) => {
-        const beforeWeights: Record<string, number> = {};
-
-        for (const item of dto.items) {
-          const kr = (existing as { keyResults: Array<{ id: string; weightBp: number }> }).keyResults.find(
-            (k) => k.id === item.krId,
-          );
-          if (kr) beforeWeights[item.krId] = kr.weightBp;
-
-          await tx.keyResult.update({
-            where: { id: item.krId },
-            data: { weightBp: item.weightBp },
-          });
-        }
-
-        await this.auditEmitter.emit({
-          action: 'objective.rebalanced',
-          entityType: 'okr.objective',
-          entityId: id,
-          diff: {
-            before: {
-              weights: dto.items.map((item) => ({
-                krId: item.krId,
-                weightBp: beforeWeights[item.krId] ?? item.weightBp,
-              })),
-            },
-            after: {
-              weights: dto.items.map((item) => ({
-                krId: item.krId,
-                weightBp: item.weightBp,
-              })),
-            },
-          },
-        });
-
-        // Return fresh cascade after rebalance
-        const updated = await tx.objective.findUnique({
-          where: { id },
-          include: {
-            period: { select: { id: true, code: true, status: true, startsAt: true, endsAt: true } },
-            _count: { select: { keyResults: { where: { deletedAt: null } } } },
-            ...OBJECTIVE_OWNER_INCLUDE,
-            keyResults: {
-              where: { deletedAt: null },
-              include: {
-                owner: { select: { id: true, displayName: true } },
-                tasks: {
-                  where: { deletedAt: null },
-                  include: {
-                    owner: { select: { id: true, displayName: true } },
-                  },
-                },
-              },
-            },
-          },
-        });
-
-        if (!updated) {
-          throw new NotFoundException(`Objective ${id} not found after rebalance`);
-        }
-
-        return this.buildCascadeDto(updated as ObjectiveRow & { keyResults: KeyResultRow[] });
-      }),
-    );
-  }
-
-  private toOwnerDto(
-    owner: { id: string; displayName: string } | null,
-  ): OwnerInCascadeDto | null {
-    if (!owner) return null;
-    return { id: owner.id, displayName: owner.displayName };
-  }
-
   private toOwnerSummaryDto(
     owner: { id: string; displayName: string; email: string } | null,
   ): OwnerSummaryDto | null {
@@ -678,223 +368,22 @@ export class ObjectiveService {
     return { id: owner.id, displayName: owner.displayName, email: owner.email };
   }
 
-  private async buildCascadeDto(
-    obj: ObjectiveRow & { keyResults: KeyResultRow[] },
-  ): Promise<ObjectiveCascadeDto> {
-    // Pre-load embedded metric links for automatic KRs (M2, §5). Read directly
-    // from the metrics table (no metrics-module import — that would be circular,
-    // since metrics already depends on okr via D-O1).
-    const metricLinksByKrId = await this.loadAutomaticLinks(
-      obj.keyResults.filter((kr) => kr.deletedAt === null),
-      obj.organizationId,
-    );
-
-    const keyResultsWithProgress = obj.keyResults.map((kr) => {
-      const isAutomatic = kr.progressMode === 'automatic';
-      const activeTasks = kr.tasks.filter((t) => t.deletedAt === null);
-      const taskSum = activeTasks.reduce((acc, t) => acc + t.weightBp, 0);
-      const tasksBalanced = activeTasks.length > 0 && taskSum === 10000;
-      // Automatic KRs draw progress from the indicator; task weights are
-      // informative only (RN-O4), so they never flag imbalance.
-      const tasksImbalanced = !isAutomatic && activeTasks.length > 0 && !tasksBalanced;
-      let krProgressBp: number;
-
-      if (isAutomatic) {
-        // RN-O1/RN-O4: % comes solely from the linked indicator (cached).
-        krProgressBp = kr.progressCachedBp;
-      } else if (activeTasks.length === 0) {
-        krProgressBp = 0;
-      } else if (tasksBalanced) {
-        krProgressBp = computeKrProgress(
-          activeTasks.map((t) => ({ weightBp: t.weightBp, progressBp: t.progressBp })),
-        );
-      } else {
-        // Weights don't sum to 10000 — use cached value (plan incomplete)
-        krProgressBp = kr.progressCachedBp;
-      }
-
-      // Derived dates from tasks
-      let krStartsAt: string | null = null;
-      let krEndsAt: string | null = null;
-      if (activeTasks.length > 0) {
-        const minStartMs = Math.min(...activeTasks.map((t) => t.startsAt.getTime()));
-        const maxEndMs = Math.max(...activeTasks.map((t) => t.endsAt.getTime()));
-        krStartsAt = new Date(minStartMs).toISOString();
-        krEndsAt = new Date(maxEndMs).toISOString();
-      }
-
-      return {
-        id: kr.id,
-        title: kr.title,
-        description: kr.description,
-        weightBp: kr.weightBp,
-        progressCachedBp: krProgressBp,
-        status: computeProgressStatus(krProgressBp),
-        hasActiveTasks: activeTasks.length > 0,
-        owner: this.toOwnerDto(kr.owner),
-        startsAt: krStartsAt,
-        endsAt: krEndsAt,
-        tasksImbalanced,
-        progressMode: (isAutomatic ? 'automatic' : 'manual') as 'manual' | 'automatic',
-        metricLink: metricLinksByKrId.get(kr.id) ?? null,
-        tasks: activeTasks.map((t) => ({
-          id: t.id,
-          title: t.title,
-          description: t.description,
-          weightBp: t.weightBp,
-          progressBp: t.progressBp,
-          startsAt: t.startsAt.toISOString(),
-          endsAt: t.endsAt.toISOString(),
-          status: computeTaskStatus(t.progressBp, t.endsAt),
-          owner: this.toOwnerDto(t.owner),
-        })),
-      };
-    });
-
-    const activeKrs = obj.keyResults.filter((kr) => kr.deletedAt === null);
-    let objectiveProgressBp: number;
-
-    if (activeKrs.length === 0) {
-      objectiveProgressBp = 0;
-    } else {
-      const krSum = activeKrs.reduce((acc, kr) => acc + kr.weightBp, 0);
-      if (krSum === 10000) {
-        objectiveProgressBp = computeObjectiveProgress(
-          keyResultsWithProgress.map((kr) => ({
-            weightBp: kr.weightBp,
-            progressBp: kr.progressCachedBp,
-          })),
-        );
-      } else {
-        objectiveProgressBp = obj.progressCachedBp;
-      }
-    }
-
-    // Automatic KRs may legitimately have no tasks (RN-O4) — they don't count
-    // toward "plan incomplete"; only manual KRs without tasks do.
-    const planIncomplete =
-      activeKrs.length === 0 ||
-      keyResultsWithProgress.some((kr) => kr.progressMode === 'manual' && !kr.hasActiveTasks);
-
-    const imbalancedKrCount = keyResultsWithProgress.filter((kr) => kr.tasksImbalanced).length;
-
-    // Derive Objective-level dates from KR dates
-    const krsWithDates = keyResultsWithProgress.filter(
-      (kr) => kr.startsAt !== null && kr.endsAt !== null,
-    );
-    let objectiveStartsAt: string | null = null;
-    let objectiveEndsAt: string | null = null;
-    if (krsWithDates.length > 0) {
-      const minStartMs = Math.min(
-        ...krsWithDates.map((kr) => new Date(kr.startsAt as string).getTime()),
-      );
-      const maxEndMs = Math.max(
-        ...krsWithDates.map((kr) => new Date(kr.endsAt as string).getTime()),
-      );
-      objectiveStartsAt = new Date(minStartMs).toISOString();
-      objectiveEndsAt = new Date(maxEndMs).toISOString();
-    }
-
-    const objectiveWithProgress = {
-      ...obj,
-      progressCachedBp: objectiveProgressBp,
-      startsAt: objectiveStartsAt,
-      endsAt: objectiveEndsAt,
-    };
-
-    return {
-      objective: this.toDetailDto(objectiveWithProgress),
-      keyResults: keyResultsWithProgress,
-      planIncomplete,
-      imbalancedKrCount,
-    };
-  }
-
-  /**
-   * Build the embedded MetricKrLinkDto for each automatic KR of an objective
-   * (M2, §5). Reads the metrics tables directly (no metrics-module import — that
-   * would be a circular dependency) and computes progress with the pure
-   * metrics-domain functions.
-   *
-   * NOTE (tech debt): the cumulative/progress computation is duplicated with
-   * MetricLinkService because okr cannot depend on the metrics module. See
-   * docs/tech-debt.md.
-   */
-  private async loadAutomaticLinks(
-    krs: Array<{ id: string; progressMode: string }>,
-    orgId: string,
-  ): Promise<Map<string, MetricKrLinkDto>> {
-    const autoKrIds = krs.filter((kr) => kr.progressMode === 'automatic').map((kr) => kr.id);
-    const map = new Map<string, MetricKrLinkDto>();
-    if (autoKrIds.length === 0) return map;
-
-    const links = (await this.prisma.scoped.metricKrLink.findMany({
-      where: { keyResultId: { in: autoKrIds }, organizationId: orgId },
-    })) as Array<{
-      id: string;
-      metricId: string;
-      keyResultId: string;
-      baselineValue: { toString(): string };
-      targetValue: { toString(): string };
-      direction: string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-
-    for (const link of links) {
-      const metric = (await this.prisma.scoped.metric.findFirst({
-        where: { id: link.metricId, organizationId: orgId, deletedAt: null },
-        select: { name: true, baselineValue: true },
-      })) as { name: string; baselineValue: { toString(): string } } | null;
-      if (!metric) continue;
-
-      const entries = (await this.prisma.scoped.metricEntry.findMany({
-        where: { metricId: link.metricId, deletedAt: null },
-        select: { incrementValue: true },
-      })) as Array<{ incrementValue: { toString(): string } }>;
-
-      let running = parseDecimal4(metric.baselineValue.toString());
-      for (const entry of entries) {
-        running += parseDecimal4(entry.incrementValue.toString());
-      }
-      const actual = formatDecimal4(running);
-      const hasData = entries.length > 0;
-      const computedProgressBp = hasData
-        ? computeAutomaticKrProgressBp({
-            actual,
-            baseline: link.baselineValue.toString(),
-            target: link.targetValue.toString(),
-          })
-        : 0;
-
-      map.set(link.keyResultId, {
-        id: link.id,
-        metricId: link.metricId,
-        metricName: metric.name,
-        keyResultId: link.keyResultId,
-        baselineValue: link.baselineValue.toString(),
-        targetValue: link.targetValue.toString(),
-        direction: link.direction as MetricKrLinkDto['direction'],
-        lastValue: actual,
-        computedProgressBp,
-        estado: hasData ? 'ok' : 'sin-datos',
-        createdAt: link.createdAt.toISOString(),
-        updatedAt: link.updatedAt.toISOString(),
-      });
-    }
-    return map;
+  /** Fechas del objetivo derivadas de sus proyectos vivos: mínimo de inicio y máximo de fin. */
+  private deriveDates(o: ObjectiveRow): { startsAt: string | null; endsAt: string | null } {
+    if (o.projects.length === 0) return { startsAt: null, endsAt: null };
+    const minStartMs = Math.min(...o.projects.map((p) => p.startsAt.getTime()));
+    const maxEndMs = Math.max(...o.projects.map((p) => p.endsAt.getTime()));
+    return { startsAt: new Date(minStartMs).toISOString(), endsAt: new Date(maxEndMs).toISOString() };
   }
 
   private toSummaryDto(o: ObjectiveRow): ObjectiveSummaryDto {
     return {
       id: o.id,
       title: o.title,
+      description: o.description,
       periodCode: o.period.code,
-      progressCachedBp: o.progressCachedBp,
       resultProgressCachedBp: o.resultProgressCachedBp,
       executionProgressCachedBp: o.executionProgressCachedBp,
-      status: computeProgressStatus(o.progressCachedBp),
-      hasActiveKeyResults: o._count.keyResults > 0,
       createdAt: o.createdAt.toISOString(),
       period: {
         id: o.period.id,
@@ -903,8 +392,7 @@ export class ObjectiveService {
         startsAt: o.period.startsAt?.toISOString(),
         endsAt: o.period.endsAt?.toISOString(),
       },
-      startsAt: o.startsAt ?? null,
-      endsAt: o.endsAt ?? null,
+      ...this.deriveDates(o),
       owner: this.toOwnerSummaryDto(o.owner),
       orgUnitId: o.orgUnitId,
       axisId: o.axisId,
@@ -915,14 +403,11 @@ export class ObjectiveService {
     return {
       id: o.id,
       title: o.title,
+      description: o.description,
       periodCode: o.period.code,
-      progressCachedBp: o.progressCachedBp,
       resultProgressCachedBp: o.resultProgressCachedBp,
       executionProgressCachedBp: o.executionProgressCachedBp,
-      status: computeProgressStatus(o.progressCachedBp),
-      hasActiveKeyResults: o._count.keyResults > 0,
       createdAt: o.createdAt.toISOString(),
-      description: o.description,
       organizationId: o.organizationId,
       periodId: o.periodId,
       updatedAt: o.updatedAt.toISOString(),
@@ -933,8 +418,7 @@ export class ObjectiveService {
         startsAt: o.period.startsAt?.toISOString(),
         endsAt: o.period.endsAt?.toISOString(),
       },
-      startsAt: o.startsAt ?? null,
-      endsAt: o.endsAt ?? null,
+      ...this.deriveDates(o),
       owner: this.toOwnerSummaryDto(o.owner),
       orgUnitId: o.orgUnitId,
       axisId: o.axisId,

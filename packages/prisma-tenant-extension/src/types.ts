@@ -41,7 +41,7 @@ export interface TenantContextProvider {
  * itself and is exported for type-level consumers only.
  */
 export type OperationContext = {
-  /** Prisma model name, e.g. `'Objective'`, `'KeyResult'`. */
+  /** Prisma model name, e.g. `'Objective'`, `'Project'`. */
   readonly model: string;
   /** Prisma operation name, e.g. `'findMany'`, `'create'`. */
   readonly operation: string;

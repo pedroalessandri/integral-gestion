@@ -8,6 +8,11 @@
 
 ## 🟡 Prioridad media — próximas semanas
 
+### [F] Adaptar copiloto de IA al modelo de planificación
+- Por qué: ADR-0009 D9 dejó el copiloto (`POST ai/draft` y `ai/validate`) solo para objetivos (`entityType: 'objective'`, sin `objectiveContext`) cuando se eliminó el KR. Falta llevarlo a los indicadores (redacción de nombre y meta) y a los proyectos (redacción y validación de alcance), con el objetivo como contexto.
+- Posible solución: ampliar `entityType` en el DTO de `ai` (`indicator` | `project`), prompts por entidad y reincorporar el contexto del objetivo; en el front, sumar `AiSuggestPanel`/`SmartFeedbackPanel` a los formularios de indicador y proyecto.
+- Origen: C24 (2026-10-09).
+
 ### [F] `MetricEntryDto` sin el título del proyecto de origen de las cargas automáticas
 - Por qué: la UI muestra "Aporte del proyecto X" en el historial a partir de los aportes vivos del indicador (`GET indicators/:id/contributions`). Si el aporte ya no existe (proyecto borrado y compensado), o en la vista standalone de métricas (`/metrics/[id]`, sin indicador), la carga automática solo dice "Aporte de un proyecto" (el título queda en el comentario).
 - Posible solución: sumar `sourceProjectTitle: string | null` a `MetricEntryDto` (C17 ya tiene `sourceProjectId`).
@@ -23,12 +28,6 @@
 - Posible solución: un job (cron del módulo `metrics`) o un endpoint admin que recorra los `ProjectContribution` cuyo estado (`appliedEntryId`) no coincide con el avance del proyecto (100 % sin aplicar / aplicado y no al 100 %) y llame a `reconcileProject`.
 - Origen: C17 (2026-10-08).
 
-### [F] Semáforos y "carga pendiente" en el listado de objetivos (`GET okr/objectives`)
-- Por qué: C16 muestra el semáforo de cada lectura y el badge "carga pendiente" en la ficha del objetivo y en la tarjeta del indicador, pero el listado `/objectives` no los tiene: `ObjectiveSummaryDto` no trae `pendingBucketsCount` ni el estado, y pedir `GET okr/objectives/:id/status` por fila sería un N+1 de requests por render.
-- Posible solución (contrato faltante, backend): sumar a los ítems de `GET okr/objectives` un `status` con `{ result: { semaphore, deviationBp, pendingBucketsCount }, execution: { semaphore, deviationBp } }`, o un `GET okr/objectives/status?periodId=` en bloque. Después, en web, usar `SemaphoreBadge` y `PendingLoadBadge` (ya existen en `components/`) en la fila.
-- Origen: C16 (2026-10-08).
-- Actualización (C21): el listado `/objectives` ya muestra semáforo de cada lectura y el badge "carga pendiente" usando `objectives[]` de `GET okr/planning-tree?periodId=` (un solo request por render, sin N+1). Sin contrato nuevo en backend.
-
 ### [F] Umbrales del semáforo configurables por organización
 - Por qué: RN-P9 fija 10 y 25 puntos por defecto y dice que serán configurables por org en una fase posterior. Hoy son la constante `DEFAULT_SEMAPHORE_THRESHOLDS` de `deviation-domain`.
 - Posible solución: columnas o tabla de settings por org y pasar `SemaphoreThresholds` a `semaphore()` desde `IndicatorStatusService`.
@@ -43,12 +42,14 @@
 - Por qué: en el dialog de crear/editar Objective, KR y Task, el campo "Responsable" aparece vacío durante ~1 segundo mientras se hace el fetch del listado de members, y después aparece el nombre. Visualmente queda como si el campo no estuviera asignado.
 - Posible solución: mostrar un skeleton o disabled+spinner hasta que el fetch resuelva. El estado `loading` ya está en OwnerSelect, solo falta usarlo visualmente.
 - Estimado: corrida muy chica (~10 min).
+- Actualización (C24): los diálogos de KR y de tarea suelta se borraron; el caso sigue vigente solo para el diálogo de objetivo.
 
 ### [B] Kebab menu de tareas queda abierto al cerrar dialog
 - Por qué: click en los 3 puntitos abre el DropdownMenu; al elegir una opción se abre un Dialog (ej. Editar); cuando se cierra el Dialog, el DropdownMenu queda visible.
 - Estado: el kebab de **key results** (`kr-card-actions.tsx`) ya quedó arreglado en la corrida del Módulo 2 (DropdownMenu controlado). Falta solo el de **tareas** (`task-row-actions.tsx`).
 - Posible solución: controlar el state del DropdownMenu desde el padre y forzar `setMenuOpen(false)` en el `onSelect` antes de abrir el Dialog. Patrón típico de shadcn cuando un MenuItem dispara un Dialog.
 - Estimado: corrida chica (~15-20 min).
+- Actualización (C24): `kr-card-actions.tsx` y `task-row-actions.tsx` se borraron junto con las pantallas de KR; el caso ya no existe en esa forma. Si se repite en las acciones de tareas de la ficha de proyecto (`features/projects`), verificarlo ahí.
 
 ### [F] Archivar o cambiar el plan activo (hoy no hay endpoint)
 - Por qué: C05 solo hace upsert del plan activo. Decisión de Pedro (2026-10-07) para cuando se agregue: 409 mientras haya ejes con objetivos; hay que definir qué pasa con `axis_id` de los objetivos al cambiar de plan.
@@ -70,6 +71,7 @@
 ### [F] Unidad obligatoria en el Objetivo
 - Por qué: Pedro (2026-10-07): la unidad del objetivo es obligatoria. Hoy el selector la deja vacía al crear y `CreateObjectiveDto.orgUnitId` es opcional. Requerirla en create (UI + DTO); la columna sigue nullable hasta la fase migrate por los objetivos existentes (plan.md), y el NOT NULL va con el contract.
 - Origen: pregunta abierta de C06.
+- Actualización (C24): resuelto de punta a punta. El DTO y el NOT NULL salieron en C23; en C24 el selector de unidad del formulario de objetivo es obligatorio (sin opción vacía, validación antes de enviar). Pendiente de mover a Completados cuando se mergee la Fase 10.
 
 ### [F] Validar proyectos y tareas al editar las fechas de un período (ADR-0009 D7, RN-P3)
 - Por qué: D7 pide que editar un período con un rango que deja afuera proyectos, tareas o cargas responda 422 con la lista (puertos `PERIOD_RANGE_CHECKER_OKR` / `_METRICS`). C08 crea los proyectos y tareas que hay que chequear, pero el puerto y el chequeo en `PeriodService` no están en ninguna corrida del plan.
@@ -97,12 +99,6 @@
 - Posible solución: `ModuleEnabledGuard` en esos controllers o exigir `metrics:write` con `metric` inline.
 - Origen: C20 (2026-10-08).
 
-### [B] El throttler nombrado `ai` (10 req/min) parece aplicar a todas las rutas, no solo a las de IA
-- Por qué: `ThrottlerModule.forRoot` define `default` (100/min) y `ai` (10/min); en `@nestjs/throttler` v6 todos los throttlers aplican a cada ruta salvo `@SkipThrottle({ ai: true })`. En el e2e de C21, el 11º request en un minuto a `GET okr/planning-tree` desde la misma IP dio 429 (la clave incluye ruta + tracker). Si se confirma en runtime, el front (filtros del árbol, refrescos) se topa con 10 requests/min por ruta y usuario.
-- Posible solución: `skipIf` / `@SkipThrottle({ ai: true })` por defecto y dejar `ai` solo en `AiController`, o mover `ai` a un `ThrottlerModule` propio del módulo de IA.
-- Origen: C21 (2026-10-09).
-- Actualización (C21, 2026-10-09): confirmado y corregido en `feature/plan-f9-tableros` (`config/throttler.config.ts`: `ai` sin límite por defecto; el `@Throttle({ ai })` de `AiController` pone los 10/min; test con 15 requests a una ruta común y 429 en la 11.ª de IA). Mover a Completados al mergear.
-
 ### [B] Borrar un objetivo deja vivos proyectos, indicadores y aportes (C20 #4, media)
 - Por qué: `ObjectiveService.softDelete` solo cuenta KRs. Los proyectos huérfanos pueden seguir disparando cargas automáticas (sospecha) y la métrica deja de contar ese objetivo en `assertCanWriteMetric`. Amplía el ítem "Borrar un objetivo no da de baja sus ObjectiveIndicator".
 - Posible solución: 409 si hay hijos vivos, o cascada con audit y compensación; `findLiveProject` y el applier verifican el objetivo vivo.
@@ -112,6 +108,7 @@
 - Por qué: `key-result.controller.ts` y `objective.controller.ts` (rebalance) reciben el body sin validar; un body malformado da 500 en vez de 400. Sin mass assignment (los services eligen campos).
 - Posible solución: `ValidationPipe({ whitelist, forbidNonWhitelisted, transform })` global en `main.ts`.
 - Origen: C20 (2026-10-08).
+- Actualización (C23): `key-result.controller.ts` y `rebalance` ya no existen (se eliminaron en el contract); queda sin sentido la parte de KR. Los demás controllers siguen con el `ValidationPipe` local por controller.
 
 ### [B] Hallazgos bajos de la revisión de seguridad C20
 - `PermissionsGuard` deja pasar sin `@Permissions` (fail-open): exigir `@Permissions` o `@Public` explícito.
@@ -144,12 +141,15 @@
 - Por qué: deuda flagueada en la corrida feat/objective-owner-assignment. El detail page usa un type local en lugar del DTO compartido.
 - Posible solución: importar ObjectiveCascadeDto desde @gestion-publica/shared-types y borrar el type local.
 - Nota (M2): el type local se extendió con `progressMode` + `metricLink` (referenciando `MetricKrLinkDto` del DTO compartido), pero la convergencia total al DTO sigue pendiente.
+- Actualización (C23): `ObjectiveCascadeDto`, `GET objectives/:id/cascade` y `MetricKrLinkDto` se eliminaron del backend/shared-types; la pantalla de detalle se reescribe en C24 (sin sentido tal como está planteado).
 - Estimado: corrida cortita (~10 min).
+- Actualización (C24): resuelto. La ficha de objetivo consume `ObjectiveDetailDto` de shared-types (`GET okr/objectives/:id`); el type local se borró. Pendiente de mover a Completados con el merge de la Fase 10.
 
 ### [F] Mostrar avatar de owner en Vista Ejecutiva (Gantt)
 - Por qué: la asignación de owner se implementó en listado y detalle, pero no en la Vista Ejecutiva. Out of scope deliberado en la corrida δ.
 - Detalles: agregar columna o avatar inline en gantt-row.tsx con el owner del Objective/KR/Task.
 - Estimado: corrida chica (~15 min).
+- Actualización (C24): las filas de la vista son Objetivo / Proyecto / Tarea (ya no hay KR).
 
 ### [F] Permitir borrar/desasignar owner desde el detalle del objetivo sin pasar por edit completo
 - Por qué: hoy para cambiar owner abrís el dialog de "Editar objetivo" entero. Sería más rápido un click directo.
@@ -165,6 +165,8 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [B] El throttler `ai` limitaba todas las rutas de la API a 10 req/min (C21) — mergeado el 9 octubre 2026
+- [F] Semáforos y "carga pendiente" en el listado de objetivos, vía `GET okr/planning-tree` (C21) — mergeado el 9 octubre 2026
 - [B] Guards y tenant scoping en `PeriodController` y `OrganizationController` (C20 crítico) y vincular una métrica existente exige poder escribirla (C20 alto) — mergeado el 9 octubre 2026
 - [F] Unidad obligatoria al invitar (`orgUnitId: string | null`, selector en el front) — mergeado el 8 octubre 2026
 - [F] Curva `from_projects` (RN-P17) habilitada con los aportes de proyectos (`ProjectContribution`, carga automática al 100 % y UI de aportes) — mergeado el 8 octubre 2026

@@ -9,16 +9,12 @@ import { AiErrorBlock } from './ai-error-block';
 
 interface AiSuggestPanelProps {
   orgId: string;
-  entityType: 'objective' | 'key_result';
-  objectiveContext?: string;
   onAccept: (suggestion: string) => void;
   aiEnabled?: boolean;
 }
 
 export function AiSuggestPanel({
   orgId,
-  entityType,
-  objectiveContext,
   onAccept,
   aiEnabled = true,
 }: AiSuggestPanelProps) {
@@ -36,7 +32,7 @@ export function AiSuggestPanel({
     setError(null);
     setSuggestion(null);
 
-    const result = await draftAiAction({ orgId, entityType, hint: hint.trim(), objectiveContext });
+    const result = await draftAiAction({ orgId, entityType: 'objective', hint: hint.trim() });
     setLoading(false);
 
     if (result.error) {
@@ -82,11 +78,7 @@ export function AiSuggestPanel({
           <Textarea
             value={hint}
             onChange={(e) => setHint(e.target.value)}
-            placeholder={
-              entityType === 'objective'
-                ? 'Qué querés lograr (en una frase informal)...'
-                : 'Qué métrica querés medir...'
-            }
+            placeholder="Qué querés lograr (en una frase informal)..."
             rows={2}
             maxLength={500}
             className="bg-white"

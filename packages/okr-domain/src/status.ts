@@ -6,7 +6,7 @@
 /** Derived status for a Task (considers scheduling + progress). */
 export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'overdue';
 
-/** Derived status for a KR or Objective (pure progress-based). */
+/** Derived status for an Objective (pure progress-based). */
 export type ProgressStatus = 'pending' | 'in_progress' | 'done';
 
 /**
@@ -34,7 +34,7 @@ export function computeTaskStatus(
 }
 
 /**
- * Compute the derived status of a KR or Objective from its cached progress.
+ * Compute the derived status of an Objective from its cached progress.
  *
  * Rules:
  * - progressBp === 10000 → 'done'

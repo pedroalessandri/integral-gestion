@@ -69,7 +69,7 @@ export function DeletePeriodButton({ orgId, periodId, periodCode }: DeletePeriod
                   <strong className="font-mono">{periodCode}</strong>.
                 </p>
                 <p className="font-semibold text-red-700">
-                  Esta acción eliminará en cascada todos los Objetivos, Resultados Clave y Tareas
+                  Esta acción eliminará en cascada todos los objetivos estratégicos, indicadores, proyectos y tareas
                   asociados a este período. No se puede deshacer.
                 </p>
                 <p>

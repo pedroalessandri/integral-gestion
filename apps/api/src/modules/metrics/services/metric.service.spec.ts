@@ -12,7 +12,6 @@ import { MetricService } from './metric.service.js';
 const mockScoped = {
   metric: { findMany: vi.fn(), findFirst: vi.fn() },
   metricEntry: { findMany: vi.fn() },
-  metricKrLink: { count: vi.fn().mockResolvedValue(0) },
   objectiveIndicator: { findMany: vi.fn().mockResolvedValue([]) },
   projectContribution: { count: vi.fn().mockResolvedValue(0) },
 };
@@ -97,7 +96,6 @@ describe('MetricService', () => {
       const [dto] = await service.list('org-1', {});
       expect(dto!.lastValue).toBe('250');
       expect(dto!.progressPct).toBe(50); // 250 / 500
-      expect(dto!.linkedKrCount).toBe(0);
     });
 
     it('returns baseline as lastValue when there are no entries', async () => {
@@ -220,16 +218,6 @@ describe('MetricService', () => {
       expect(mockAuditEmitter.emit).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'metric.deleted' }),
       );
-    });
-
-    it('RN-O7: blocks (409) when the metric has active KR links', async () => {
-      mockScoped.metric.findFirst.mockResolvedValue(metricRow);
-      mockScoped.metricKrLink.count.mockResolvedValueOnce(2);
-
-      await expect(service.softDelete('metric-1', 'org-1', authContext)).rejects.toThrow(
-        ConflictException,
-      );
-      expect(mockTx.metric.update).not.toHaveBeenCalled();
     });
 
     it('409 MetricInUseByObjective cuando mide un objetivo vivo; ignora indicadores de objetivos borrados', async () => {

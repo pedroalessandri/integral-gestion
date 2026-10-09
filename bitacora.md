@@ -15,6 +15,45 @@ Formato:
 
 ---
 
+## 2026-10-09 · C24 · frontend-dev · feature/plan-f10-contract
+- Hecho:
+  - `apps/web` sin KR: se borraron 11 componentes (crear/editar KR, vínculo métrica↔KR, progreso automático de KR, rebalanceo de pesos, menú de KR, `gantt-chart` viejo, `progress-ring` del número único y dos componentes de tareas huérfanos). La ficha de objetivo queda con encabezado de dos lecturas y pestañas Indicadores / Proyectos / Contexto (SPEC §5.4); el listado muestra dos barras rotuladas (Resultado / Gestión) más los semáforos por lectura; `/metrics` sin la columna y el filtro de vínculos con KR.
+  - Unidad obligatoria al crear un objetivo (selector sin opción vacía, `required`, validación antes de enviar).
+  - Copiloto IA: los paneles llaman siempre con `entityType: 'objective'`, sin `objectiveContext`.
+  - Copy sin "KR"/"Key Result" en la UI y en `lib/labels.ts` (términos del glosario). El módulo `indicadores-okr` conserva la key y en la UI se llama "Indicadores de contexto en objetivos".
+  - `TODO.md`: nuevo "[F] Adaptar copiloto de IA al modelo de planificación" (media). `AGENTS.md`: la tarea siempre pertenece a un proyecto y ejemplos sin KR. `docs/tech-debt.md`: el `gantt-chart` huérfano queda resuelto.
+- Commit: este commit (`refactor(web): limpieza del front sin KR`)
+- Verificación: `turbo run typecheck --force` 7/7; `turbo run lint --force` 0 errores (warnings preexistentes); `turbo run test --force` 12/12 (api 490, web 123); `pnpm --filter web build` OK; `grep` de KR en `apps/web/src` → 0. No se probó contra la API levantada: lo cubre el smoke grande de Pedro.
+- Pendiente / desvíos:
+  - Editar un objetivo desde el listado: `ObjectiveSummaryDto` no trae `description`, y antes se mandaba `null` y se borraba. Ahora solo se envía si el usuario la cambia; el diálogo abre con la descripción vacía.
+  - Quedan sin uso `restoreObjectiveAction`, `restoreTaskAction` y `listObjectiveContextMetricsAction` (ya lo estaban antes).
+- Preguntas abiertas de C23 y C24 (respondidas por Pedro el 2026-10-09 y aplicadas en un commit aparte):
+  - ✅ Se borró `lg-o3` de la DB local (objetivo ya borrado sin unidad, sin dependientes) y se aplicó ahí el contract.
+  - ✅ Migración de catálogo `20261009000002_catalog_texts_without_kr`: descripciones de `metrics:write`, `okr:read`, `okr:write` y de los módulos `okr` e `indicadores-okr` sin KR (solo UPDATE, sin cambiar keys). El módulo `indicadores-okr` se llama "Indicadores de contexto en objetivos".
+  - ✅ Se borraron de `domain-event.ts` los tipos de eventos de KR. Las filas de `audit.event` no se tocan (append-only); los lectores tipan `action` como `string`, así que los eventos viejos se leen como genéricos.
+  - ✅ Se sacó "Sin unidad" del árbol (contrato, service, `okr-domain` y vista) y la unidad del objetivo es no nula en `PlanningTreeDto`, `ObjectivePlanGanttDto` y los puertos; fuera las guardas muertas `ObjectiveWithoutOrgUnit`. La rama "entidad sin unidad" de `ORG_UNIT_SCOPE` queda muerta: `docs/tech-debt.md`.
+  - ✅ `ObjectiveSummaryDto` trae `description`: el diálogo de edición del listado abre con el valor actual (se revirtió el workaround de C24).
+  - Verificación del ajuste: `turbo run typecheck/lint/test --force` verde (api 490, web 122); `pnpm --filter web build` OK; psql: `20261009000002` aplicada en la DB local y descripciones nuevas; 6 e2e vigentes 16/16 en DB descartable (subagente).
+  - Queda: el CHECK de `ai.prompt_log.entity_type` sigue admitiendo `key_result` (hay logs históricos).
+- Fin de la Fase 10: PR abierto. Smoke grande de Pedro (regresión completa de las Fases 2–10).
+
+## 2026-10-09 · C23 · backend-dev · feature/plan-f10-contract
+- Hecho (contract, ADR-0009 D6 y D9):
+  - **Migración** `20261009000001_contract_drop_key_result` (a mano): primero verifica que no haya `okr.objective.org_unit_id` ni `okr.task.project_id` NULL (vivos o borrados) y si los hay aborta con `RAISE EXCEPTION` y los conteos, sin borrar datos. Después: drop de `metrics.metric_kr_link`, de `okr.task.key_result_id` (con sus CHECK, índices y FK), de `okr.key_result`, de `okr.objective.progress_cached_bp` y de `legacy_key_result_id` (+ índices parciales) en `okr.project` y `metrics.objective_indicator`; `objective.org_unit_id` y `task.project_id` NOT NULL. No toca `audit.event`.
+  - **API**: fuera endpoints `/key-results*`, tareas bajo KR, `GET objectives/gantt`, `GET objectives/:id/cascade`, `POST objectives/:id/rebalance-weights`, vínculo métrica↔KR (`MetricLinkService` queda solo con el contexto métrica-objetivo), hooks de recálculo de KR, `computeAutomaticKrProgressBp` y lógica de cascada de KR de `okr-domain`. Copiloto IA (D9): `entityType` solo `objective`. Borrar un objetivo con proyectos vivos da 409 (antes lo bloqueaban los KR). El borrado en cascada de un período baja por objetivos → proyectos → tareas. `startsAt`/`endsAt` del objetivo salen de sus proyectos.
+  - **Contratos**: `CreateObjectiveDto.orgUnitId` obligatorio; `ObjectiveSummaryDto`/`ObjectiveDetailDto` sin `progressCachedBp`, `status` ni `hasActiveKeyResults` (no se deriva un estado único para no fusionar lecturas); `TaskSummaryDto.projectId` obligatorio y sin `keyResultId`; `MetricSummaryDto` sin `linkedKrCount`. Se mantienen en `audit/domain-event.ts` los tipos de eventos históricos de KR (append-only).
+  - Se borró el script de migración de F5 (`migrate-to-planning`; ya corrió) y sus scripts de `package.json`. Seed sin KR. `CLAUDE.md` y `AGENTS.md`: KR y `MetricKrLink` "se eliminaron en F10".
+- Commit: este commit (`feat(okr)!: contract — eliminar KeyResult, MetricKrLink y el avance único del objetivo`)
+- Verificación: `turbo run typecheck --force` 6/7 (**web falla a propósito**: 11 errores en 8 archivos que usan KR; lo arregla C24, el siguiente commit de esta rama); `turbo run lint --force` 0 errores; `turbo run test --force` 12/12 (api 490, okr-domain 110, metrics-domain 74, web 120); `grep` de KR en `apps/api/src` y `packages/*/src` (sin tests ni eventos históricos) → 0. E2E en DB descartable migrada desde cero (subagente): `planning-tree`, `planning-gantt`, `org-unit-scope`, `security-c20b`, `project-contribution`, `indicator-curves` → 16/16; seed corrido dos veces; `psql` sin `okr.key_result` ni `metrics.metric_kr_link`.
+- Pendiente / desvíos:
+  - **La migración no se aplicó en la DB local de desarrollo**: hay 1 objetivo borrado sin unidad (`lg-o3`, org `lg-org`, `deleted_at` 2026-10-08). Probada en un clon: aborta con el conteo y no toca nada. Hace falta borrar esa fila (decisión de Pedro).
+  - El CHECK de `ai.prompt_log.entity_type` sigue admitiendo `key_result` por los logs históricos.
+  - `AGENTS.md` (líneas ~100 y ~140) todavía menciona tareas colgando de un KR legacy: se corrige en C24.
+- Preguntas abiertas:
+  - ¿Se borra `lg-o3` de la DB local para aplicar la migración?
+  - La descripción del permiso `metrics:write` ("manage KR links") y del módulo `indicadores-okr` ("vínculo de indicadores a Key Results") son datos sembrados: ¿se actualizan con una migración de catálogo o se dejan?
+  - Los tipos de eventos históricos de KR en `domain-event.ts` quedan indefinidamente (el audit es append-only). ¿OK?
+
 ## 2026-10-09 · C22 · backend-dev + frontend-dev · feature/plan-f9-tableros
 - Hecho:
   - **Endpoint** `GET okr/planning-gantt?periodId=&axisId=&orgUnitId=` (en `metrics`, junto a `planning-tree`; `TenantGuard` + `okr:read`; todos opcionales, período abierto por defecto, 404 `OpenPeriodNotFound` si no hay; `orgUnitId` filtra subárbol). Devuelve Objetivo → Proyecto → Tarea: el objetivo con unidad, eje, fechas min–max de sus proyectos y las dos lecturas por separado con desvío y semáforo (mismo cálculo por lote de C21, igual a `/status`); el proyecto con unidad, avance, `progressMode` y fechas planificadas; las tareas con `TaskGanttDto`. Objetivos sin proyectos incluidos con fechas `null`. Dos queries por lote (proyectos y tareas), sin N+1. `GET objectives/gantt` y `ObjectiveGanttDto` quedan `@deprecated` hasta el contract (F10); nada nuevo sobre KR.
@@ -27,7 +66,7 @@ Formato:
   - Corregí los links que armó el subagente (`#project-` no existía): ahora van a `/objectives/:id/projects/:projectId` y `#task-<id>`; test agregado.
 - Preguntas abiertas: ninguna nueva.
 - Nota: Pedro aprobó (2026-10-09) que `PATCH orgs/:id` quede para el org-admin central con `core:org-unit:manage` (pregunta abierta de C20b).
-- Fin de la Fase 9: PR abierto. Smoke de Pedro: demo completa.
+- Fin de la Fase 9: mergeada por Pedro (PR #25, 2026-10-09). Pedro difiere el smoke a uno grande al cerrar la Fase 10.
 
 ## 2026-10-09 · C21 · backend-dev + frontend-dev · feature/plan-f9-tableros
 - Hecho:

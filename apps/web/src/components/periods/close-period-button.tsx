@@ -79,7 +79,7 @@ export function ClosePeriodButton({ orgId, periodId, openPeriodCode }: ClosePeri
                     <ul className="list-disc list-inside space-y-0.5 text-xs">
                       <li>
                         El período <strong>{openPeriodCode}</strong> quedará cerrado y sus objetivos,
-                        Resultados Clave y tareas pasarán a ser <strong>histórico de solo lectura</strong>.
+                        indicadores, proyectos y tareas pasarán a ser <strong>histórico de solo lectura</strong>.
                       </li>
                       <li>
                         Para continuar trabajando, vas a tener que crear un nuevo período manualmente desde la sección de Períodos.

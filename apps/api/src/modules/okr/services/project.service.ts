@@ -51,7 +51,7 @@ type ProjectRow = {
 
 type ObjectiveForProject = {
   id: string;
-  orgUnitId: string | null;
+  orgUnitId: string;
   period: PeriodRow;
 };
 
@@ -99,11 +99,6 @@ export class ProjectService {
     assertPeriodOpen(objective.period as PeriodRef);
     this.assertProgressModeOperable(dto.progressMode);
 
-    if (objective.orgUnitId === null) {
-      throw new UnprocessableEntityException(
-        'ObjectiveWithoutOrgUnit: el objetivo todavía no tiene unidad asignada; asignale una antes de crear proyectos (RN-P4).',
-      );
-    }
     const orgUnitId = dto.orgUnitId ?? objective.orgUnitId;
     // RN-P20: la unidad efectiva del proyecto es la suya (no la del objetivo, salvo que herede).
     await this.orgUnitScope.assertCanWriteInUnit(authContext, orgUnitId);
@@ -187,11 +182,6 @@ export class ProjectService {
 
     const orgUnitChanged = dto.orgUnitId !== undefined && dto.orgUnitId !== existing.orgUnitId;
     if (orgUnitChanged && dto.orgUnitId !== undefined) {
-      if (objective.orgUnitId === null) {
-        throw new UnprocessableEntityException(
-          'ObjectiveWithoutOrgUnit: el objetivo todavía no tiene unidad asignada (RN-P4).',
-        );
-      }
       await this.assertOrgUnitInScope(orgId, objective.orgUnitId, dto.orgUnitId);
     }
 

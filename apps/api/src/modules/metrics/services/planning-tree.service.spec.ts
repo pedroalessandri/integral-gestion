@@ -41,7 +41,7 @@ const unit = (
 });
 const reading = (
   id: string,
-  orgUnitId: string | null,
+  orgUnitId: string,
   axisId: string | null,
   result: number,
   execution: number,
@@ -96,7 +96,7 @@ beforeEach(() => {
     reading('o1', 'min-a', 'ax-1', 6000, 1000),
     reading('o2', 'area-a1', 'ax-1', 2000, 3000),
     reading('o3', 'min-b', null, 0, 0),
-    reading('o4', null, 'ax-2', 1000, 1000),
+    reading('o4', 'min-b', 'ax-2', 1000, 1000),
   ]);
   statusService.getObjectivesStatusSummaries.mockImplementation(
     async (_org: string, rs: Array<{ id: string }>) => {
@@ -129,11 +129,10 @@ describe('getPlanningTree', () => {
     expect(ax1?.objectiveIds).toEqual(['o1', 'o2']);
     expect(ax1?.aggregate.result.progressBp).toBe(4000);
     expect(ax1?.units.map((u) => u.orgUnitId)).toEqual(['min-a', 'area-a1']);
-    expect(tree.axes[1]?.units.map((u) => u.orgUnitId)).toEqual([null]);
+    expect(tree.axes[1]?.units.map((u) => u.orgUnitId)).toEqual(['min-b']);
 
-    // sin eje / sin unidad
+    // sin eje
     expect(tree.withoutAxis.objectiveIds).toEqual(['o3']);
-    expect(tree.withoutUnit.objectiveIds).toEqual(['o4']);
 
     // árbol de unidades completo; el subárbol de min-a incluye a area-a1
     const central = tree.units[0];
@@ -143,7 +142,7 @@ describe('getPlanningTree', () => {
     expect(minA?.aggregate.result.progressBp).toBe(4000);
     expect(minA?.directAggregate.objectivesCount).toBe(1);
     expect(minA?.children[0]?.id).toBe('area-a1');
-    expect(central?.aggregate.objectivesCount).toBe(3); // o4 no tiene unidad
+    expect(central?.aggregate.objectivesCount).toBe(4);
 
     expect(tree.objectives.map((o) => o.id)).toEqual(['o1', 'o2', 'o3', 'o4']);
     expect(tree.objectives[0]?.execution.deviationBp).toBe(-200);
@@ -185,7 +184,6 @@ describe('getPlanningTree', () => {
     expect(tree.units.map((u) => u.id)).toEqual(['min-a']);
     expect(tree.units[0]?.children.map((c) => c.id)).toEqual(['area-a1']);
     expect(tree.objectives.map((o) => o.id)).toEqual(['o1', 'o2']);
-    expect(tree.withoutUnit.aggregate.objectivesCount).toBe(0);
   });
 
   it('un eje de un plan archivado cuenta como "sin eje"', async () => {

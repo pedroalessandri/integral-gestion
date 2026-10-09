@@ -21,7 +21,7 @@ import { SmartFeedbackPanel } from '@/components/ai/smart-feedback-panel';
 import { OwnerSelect } from './owner-select';
 import { UnitSelect } from '@/features/org-structure';
 import { AxisSelect } from '@/features/strategic-plan';
-import { assignmentForCreate, assignmentForUpdate } from '@/features/planning/objective-assignment';
+import { assignmentForCreate, assignmentForUpdate, hasUnit } from '@/features/planning/objective-assignment';
 import { LABELS } from '@/lib/labels';
 
 interface ObjectiveInitialValues {
@@ -29,7 +29,7 @@ interface ObjectiveInitialValues {
   title: string;
   description?: string | null;
   ownerUserId?: string | null;
-  orgUnitId?: string | null;
+  orgUnitId: string;
   axisId?: string | null;
 }
 
@@ -103,8 +103,9 @@ export function CreateObjectiveButton(props: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    const assignment = { orgUnitId, axisId };
+    setLoading(true);
 
     let result: { error?: string };
 
@@ -117,20 +118,22 @@ export function CreateObjectiveButton(props: Props) {
         ownerUserId,
         ...assignmentForUpdate(
           {
-            orgUnitId: props.initialValues.orgUnitId ?? null,
+            orgUnitId: props.initialValues.orgUnitId,
             axisId: props.initialValues.axisId ?? null,
           },
           { orgUnitId, axisId },
         ),
       });
-    } else {
+    } else if (hasUnit(assignment)) {
       result = await createObjectiveAction({
         orgId: props.orgId,
         title,
         description: description || undefined,
         ownerUserId,
-        ...assignmentForCreate({ orgUnitId, axisId }),
+        ...assignmentForCreate(assignment),
       });
+    } else {
+      result = { error: LABELS.unit.required };
     }
 
     setLoading(false);
@@ -175,7 +178,6 @@ export function CreateObjectiveButton(props: Props) {
         </div>
         <AiSuggestPanel
           orgId={props.orgId}
-          entityType="objective"
           onAccept={(suggestion) => setTitle(suggestion)}
           aiEnabled={aiEnabled}
         />
@@ -201,7 +203,6 @@ export function CreateObjectiveButton(props: Props) {
               orgId={props.orgId}
               value={orgUnitId}
               onChange={setOrgUnitId}
-              allowEmpty={!(isEdit && props.initialValues?.orgUnitId)}
             />
           </div>
           <div className="space-y-2">
@@ -236,7 +237,7 @@ export function CreateObjectiveButton(props: Props) {
       </form>
       {title.trim() && (
         <div className="mt-4">
-          <SmartFeedbackPanel orgId={props.orgId} entityType="objective" text={title} aiEnabled={aiEnabled} />
+          <SmartFeedbackPanel orgId={props.orgId} text={title} aiEnabled={aiEnabled} />
         </div>
       )}
     </DialogContent>

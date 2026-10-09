@@ -28,9 +28,9 @@ interface Props {
   objective: {
     id: string;
     title: string;
-    description?: string | null;
+    description: string | null;
     ownerUserId?: string | null;
-    orgUnitId?: string | null;
+    orgUnitId: string;
     axisId?: string | null;
   };
   aiEnabled?: boolean;
@@ -106,7 +106,7 @@ export function ObjectiveRowActions({ orgId, objective, aiEnabled = true }: Prop
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar objetivo?</AlertDialogTitle>
             <AlertDialogDescription>
-              El objetivo <strong>{objective.title}</strong> y todos sus Resultados Clave y tareas se moverán a
+              El objetivo <strong>{objective.title}</strong> y todos sus indicadores, proyectos y tareas se moverán a
               la papelera. Esta acción se puede revertir desde la papelera de la organización.
             </AlertDialogDescription>
           </AlertDialogHeader>

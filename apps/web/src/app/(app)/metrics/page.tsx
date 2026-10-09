@@ -3,7 +3,6 @@ import { BarChart3, TrendingUp, TrendingDown, Gauge } from 'lucide-react';
 import { getActiveOrgId } from '@/lib/active-org';
 import { apiFetch } from '@/lib/api-client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/empty-state';
 import { MetricFilters } from '@/components/metrics/metric-filters';
 import { MetricFormDialog } from '@/components/metrics/metric-form-dialog';
@@ -24,10 +23,10 @@ function parseFrequency(v: string | undefined): MetricFrequency | undefined {
 export default async function MetricsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ frequency?: string; linked?: string }>;
+  searchParams: Promise<{ frequency?: string }>;
 }) {
   const orgId = await getActiveOrgId();
-  const { frequency: freqParam, linked } = await searchParams;
+  const { frequency: freqParam } = await searchParams;
 
   if (!orgId) {
     return (
@@ -58,8 +57,7 @@ export default async function MetricsPage({
   }
 
   const error = metricsResult.error ?? null;
-  let metrics = metricsResult.metrics ?? [];
-  if (linked === 'okr') metrics = metrics.filter((m) => m.linkedKrCount > 0);
+  const metrics = metricsResult.metrics ?? [];
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -97,32 +95,25 @@ export default async function MetricsPage({
                 <Th className="w-48">Meta del período</Th>
                 <Th className="w-32">Último valor</Th>
                 <Th className="w-44">Avance</Th>
-                <Th className="w-20">Vínculos</Th>
                 <Th className="w-12 text-right">{''}</Th>
               </TableRow>
             </TableHeader>
             <TableBody>
               {metrics.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="p-0">
+                  <TableCell colSpan={6} className="p-0">
                     <EmptyState
                       icon={BarChart3}
                       title={
-                        linked === 'okr'
-                          ? 'Sin indicadores vinculados a OKRs'
-                          : frequency
-                          ? 'Sin indicadores con esa frecuencia'
-                          : 'Todavía no hay indicadores'
+                        frequency ? 'Sin indicadores con esa frecuencia' : 'Todavía no hay indicadores'
                       }
                       description={
-                        linked === 'okr'
-                          ? 'Los vínculos con Key Results se habilitan con el módulo "Indicadores en OKRs".'
-                          : openPeriodExists
+                        openPeriodExists
                           ? 'Creá tu primer indicador para empezar a cargar avances y ver el esperado vs. real.'
                           : 'Necesitás un período abierto para crear indicadores. Pedí a un admin que abra uno.'
                       }
                       action={
-                        openPeriodExists && linked !== 'okr' ? <MetricFormDialog orgId={orgId} /> : undefined
+                        openPeriodExists ? <MetricFormDialog orgId={orgId} /> : undefined
                       }
                     />
                   </TableCell>
@@ -165,17 +156,6 @@ export default async function MetricsPage({
                     </TableCell>
                     <TableCell>
                       <MiniProgress pct={m.progressPct} />
-                    </TableCell>
-                    <TableCell>
-                      {m.linkedKrCount > 0 ? (
-                        <Badge variant="outline" className="text-xs" style={{ borderColor: '#c7d2fe', color: '#4338ca', backgroundColor: '#eef2ff' }}>
-                          OKR
-                        </Badge>
-                      ) : (
-                        <span className="text-xs" style={{ color: 'var(--color-neutral-300)' }}>
-                          —
-                        </span>
-                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {m.period.status === 'open' ? (

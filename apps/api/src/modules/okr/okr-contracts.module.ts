@@ -84,7 +84,7 @@ export class PrismaObjectiveAxisUnassigner implements ObjectiveAxisUnassigner {
 function toObjectiveRef(objective: {
   id: string;
   periodId: string;
-  orgUnitId: string | null;
+  orgUnitId: string;
   period: { id: string; code: string; status: string };
 }): ObjectiveRef {
   return {
@@ -235,7 +235,7 @@ const PROJECT_LINK_SELECT = {
 function toProjectLinkRef(row: {
   id: string;
   objectiveId: string;
-  orgUnitId: string | null;
+  orgUnitId: string;
   title: string;
   endsAt: Date;
   progressCachedBp: number;

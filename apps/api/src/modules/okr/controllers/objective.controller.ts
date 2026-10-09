@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -22,7 +21,6 @@ import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { ObjectiveService } from '../services/objective.service.js';
 import { CreateObjectiveDto } from '../dto/create-objective.dto.js';
 import { UpdateObjectiveDto } from '../dto/update-objective.dto.js';
-import { RebalanceKrWeightsDto } from '../dto/rebalance-kr-weights.dto.js';
 
 /** Validación de DTOs en el borde (class-validator). */
 const bodyPipe = new ValidationPipe({ transform: true, whitelist: true });
@@ -54,22 +52,6 @@ export class ObjectiveController {
     return this.objectiveService.list(requireOrgId(user), periodId);
   }
 
-  /**
-   * @deprecated Gantt Objetivo -> KR -> Tarea (camino legacy). Lo reemplaza GET /okr/planning-gantt
-   * (Objetivo -> Proyecto -> Tarea). Se elimina en el contract (F10).
-   */
-  @Get('gantt')
-  @Permissions('okr:read')
-  listGantt(
-    @CurrentUser() user: AuthContext,
-    @Query('periodId') periodId?: string,
-  ) {
-    if (!periodId) {
-      throw new BadRequestException('Query param "periodId" is required');
-    }
-    return this.objectiveService.listGantt(requireOrgId(user), periodId);
-  }
-
   @Get(':id')
   @Permissions('okr:read')
   getById(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -97,21 +79,5 @@ export class ObjectiveController {
   @HttpCode(HttpStatus.NO_CONTENT)
   softDelete(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.objectiveService.softDelete(id, requireOrgId(user), user);
-  }
-
-  @Get(':id/cascade')
-  @Permissions('okr:read')
-  getCascade(@CurrentUser() user: AuthContext, @Param('id') id: string) {
-    return this.objectiveService.getCascade(id, requireOrgId(user));
-  }
-
-  @Post(':id/rebalance-weights')
-  @Permissions('okr:write')
-  rebalanceKrWeights(
-    @CurrentUser() user: AuthContext,
-    @Param('id') id: string,
-    @Body() dto: RebalanceKrWeightsDto,
-  ) {
-    return this.objectiveService.rebalanceKrWeights(id, requireOrgId(user), dto, user);
   }
 }

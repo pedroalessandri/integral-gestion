@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ALL_PERMISSIONS, hasPermission } from '../src/auth/index.js';
 import type { AuthContext, PermissionKey } from '../src/auth/index.js';
-import type { ObjectiveCascadeDto, SetTaskProgressDto } from '../src/okr/index.js';
+import type { ObjectiveDetailDto, SetTaskProgressDto } from '../src/okr/index.js';
 import type { MeDto, OrganizationDetailDto } from '../src/core/index.js';
 import type { AuditEventDto, DomainEvent } from '../src/audit/index.js';
 import type { ErrorResponseDto } from '../src/common/index.js';
@@ -30,33 +30,25 @@ describe('shared-types public API', () => {
 
   // Structural smoke: construct a sample of each major DTO to verify shape compiles
   it('sample DTOs satisfy their interfaces', () => {
-    const cascade: ObjectiveCascadeDto = {
-      objective: {
-        id: 'c1',
-        title: 'T',
-        periodCode: '2026-Q2',
-        progressCachedBp: 5000,
-        resultProgressCachedBp: 0,
-        executionProgressCachedBp: 0,
-        status: 'in_progress',
-        hasActiveKeyResults: true,
-        createdAt: '2026-04-20T00:00:00Z',
-        period: { id: 'p1', code: '2026-Q2', status: 'open' },
-        description: null,
-        organizationId: 'o1',
-        periodId: 'p1',
-        updatedAt: '2026-04-20T00:00:00Z',
-        startsAt: null,
-        endsAt: null,
-        owner: null,
-        orgUnitId: null,
-        axisId: null,
-      },
-      keyResults: [],
-      planIncomplete: true,
-      imbalancedKrCount: 0,
+    const objective: ObjectiveDetailDto = {
+      id: 'c1',
+      title: 'T',
+      periodCode: '2026-Q2',
+      resultProgressCachedBp: 0,
+      executionProgressCachedBp: 0,
+      createdAt: '2026-04-20T00:00:00Z',
+      period: { id: 'p1', code: '2026-Q2', status: 'open' },
+      description: null,
+      organizationId: 'o1',
+      periodId: 'p1',
+      updatedAt: '2026-04-20T00:00:00Z',
+      startsAt: null,
+      endsAt: null,
+      owner: null,
+      orgUnitId: 'u1',
+      axisId: null,
     };
-    expect(cascade.keyResults).toHaveLength(0);
+    expect(objective.orgUnitId).toBe('u1');
 
     const progress: SetTaskProgressDto = { progressBp: 5000 };
     expect(progress.progressBp).toBe(5000);

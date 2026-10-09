@@ -13,9 +13,6 @@ export type {
   MetricEntryOrigin,
 } from './metric.dto.js';
 export type {
-  MetricKrLinkDto,
-  UpsertMetricKrLinkDto,
-  UpdateMetricKrLinkDto,
   MetricContextDto,
 } from './metric-link.dto.js';
 export type {

@@ -102,7 +102,7 @@ export class PlanningTreeService {
     const selected = readings.filter(
       (r) =>
         (filters.axisId === undefined || r.axisId === filters.axisId) &&
-        (unitScope === null || (r.orgUnitId !== null && unitScope.has(r.orgUnitId))),
+        (unitScope === null || unitScope.has(r.orgUnitId)),
     );
 
     const statuses = await this.statusService.getObjectivesStatusSummaries(orgId, selected, now);
@@ -113,7 +113,8 @@ export class PlanningTreeService {
       const status = statuses.get(r.id);
       if (!status) continue; // inalcanzable: el servicio devuelve una entrada por cada lectura recibida
       const axisId = r.axisId !== null && axisIds.has(r.axisId) ? r.axisId : null;
-      const orgUnitId = r.orgUnitId !== null && unitIds.has(r.orgUnitId) ? r.orgUnitId : null;
+      if (!unitIds.has(r.orgUnitId)) continue; // inalcanzable: una unidad con objetivos vivos no se puede borrar
+      const orgUnitId = r.orgUnitId;
       objectives.push({
         id: r.id,
         title: r.title,
@@ -145,14 +146,12 @@ export class PlanningTreeService {
     };
     orderUnits(unitAggregates.roots);
 
-    /** Desglose por unidad (solo directos) de un conjunto de objetivos, en el orden del árbol y "sin unidad" al final. */
+    /** Desglose por unidad (solo directos) de un conjunto de objetivos, en el orden del árbol. */
     const unitBreakdown = (items: ReadonlyArray<ObjectiveReadingInput>): PlanningAxisUnitDto[] =>
       [...aggregateObjectiveReadingsBy(items, (i) => i.orgUnitId)]
         .map(([orgUnitId, aggregate]) => ({ orgUnitId, aggregate }))
         .sort(
-          (a, b) =>
-            (a.orgUnitId === null ? Infinity : (unitOrder.get(a.orgUnitId) ?? Infinity)) -
-            (b.orgUnitId === null ? Infinity : (unitOrder.get(b.orgUnitId) ?? Infinity)),
+          (a, b) => (unitOrder.get(a.orgUnitId) ?? Infinity) - (unitOrder.get(b.orgUnitId) ?? Infinity),
         );
 
     const toUnitNode = (node: UnitAggregateNode): PlanningUnitNodeDto => {
@@ -200,7 +199,6 @@ export class PlanningTreeService {
         units: unitBreakdown(withoutAxisItems),
       },
       units: unitAggregates.roots.map(toUnitNode),
-      withoutUnit: unitAggregates.withoutUnit,
       objectives,
     };
   }

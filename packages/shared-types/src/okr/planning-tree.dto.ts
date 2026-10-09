@@ -34,8 +34,8 @@ export type PlanningObjectiveResultDto = Omit<ObjectiveResultStatusDto, 'indicat
 export interface PlanningObjectiveDto {
   id: string;
   title: string;
-  /** Unidad del objetivo; `null` mientras haya objetivos sin unidad (migración pendiente). */
-  orgUnitId: string | null;
+  /** Unidad del objetivo (siempre tiene una). */
+  orgUnitId: string;
   /** Eje del plan activo; `null` si no tiene eje. */
   axisId: string | null;
   result: PlanningObjectiveResultDto;
@@ -80,8 +80,7 @@ export interface PlanningPlanNodeDto {
 
 /** Agregado de los objetivos DIRECTOS de una unidad dentro de un eje (o dentro de "sin eje"). */
 export interface PlanningAxisUnitDto {
-  /** `null` = objetivos sin unidad. */
-  orgUnitId: string | null;
+  orgUnitId: string;
   aggregate: PlanningAggregateDto;
 }
 
@@ -119,12 +118,6 @@ export interface PlanningUnitNodeDto {
   children: PlanningUnitNodeDto[];
 }
 
-/** Objetivos sin unidad ("Sin unidad"). Siempre presente. */
-export interface PlanningWithoutUnitDto {
-  aggregate: PlanningAggregateDto;
-  objectiveIds: string[];
-}
-
 export interface PlanningTreeDto {
   /** ISO-8601 UTC del momento de cálculo. */
   asOf: string;
@@ -136,7 +129,6 @@ export interface PlanningTreeDto {
   withoutAxis: PlanningWithoutAxisDto;
   /** Árbol de unidades (raíz: la central). Con `orgUnitId` la raíz es esa unidad. */
   units: PlanningUnitNodeDto[];
-  withoutUnit: PlanningWithoutUnitDto;
   /** Lista plana de objetivos (filtrados), sin repetir: los nodos los referencian por id. */
   objectives: PlanningObjectiveDto[];
 }

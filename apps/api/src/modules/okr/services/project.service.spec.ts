@@ -152,11 +152,6 @@ describe('ProjectService.create', () => {
     ).rejects.toThrow(/OrgUnitNotFound/);
   });
 
-  it('objetivo sin unidad -> 422 ObjectiveWithoutOrgUnit', async () => {
-    scoped.objective.findFirst.mockResolvedValue({ id: 'obj-1', orgUnitId: null, period: PERIOD });
-    await expect(build().create('obj-1', ORG, baseDto, authCtx)).rejects.toThrow(/ObjectiveWithoutOrgUnit/);
-  });
-
   it.each([
     ['inicio antes del período', '2026-12-31T00:00:00.000Z', '2027-03-01T00:00:00.000Z', /ProjectOutsidePeriod/],
     ['fin después del período', '2027-02-01T00:00:00.000Z', '2028-01-01T00:00:00.000Z', /ProjectOutsidePeriod/],

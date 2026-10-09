@@ -24,7 +24,7 @@ interface Props {
   objective: {
     id: string;
     title: string;
-    orgUnitId: string | null;
+    orgUnitId: string;
     periodStartsAt: string;
     periodEndsAt: string;
   };

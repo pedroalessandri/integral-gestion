@@ -327,7 +327,7 @@ export class PeriodService {
   }
 
   /**
-   * Soft-deletes a period and cascades deletedAt to all Objectives, KeyResults, and Tasks.
+   * Soft-deletes a period and cascades deletedAt to all Objectives, Projects, and Tasks.
    * Admin-only. Uses a single transaction for atomicity.
    * Emits period.deleted audit event with cascade counts.
    */
@@ -365,33 +365,30 @@ export class PeriodService {
           });
         }
 
-        // Cascade: find affected key results
-        let keyResultsDeleted = 0;
-        const affectedKrIds: string[] = [];
+        // Cascade: soft-delete projects of those objectives
+        let projectsDeleted = 0;
+        let tasksDeleted = 0;
         if (objectiveIds.length > 0) {
-          const affectedKrs = await tx.keyResult.findMany({
+          const affectedProjects = await tx.project.findMany({
             where: { objectiveId: { in: objectiveIds }, deletedAt: null },
             select: { id: true },
           });
-          affectedKrIds.push(...affectedKrs.map((kr) => kr.id));
-          keyResultsDeleted = affectedKrIds.length;
+          const projectIds = affectedProjects.map((p) => p.id);
+          projectsDeleted = projectIds.length;
 
-          if (keyResultsDeleted > 0) {
-            await tx.keyResult.updateMany({
-              where: { objectiveId: { in: objectiveIds }, deletedAt: null },
+          if (projectsDeleted > 0) {
+            await tx.project.updateMany({
+              where: { id: { in: projectIds }, deletedAt: null },
               data: { deletedAt },
             });
-          }
-        }
 
-        // Cascade: soft-delete tasks
-        let tasksDeleted = 0;
-        if (affectedKrIds.length > 0) {
-          const result = await tx.task.updateMany({
-            where: { keyResultId: { in: affectedKrIds }, deletedAt: null },
-            data: { deletedAt },
-          });
-          tasksDeleted = result.count;
+            // Cascade: soft-delete tasks of those projects
+            const result = await tx.task.updateMany({
+              where: { projectId: { in: projectIds }, deletedAt: null },
+              data: { deletedAt },
+            });
+            tasksDeleted = result.count;
+          }
         }
 
         await this.auditEmitter.emit({
@@ -403,7 +400,7 @@ export class PeriodService {
             after: {
               deletedAt: deletedAt.toISOString(),
               objectivesDeleted,
-              keyResultsDeleted,
+              projectsDeleted,
               tasksDeleted,
             },
           },
@@ -411,7 +408,7 @@ export class PeriodService {
 
         this.logger.log(
           `Period ${periodId} soft-deleted. Cascade: ${objectivesDeleted} objectives, ` +
-            `${keyResultsDeleted} key results, ${tasksDeleted} tasks.`,
+            `${projectsDeleted} projects, ${tasksDeleted} tasks.`,
         );
       }),
     );

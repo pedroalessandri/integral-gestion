@@ -96,7 +96,7 @@ type PeriodDeletedEvent = BaseEvent<
     after: {
       deletedAt: string;
       objectivesDeleted: number;
-      keyResultsDeleted: number;
+      projectsDeleted: number;
       tasksDeleted: number;
     };
   }
@@ -292,54 +292,12 @@ type ObjectiveOwnerUnassignedEvent = BaseEvent<
   { before: { ownerUserId: string }; after: { ownerUserId: null } }
 >;
 
-type KeyResultCreatedEvent = BaseEvent<
-  'key_result.created',
-  'okr.key_result',
-  {
-    before: null;
-    after: {
-      objectiveId: string;
-      title: string;
-      description: string | null;
-      ownerUserId: string | null;
-      weightBp: number;
-    };
-  }
->;
-
-type KeyResultUpdatedEvent = BaseEvent<
-  'key_result.updated',
-  'okr.key_result',
-  {
-    before: Partial<{
-      title: string;
-      description: string | null;
-      ownerUserId: string | null;
-      weightBp: number;
-    }>;
-    after: Partial<{
-      title: string;
-      description: string | null;
-      ownerUserId: string | null;
-      weightBp: number;
-    }>;
-  }
->;
-
-type KeyResultDeletedEvent = BaseEvent<
-  'key_result.deleted',
-  'okr.key_result',
-  { before: { deletedAt: null }; after: { deletedAt: string } }
->;
-
 type TaskCreatedEvent = BaseEvent<
   'task.created',
   'okr.task',
   {
     before: null;
     after: {
-      /** Camino KR legacy. Exactamente uno entre keyResultId y projectId. */
-      keyResultId?: string | null;
       /** Proyecto (N5). */
       projectId?: string | null;
       title: string;
@@ -615,53 +573,9 @@ type MetricEntryDeletedEvent = BaseEvent<
 >;
 
 // ---------------------------------------------------------------------------
-// Metrics ↔ OKR events (Módulo 2 "Indicadores en OKRs")
+// Metrics ↔ OKR events (Módulo 2 "Indicadores de contexto en objetivos")
 // docs/features/indicadores-okr.md §5
 // ---------------------------------------------------------------------------
-
-type KrMetricLinkedEvent = BaseEvent<
-  'kr.metric_linked',
-  'okr.key_result',
-  {
-    before: null;
-    after: {
-      metricId: string;
-      baselineValue: string;
-      targetValue: string;
-      direction: string;
-    };
-  }
->;
-
-type KrMetricLinkUpdatedEvent = BaseEvent<
-  'kr.metric_link_updated',
-  'okr.key_result',
-  {
-    before: Partial<{ baselineValue: string; targetValue: string }>;
-    after: Partial<{ baselineValue: string; targetValue: string }>;
-  }
->;
-
-/** Unlink is a hard delete audited with the full snapshot (D-O3). */
-type KrMetricUnlinkedEvent = BaseEvent<
-  'kr.metric_unlinked',
-  'okr.key_result',
-  {
-    before: {
-      metricId: string;
-      baselineValue: string;
-      targetValue: string;
-      direction: string;
-    };
-    after: null;
-  }
->;
-
-type KrProgressRecomputedFromMetricEvent = BaseEvent<
-  'kr.progress_recomputed_from_metric',
-  'okr.key_result',
-  { before: { progressCachedBp: number }; after: { progressCachedBp: number } }
->;
 
 type MetricObjectiveContextLinkedEvent = BaseEvent<
   'metric_objective_context.linked',
@@ -722,10 +636,6 @@ export type DomainEvent =
   | ObjectiveOwnerAssignedEvent
   | ObjectiveOwnerChangedEvent
   | ObjectiveOwnerUnassignedEvent
-  // OKR — key_result (3)
-  | KeyResultCreatedEvent
-  | KeyResultUpdatedEvent
-  | KeyResultDeletedEvent
   // OKR — task (4)
   | TaskCreatedEvent
   | TaskUpdatedEvent
@@ -754,10 +664,6 @@ export type DomainEvent =
   | MetricEntryUpdatedEvent
   | MetricEntryDeletedEvent
   // Metrics ↔ OKR — M2 (6)
-  | KrMetricLinkedEvent
-  | KrMetricLinkUpdatedEvent
-  | KrMetricUnlinkedEvent
-  | KrProgressRecomputedFromMetricEvent
   | MetricObjectiveContextLinkedEvent
   | MetricObjectiveContextUnlinkedEvent;
 

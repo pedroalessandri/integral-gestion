@@ -157,7 +157,7 @@ function RowView({
                 </Link>
               </div>
               <p className="pl-6 text-[11px] text-neutral-500">
-                {o.orgUnitName ?? L.noUnit} · {o.axisName ?? L.noAxis}
+                {o.orgUnitName} · {o.axisName ?? L.noAxis}
               </p>
               <div className="space-y-1 pl-6">
                 <div className="flex flex-wrap items-center gap-1.5">

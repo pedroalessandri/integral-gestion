@@ -15,9 +15,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "node dist/database/seed-demo.js",
-    "migrate:planning": "node dist/database/migrate-to-planning.js",
-    "migrate:planning:dry-run": "node dist/database/migrate-to-planning.js --dry-run"
+    "prisma:seed": "node dist/database/seed-demo.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.0",

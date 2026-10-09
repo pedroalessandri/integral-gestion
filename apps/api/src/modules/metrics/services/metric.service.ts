@@ -82,8 +82,7 @@ export class MetricService {
   /**
    * RN-P20: regla de escritura sobre una métrica existente (edición, borrado, cargas). Se exige poder escribir en
    * la unidad de CADA objetivo vivo que la usa como indicador. Una métrica sin objetivos es de la organización
-   * completa y se asocia a la unidad central: solo la escribe el alcance central. Un objetivo sin unidad también
-   * exige alcance central.
+   * completa y se asocia a la unidad central: solo la escribe el alcance central.
    */
   async assertCanWriteMetric(metricId: string, orgId: string, authContext: AuthContext): Promise<void> {
     const links = (await this.prisma.scoped.objectiveIndicator.findMany({
@@ -284,16 +283,6 @@ export class MetricService {
     const existing = await this.findActiveOrThrow(id, orgId);
     await this.assertCanWriteMetric(id, orgId, authContext);
     assertPeriodOpen(this.toMinimalPeriod(existing.period));
-
-    // RN-O7: a metric with active KR links cannot be deleted — unlink first.
-    const activeLinks = await this.prisma.scoped.metricKrLink.count({
-      where: { metricId: id, organizationId: orgId },
-    });
-    if (activeLinks > 0) {
-      throw new ConflictException(
-        `No se puede eliminar el indicador: tiene ${activeLinks} vínculo(s) activo(s) con Key Results. Desvinculá primero.`,
-      );
-    }
 
     // ADR-0009 D2: una métrica que mide un objetivo no se borra; quitá primero el indicador del objetivo.
     const objectiveIndicators = await this.findLiveObjectiveIndicators(id, orgId);
@@ -507,7 +496,6 @@ export class MetricService {
       lastValue,
       expectedToDate: expectedAt(new Date(), range, baseline, target),
       progressPct: Math.trunc(progressBp({ actual: lastValue, baseline, target }) / 100),
-      linkedKrCount: 0,
       period: {
         id: metric.period.id,
         code: metric.period.code,

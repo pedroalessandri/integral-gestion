@@ -10,7 +10,7 @@ import {
 
 const obj = (id: string, over: Partial<ObjectiveReadingInput> = {}): ObjectiveReadingInput => ({
   id,
-  orgUnitId: null,
+  orgUnitId: 'u0',
   axisId: null,
   resultProgressBp: 0,
   executionProgressBp: 0,
@@ -123,17 +123,14 @@ describe('buildUnitAggregates', () => {
     expect(empty?.aggregate.result.progressBp).toBeNull();
   });
 
-  it('los objetivos sin unidad o con una unidad desconocida van a withoutUnit', () => {
-    const r = buildUnitAggregates(units, [obj('a'), obj('b', { orgUnitId: 'borrada' }), obj('c', { orgUnitId: 'min' })]);
-    expect(r.withoutUnit.objectiveIds).toEqual(['a', 'b']);
-    expect(r.withoutUnit.aggregate.objectivesCount).toBe(2);
+  it('los objetivos de una unidad desconocida no entran en el árbol', () => {
+    const r = buildUnitAggregates(units, [obj('b', { orgUnitId: 'borrada' }), obj('c', { orgUnitId: 'min' })]);
     expect(r.roots[0]?.aggregate.objectivesCount).toBe(1);
   });
 
   it('tolera ciclos sin colgarse', () => {
     const r = buildUnitAggregates([unit('a', 'b'), unit('b', 'a')], [obj('o', { orgUnitId: 'a' })]);
     expect(r.roots).toEqual([]);
-    expect(r.withoutUnit.objectiveIds).toEqual(['o']);
   });
 });
 

@@ -21,7 +21,7 @@ const objective = {
   orgUnitId: 'unit-b',
   deletedAt: null,
   period: { id: 'p', code: 'P', status: 'open', startsAt: new Date(), endsAt: new Date() },
-  _count: { keyResults: 0 },
+  _count: { projects: 0 },
 };
 const runInTransaction = vi.fn();
 const prisma = { scoped: { objective: { findFirst: vi.fn().mockResolvedValue(objective) } }, runInTransaction };
@@ -42,25 +42,20 @@ function build() {
 }
 
 describe('ObjectiveService — alcance de unidad', () => {
-  it('update / softDelete / rebalance de un objetivo de otra unidad → 403 sin escribir', async () => {
+  it('update / softDelete de un objetivo de otra unidad → 403 sin escribir', async () => {
     const service = build();
     await expect(service.update('obj-1', 'org-1', { title: 'x' }, ctx)).rejects.toThrow(/OrgUnitScopeForbidden/);
     await expect(service.softDelete('obj-1', 'org-1', ctx)).rejects.toThrow(/OrgUnitScopeForbidden/);
-    await expect(
-      service.rebalanceKrWeights('obj-1', 'org-1', { items: [{ krId: 'k', weightBp: 10000 }] } as never, ctx),
-    ).rejects.toThrow(/OrgUnitScopeForbidden/);
     expect(forbid).toHaveBeenCalledWith(ctx, 'unit-b');
     expect(runInTransaction).not.toHaveBeenCalled();
   });
 
-  it('create en una unidad fuera del alcance (o sin unidad) → 403 antes de resolver el período', async () => {
+  it('create en una unidad fuera del alcance → 403 antes de resolver el período', async () => {
     const service = build();
     await expect(service.create('org-1', { title: 'x', orgUnitId: 'unit-b' } as never, ctx)).rejects.toThrow(
       /OrgUnitScopeForbidden/,
     );
     expect(forbid).toHaveBeenLastCalledWith(ctx, 'unit-b');
-    await expect(service.create('org-1', { title: 'x' } as never, ctx)).rejects.toThrow(/OrgUnitScopeForbidden/);
-    expect(forbid).toHaveBeenLastCalledWith(ctx, null);
     expect(periodService.getCurrentOpenPeriod).not.toHaveBeenCalled();
   });
 });

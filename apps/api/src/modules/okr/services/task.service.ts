@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -8,8 +7,6 @@ import {
 import type { TaskDetailDto, TaskSummaryDto } from '@gestion-publica/shared-types/okr';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import {
-  computeKrProgress,
-  computeObjectiveProgress,
   computeExecutionProgress,
   computeProjectProgress,
   computeTaskStatus,
@@ -19,13 +16,11 @@ import {
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/index.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
-import type { CreateTaskDto } from '../dto/create-task.dto.js';
 import type { UpdateTaskDto } from '../dto/update-task.dto.js';
 import type { CreateProjectTaskDto } from '../dto/create-project-task.dto.js';
 import type { SetSiblingWeightsDto } from '../dto/set-sibling-weights.dto.js';
 import { ORG_UNIT_SCOPE, type OrgUnitScope } from '../../../common/contracts/index.js';
 import { assertPeriodOpen } from '../../../common/guards/period-guard.js';
-import { recomputeKrAndObjectiveProgress } from './recompute.js';
 import { lockProject, recomputeProjectAndObjectiveExecution } from './project-recompute.js';
 import { ProjectLifecyclePublisher, type ProjectProgressTransition } from './project-lifecycle-publisher.js';
 import { assertSameSiblingSet, assertValidWeightGroup } from './weight-group.js';
@@ -42,8 +37,7 @@ type PeriodRef = { id: string; status: 'open' | 'closed' | 'future'; code: strin
 
 type TaskRow = {
   id: string;
-  keyResultId: string | null;
-  projectId: string | null;
+  projectId: string;
   organizationId: string;
   title: string;
   description?: string | null;
@@ -60,48 +54,23 @@ type TaskRow = {
 type ProjectParentRow = {
   id: string;
   objectiveId: string;
-  orgUnitId: string | null;
+  orgUnitId: string;
   progressMode: string;
   startsAt: Date;
   endsAt: Date;
-  objective: { period: PeriodRow; orgUnitId: string | null };
+  objective: { period: PeriodRow; orgUnitId: string };
 };
 
 type TaskWithParent = TaskRow & {
-  keyResult: { objective: { period: PeriodRow; orgUnitId: string | null } } | null;
-  project: ProjectParentRow | null;
+  project: ProjectParentRow;
 };
 
 const PERIOD_SELECT = { id: true, code: true, status: true, startsAt: true, endsAt: true } as const;
 const OBJECTIVE_PERIOD_INCLUDE = { objective: { include: { period: { select: PERIOD_SELECT } } } } as const;
-/** Padre de una tarea: KR legacy o proyecto (exactamente uno, CHECK chk_task_parent_xor). */
+/** Padre de una tarea: su proyecto (N5). */
 const TASK_PARENT_INCLUDE = {
-  keyResult: { include: OBJECTIVE_PERIOD_INCLUDE },
   project: { include: OBJECTIVE_PERIOD_INCLUDE },
 } as const;
-
-/** Validate that task dates are within the parent period's range (camino KR legacy). */
-function assertTaskDatesWithinPeriod(
-  startsAt: Date,
-  endsAt: Date,
-  period: PeriodRow,
-): void {
-  if (startsAt > endsAt) {
-    throw new ConflictException(
-      `La fecha de inicio de la tarea (${startsAt.toISOString()}) debe ser anterior o igual a la fecha de fin (${endsAt.toISOString()}).`,
-    );
-  }
-  if (startsAt < period.startsAt) {
-    throw new ConflictException(
-      `La fecha de inicio de la tarea (${startsAt.toISOString().slice(0, 10)}) no puede ser anterior al inicio del período (${period.startsAt.toISOString().slice(0, 10)}).`,
-    );
-  }
-  if (endsAt > period.endsAt) {
-    throw new ConflictException(
-      `La fecha de fin de la tarea (${endsAt.toISOString().slice(0, 10)}) no puede ser posterior al fin del período (${period.endsAt.toISOString().slice(0, 10)}).`,
-    );
-  }
-}
 
 /** RN-P5: las fechas de una tarea caen dentro de las de su proyecto (inclusive). */
 function assertTaskDatesWithinProject(
@@ -130,15 +99,6 @@ export class TaskService {
     @Inject(ORG_UNIT_SCOPE) private readonly orgUnitScope: OrgUnitScope,
   ) {}
 
-  async list(keyResultId: string, orgId: string): Promise<TaskSummaryDto[]> {
-    const tasks = await this.prisma.scoped.task.findMany({
-      where: { keyResultId, organizationId: orgId, deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    return (tasks as TaskRow[]).map((t) => this.toSummaryDto(t));
-  }
-
   async listByProject(projectId: string, orgId: string): Promise<TaskSummaryDto[]> {
     await this.findProjectOrThrow(projectId, orgId);
     const tasks = await this.prisma.scoped.task.findMany({
@@ -159,87 +119,6 @@ export class TaskService {
     }
 
     return this.toDetailDto(task as TaskRow);
-  }
-
-  async create(
-    keyResultId: string,
-    orgId: string,
-    dto: CreateTaskDto,
-    authContext: AuthContext,
-  ): Promise<TaskDetailDto> {
-    const kr = await this.prisma.scoped.keyResult.findFirst({
-      where: { id: keyResultId, organizationId: orgId, deletedAt: null },
-      include: {
-        objective: {
-          include: {
-            period: { select: PERIOD_SELECT },
-          },
-        },
-      },
-    });
-    if (!kr) {
-      throw new NotFoundException(`Key result ${keyResultId} not found`);
-    }
-    await this.orgUnitScope.assertCanWriteInUnit(
-      authContext,
-      (kr as { objective: { orgUnitId: string | null } }).objective.orgUnitId,
-    );
-
-    const period = (kr as { objective: { period: PeriodRow } }).objective.period;
-    assertPeriodOpen(period as PeriodRef);
-
-    const startsAt = new Date(dto.startsAt);
-    const endsAt = new Date(dto.endsAt);
-    assertTaskDatesWithinPeriod(startsAt, endsAt, period);
-
-    return tenantContextStorage.run(authContext, () =>
-      this.prisma.runInTransaction(async (tx) => {
-        const siblings = await tx.task.findMany({
-          where: { keyResultId, organizationId: orgId, deletedAt: null },
-          select: { weightBp: true },
-        });
-        const currentSum = siblings.reduce((acc: number, s: { weightBp: number | null }) => acc + (s.weightBp ?? 0), 0);
-        if (currentSum + dto.weightBp > 10000) {
-          throw new ConflictException(
-            `Agregar esta tarea haría que la suma de pesos sea ${((currentSum + dto.weightBp) / 100).toFixed(1)}%, superando el 100% permitido.`,
-          );
-        }
-
-        const task = await tx.task.create({
-          data: {
-            keyResultId,
-            organizationId: orgId,
-            title: dto.title,
-            description: dto.description ?? null,
-            ownerUserId: dto.ownerUserId ?? null,
-            weightBp: dto.weightBp,
-            startsAt,
-            endsAt,
-          },
-        });
-
-        await this.auditEmitter.emit({
-          action: 'task.created',
-          entityType: 'okr.task',
-          entityId: task.id,
-          diff: {
-            before: null,
-            after: {
-              keyResultId,
-              title: task.title,
-              description: task.description,
-              ownerUserId: task.ownerUserId,
-              weightBp: task.weightBp,
-              progressBp: 0,
-              startsAt: startsAt.toISOString(),
-              endsAt: endsAt.toISOString(),
-            },
-          },
-        });
-
-        return this.toDetailDto(task as TaskRow);
-      }),
-    );
   }
 
   /**
@@ -316,46 +195,26 @@ export class TaskService {
     await this.orgUnitScope.assertCanWriteInUnit(authContext, this.taskUnitId(existing));
     const existingRow = existing as TaskRow;
     const project = existing.project;
-    const period = (project ? project.objective.period : existing.keyResult?.objective.period) as PeriodRow;
-    assertPeriodOpen(period as PeriodRef);
+    assertPeriodOpen(project.objective.period as PeriodRef);
 
     // Resolve effective dates for validation
     const newStartsAt = dto.startsAt !== undefined ? new Date(dto.startsAt) : existingRow.startsAt;
     const newEndsAt = dto.endsAt !== undefined ? new Date(dto.endsAt) : existingRow.endsAt;
     if (dto.startsAt !== undefined || dto.endsAt !== undefined) {
-      if (project) assertTaskDatesWithinProject(newStartsAt, newEndsAt, project);
-      else assertTaskDatesWithinPeriod(newStartsAt, newEndsAt, period);
-    }
-
-    // El camino KR legacy siempre exige peso (CHECK chk_task_kr_weight).
-    if (!project && dto.weightBp === null) {
-      throw new UnprocessableEntityException(
-        'KrTaskWeightRequired: las tareas de un Key Result siempre llevan peso.',
-      );
+      assertTaskDatesWithinProject(newStartsAt, newEndsAt, project);
     }
     const weightChanged = dto.weightBp !== undefined && dto.weightBp !== existingRow.weightBp;
 
     return this.runWithTransitions(orgId, authContext, async (tx, transitions) => {
-      if (project) await lockProject(tx, project.id, orgId);
+      await lockProject(tx, project.id, orgId);
 
       if (weightChanged && dto.weightBp !== undefined) {
         const siblings = await tx.task.findMany({
-          where: project
-            ? { projectId: project.id, organizationId: orgId, deletedAt: null, id: { not: id } }
-            : { keyResultId: existingRow.keyResultId, organizationId: orgId, deletedAt: null, id: { not: id } },
+          where: { projectId: project.id, organizationId: orgId, deletedAt: null, id: { not: id } },
           select: { weightBp: true },
         });
-        if (project) {
-          // RN-P6: se valida el grupo resultante (todo-o-nada, suma 10000).
-          assertValidWeightGroup([...siblings, { weightBp: dto.weightBp }], 'tareas');
-        } else {
-          const siblingsSum = siblings.reduce((acc: number, s: { weightBp: number | null }) => acc + (s.weightBp ?? 0), 0);
-          if (siblingsSum + (dto.weightBp ?? 0) > 10000) {
-            throw new ConflictException(
-              `Actualizar este peso haría que la suma de pesos de las tareas sea ${((siblingsSum + (dto.weightBp ?? 0)) / 100).toFixed(1)}%, superando el 100% permitido.`,
-            );
-          }
-        }
+        // RN-P6: se valida el grupo resultante (todo-o-nada, suma 10000).
+        assertValidWeightGroup([...siblings, { weightBp: dto.weightBp }], 'tareas');
       }
 
       const updated = await tx.task.update({
@@ -370,19 +229,8 @@ export class TaskService {
         },
       });
 
-      // If weight changed, recompute the cached progress up the branch (KR path or project path).
       if (weightChanged) {
-        if (project) {
-          await this.recomputeProject(tx, project.id, orgId, transitions);
-        } else if (existingRow.keyResultId) {
-          await recomputeKrAndObjectiveProgress(
-            tx,
-            existingRow.keyResultId,
-            orgId,
-            computeKrProgress,
-            computeObjectiveProgress,
-          );
-        }
+        await this.recomputeProject(tx, project.id, orgId, transitions);
       }
 
       const before: Record<string, unknown> = {};
@@ -476,27 +324,21 @@ export class TaskService {
     const existing = await this.findTaskWithParentOrThrow(id, orgId);
     await this.orgUnitScope.assertCanWriteInUnit(authContext, this.taskUnitId(existing));
     const project = existing.project;
-    assertPeriodOpen(
-      (project ? project.objective.period : existing.keyResult?.objective.period) as PeriodRef,
-    );
-
-    const existingTask = existing as TaskRow;
+    assertPeriodOpen(project.objective.period as PeriodRef);
 
     await this.runWithTransitions(orgId, authContext, async (tx, transitions) => {
-      if (project) {
-        await lockProject(tx, project.id, orgId);
-        // RN-P6 / RN-25: no se puede dejar un grupo ponderado con suma != 10000.
-        const siblings = await tx.task.findMany({
-          where: { projectId: project.id, organizationId: orgId, deletedAt: null },
-          select: { id: true, weightBp: true },
-        });
-        if (weightMode(siblings) === 'weighted' && siblings.length > 1) {
-          const remaining = projectSumAfterDelete(siblings, id);
-          if (remaining !== 10000) {
-            throw new UnprocessableEntityException(
-              `WeightSumInvalid: borrar esta tarea dejaría los pesos de las tareas en ${remaining} bp (deben sumar 10000). Redistribuí los pesos primero (RN-P6).`,
-            );
-          }
+      await lockProject(tx, project.id, orgId);
+      // RN-P6 / RN-25: no se puede dejar un grupo ponderado con suma != 10000.
+      const siblings = await tx.task.findMany({
+        where: { projectId: project.id, organizationId: orgId, deletedAt: null },
+        select: { id: true, weightBp: true },
+      });
+      if (weightMode(siblings) === 'weighted' && siblings.length > 1) {
+        const remaining = projectSumAfterDelete(siblings, id);
+        if (remaining !== 10000) {
+          throw new UnprocessableEntityException(
+            `WeightSumInvalid: borrar esta tarea dejaría los pesos de las tareas en ${remaining} bp (deben sumar 10000). Redistribuí los pesos primero (RN-P6).`,
+          );
         }
       }
 
@@ -505,18 +347,7 @@ export class TaskService {
         data: { deletedAt: new Date() },
       });
 
-      // Recompute cached progress after task deletion (project path or KR path).
-      if (project) {
-        await this.recomputeProject(tx, project.id, orgId, transitions);
-      } else if (existingTask.keyResultId) {
-        await recomputeKrAndObjectiveProgress(
-          tx,
-          existingTask.keyResultId,
-          orgId,
-          computeKrProgress,
-          computeObjectiveProgress,
-        );
-      }
+      await this.recomputeProject(tx, project.id, orgId, transitions);
 
       await this.auditEmitter.emit({
         action: 'task.deleted',
@@ -545,15 +376,13 @@ export class TaskService {
     const existing = await this.findTaskWithParentOrThrow(id, orgId);
     await this.orgUnitScope.assertCanWriteInUnit(authContext, this.taskUnitId(existing));
     const project = existing.project;
-    assertPeriodOpen(
-      (project ? project.objective.period : existing.keyResult?.objective.period) as PeriodRef,
-    );
+    assertPeriodOpen(project.objective.period as PeriodRef);
 
     const existingTask = existing as TaskRow;
     const beforeProgressBp = existingTask.progressBp;
 
     return this.runWithTransitions(orgId, authContext, async (tx, transitions) => {
-      if (project) await lockProject(tx, project.id, orgId);
+      await lockProject(tx, project.id, orgId);
 
       // Update task progress
       const updatedTask = await tx.task.update({
@@ -561,18 +390,7 @@ export class TaskService {
         data: { progressBp },
       });
 
-      // Recompute cached progress via the shared helper of each branch
-      if (project) {
-        await this.recomputeProject(tx, project.id, orgId, transitions);
-      } else if (existingTask.keyResultId) {
-        await recomputeKrAndObjectiveProgress(
-          tx,
-          existingTask.keyResultId,
-          orgId,
-          computeKrProgress,
-          computeObjectiveProgress,
-        );
-      }
+      await this.recomputeProject(tx, project.id, orgId, transitions);
 
       await this.auditEmitter.emit({
         action: 'task.progress.updated',
@@ -588,15 +406,12 @@ export class TaskService {
     });
   }
 
-  /**
-   * RN-P20: la unidad efectiva de una tarea es la de su proyecto (`Project.orgUnitId`); en el camino KR legacy,
-   * la de su objetivo.
-   */
-  private taskUnitId(existing: TaskWithParent): string | null {
-    return existing.project ? existing.project.orgUnitId : (existing.keyResult?.objective.orgUnitId ?? null);
+  /** RN-P20: la unidad efectiva de una tarea es la de su proyecto (`Project.orgUnitId`). */
+  private taskUnitId(existing: TaskWithParent): string {
+    return existing.project.orgUnitId;
   }
 
-  /** Tarea viva de la org con su padre (KR o proyecto) y el período del objetivo. */
+  /** Tarea viva de la org con su proyecto y el período del objetivo. */
   private async findTaskWithParentOrThrow(id: string, orgId: string): Promise<TaskWithParent> {
     const existing = await this.prisma.scoped.task.findFirst({
       where: { id, organizationId: orgId, deletedAt: null },
@@ -672,7 +487,6 @@ export class TaskService {
   private toSummaryDto(t: TaskRow): TaskSummaryDto {
     return {
       id: t.id,
-      keyResultId: t.keyResultId,
       projectId: t.projectId,
       title: t.title,
       weightBp: t.weightBp,

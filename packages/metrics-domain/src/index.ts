@@ -15,7 +15,6 @@ export { expectedAt } from './expected';
 export {
   progressBp,
   deviationBp,
-  computeAutomaticKrProgressBp,
   objectiveIndicatorProgressBp,
 } from './progress';
 export {

@@ -90,7 +90,6 @@ export function createInMemoryOkrDb(): InMemoryOkrDb {
     deletedAt: null,
     progressBp: 0,
     weightBp: null,
-    keyResultId: null,
     description: null,
     ownerUserId: null,
     createdAt: now,

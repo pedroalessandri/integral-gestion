@@ -25,7 +25,7 @@ import { inviteMemberAction } from './actions';
 
 const ROLES = [
   { value: 'org-admin', label: 'Administrador', desc: 'Puede gestionar toda la organización.' },
-  { value: 'org-user', label: 'Usuario', desc: 'Puede leer OKR y cargar avances.' },
+  { value: 'org-user', label: 'Usuario', desc: 'Puede leer la planificación y cargar avances.' },
   { value: 'org-reader', label: 'Lector', desc: 'Solo lectura.' },
 ] as const;
 

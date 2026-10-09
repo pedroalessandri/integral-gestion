@@ -33,26 +33,6 @@ export function progressBp(input: {
 }
 
 /**
- * Automatic KR progress in basis points, per docs/features/indicadores-okr.md §3
- * (RN-O1/RN-O4): the KR percentage of an automatic Key Result derives solely
- * from the linked indicator, interpolating between the link's snapshot
- * `baseline` and `target` at the metric's accumulated `actual` value.
- *
- * This is the linear-interpolation formula of {@link progressBp} named for the
- * OKR domain. Direction is implicit in the sign of (target − baseline); the
- * link stores it explicitly only for UI/validation (D-O6). The caller treats a
- * `baseline === target` link as invalid (422) before reaching here — this
- * function still returns a defined value (10000 iff actual reached target).
- */
-export function computeAutomaticKrProgressBp(input: {
-  actual: string;
-  baseline: string;
-  target: string;
-}): number {
-  return progressBp(input);
-}
-
-/**
  * Signed deviation of the real value vs the expected one, in basis points of the baseline→target span
  * (RN-P9). Positive = ahead, negative = behind; NOT clamped; 0 when baseline === target.
  *

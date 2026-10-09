@@ -1,8 +1,4 @@
 export type {
-  TaskInput,
-  KrInput,
-  ObjectiveInput,
-  CascadeResult,
   WeightSumError,
   OptionalWeightInput,
   ProjectTaskInput,
@@ -13,8 +9,6 @@ export type {
 } from './types';
 export { truncateBpFromPct, bpToPct } from './basis-points';
 export {
-  computeKrProgress,
-  computeObjectiveProgress,
   computeProjectProgress,
   computeExecutionProgress,
   computeResultProgress,

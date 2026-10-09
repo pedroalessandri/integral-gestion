@@ -13,23 +13,8 @@ import { PeriodSelector } from '@/components/periods/period-selector';
 import { listPeriodsAction, getAiStatusAction, type PeriodItem } from '@/components/objectives/actions';
 import Link from 'next/link';
 import { getPlanningTreeAction, indexObjectiveReadings, ObjectiveStatusCell } from '@/features/planning-tree';
-import type { OwnerSummaryDto } from '@gestion-publica/shared-types/okr';
-
-interface ObjectiveItem {
-  id: string;
-  title: string;
-  description?: string | null;
-  progressCachedBp: number;
-  createdAt: string;
-  owner: OwnerSummaryDto | null;
-  orgUnitId?: string | null;
-  axisId?: string | null;
-  period: {
-    id: string;
-    code: string;
-    status: 'open' | 'closed' | 'future';
-  };
-}
+import type { ObjectiveSummaryDto } from '@gestion-publica/shared-types/okr';
+import { LABELS, PLANNING_TREE_LABELS } from '@/lib/labels';
 
 interface MeResponse {
   userId: string;
@@ -102,7 +87,7 @@ export default async function ObjectivesPage({
   const treeResult = targetPeriodId ? await getPlanningTreeAction(orgId, { periodId: targetPeriodId }) : null;
   const readingsByObjective = treeResult?.ok ? indexObjectiveReadings(treeResult.data) : null;
 
-  let objectives: ObjectiveItem[] = [];
+  let objectives: ObjectiveSummaryDto[] = [];
   let error: string | null = null;
   let isSuperadmin = false;
   let currentUserId: string | null = null;
@@ -112,8 +97,8 @@ export default async function ObjectivesPage({
   } else {
     const data: unknown = await objectivesRes.json();
     objectives = Array.isArray(data)
-      ? (data as ObjectiveItem[])
-      : ((data as { items?: ObjectiveItem[] }).items ?? []);
+      ? (data as ObjectiveSummaryDto[])
+      : ((data as { items?: ObjectiveSummaryDto[] }).items ?? []);
   }
 
   if (meRes.ok) {
@@ -232,10 +217,10 @@ export default async function ObjectivesPage({
                   Responsable
                 </TableHead>
                 <TableHead
-                  className="w-40 text-xs uppercase tracking-wider font-medium"
+                  className="w-56 text-xs uppercase tracking-wider font-medium"
                   style={{ color: 'var(--color-neutral-500)' }}
                 >
-                  Progreso
+                  Avance
                 </TableHead>
                 <TableHead
                   className="w-48 text-xs uppercase tracking-wider font-medium"
@@ -264,7 +249,7 @@ export default async function ObjectivesPage({
                     <EmptyState
                       icon={Target}
                       title="Sin objetivos este período"
-                      description="Los objetivos te ayudan a medir avances concretos del equipo."
+                      description="Los objetivos estratégicos son lo que querés lograr en el período. Creá el primero."
                       action={
                         !isHistoricalView && openPeriod ? (
                           <CreateObjectiveButton
@@ -293,7 +278,18 @@ export default async function ObjectivesPage({
                         <OwnerPill owner={obj.owner} size="sm" />
                       </TableCell>
                       <TableCell>
-                        <ProgressBar valueBp={obj.progressCachedBp} />
+                        <div className="space-y-1.5">
+                          <ProgressBar
+                            label={PLANNING_TREE_LABELS.readingShort.result}
+                            title={LABELS.resultProgress}
+                            valueBp={obj.resultProgressCachedBp}
+                          />
+                          <ProgressBar
+                            label={PLANNING_TREE_LABELS.readingShort.execution}
+                            title={LABELS.executionProgress}
+                            valueBp={obj.executionProgressCachedBp}
+                          />
+                        </div>
                       </TableCell>
                       <TableCell>
                         {readingsByObjective && <ObjectiveStatusCell readings={readingsByObjective.get(obj.id)} />}
@@ -314,8 +310,8 @@ export default async function ObjectivesPage({
                                 title: obj.title,
                                 description: obj.description,
                                 ownerUserId: obj.owner?.id ?? null,
-                                orgUnitId: obj.orgUnitId ?? null,
-                                axisId: obj.axisId ?? null,
+                                orgUnitId: obj.orgUnitId,
+                                axisId: obj.axisId,
                               }}
                               aiEnabled={aiStatus.enabled}
                             />
@@ -456,10 +452,13 @@ function NoPeriodEmptyState({
   );
 }
 
-function ProgressBar({ valueBp }: { valueBp: number }) {
+function ProgressBar({ label, title, valueBp }: { label: string; title: string; valueBp: number }) {
   const pct = valueBp / 100;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" title={title}>
+      <span className="w-14 shrink-0 text-xs" style={{ color: 'var(--color-neutral-500)' }}>
+        {label}
+      </span>
       <div
         className="flex-1 rounded-full h-2"
         style={{ backgroundColor: 'var(--color-neutral-200)' }}

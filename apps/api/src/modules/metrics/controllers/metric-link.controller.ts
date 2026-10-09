@@ -1,5 +1,4 @@
 import {
-  Body,
   Controller,
   Delete,
   ForbiddenException,
@@ -7,10 +6,8 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  Patch,
   Put,
   UseGuards,
-  ValidationPipe,
 } from '@nestjs/common';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
@@ -20,8 +17,6 @@ import { ModuleEnabledGuard } from '../../../common/guards/module-enabled.guard.
 import { RequiresModule } from '../../../common/decorators/requires-module.decorator.js';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { MetricLinkService } from '../services/metric-link.service.js';
-import { UpsertMetricKrLinkDto } from '../dto/upsert-metric-kr-link.dto.js';
-import { UpdateMetricKrLinkDto } from '../dto/update-metric-kr-link.dto.js';
 
 function requireOrgId(user: AuthContext): string {
   if (!user.organizationId) {
@@ -31,7 +26,7 @@ function requireOrgId(user: AuthContext): string {
 }
 
 /**
- * MetricLinkController — metric↔KR link + metric↔objective context (Módulo 2).
+ * MetricLinkController — metric↔objective context (Módulo 2).
  * Routes per docs/features/indicadores-okr.md §5.
  *
  * RN-O11: every endpoint requires BOTH modules enabled. The guard rejects the
@@ -43,42 +38,6 @@ function requireOrgId(user: AuthContext): string {
 @Controller()
 export class MetricLinkController {
   constructor(private readonly metricLinkService: MetricLinkService) {}
-
-  @Put('key-results/:id/metric-link')
-  @Permissions('metrics:write')
-  upsertLink(
-    @CurrentUser() user: AuthContext,
-    @Param('id') keyResultId: string,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
-    dto: UpsertMetricKrLinkDto,
-  ) {
-    return this.metricLinkService.upsert(keyResultId, requireOrgId(user), dto, user);
-  }
-
-  @Patch('key-results/:id/metric-link')
-  @Permissions('metrics:write')
-  updateLink(
-    @CurrentUser() user: AuthContext,
-    @Param('id') keyResultId: string,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
-    dto: UpdateMetricKrLinkDto,
-  ) {
-    return this.metricLinkService.update(keyResultId, requireOrgId(user), dto, user);
-  }
-
-  @Delete('key-results/:id/metric-link')
-  @Permissions('metrics:write')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  removeLink(@CurrentUser() user: AuthContext, @Param('id') keyResultId: string) {
-    return this.metricLinkService.remove(keyResultId, requireOrgId(user), user);
-  }
-
-  @Get('metrics/:id/links')
-  @Permissions('metrics:read')
-  async listLinks(@CurrentUser() user: AuthContext, @Param('id') metricId: string) {
-    const items = await this.metricLinkService.listByMetric(metricId, requireOrgId(user));
-    return { items };
-  }
 
   @Put('objectives/:id/context-metrics/:metricId')
   @Permissions('metrics:write')

@@ -13,11 +13,10 @@ export class CreateObjectiveDto {
   @IsString()
   ownerUserId?: string;
 
-  /** Unidad ministry|area de la misma org (RN-P3). Opcional hasta la fase migrate. */
-  @IsOptional()
+  /** Unidad ministry|area de la misma org (RN-P3). Obligatoria. */
   @IsString()
   @IsNotEmpty()
-  orgUnitId?: string;
+  orgUnitId!: string;
 
   /** Eje del plan activo (RN-P2). */
   @IsOptional()

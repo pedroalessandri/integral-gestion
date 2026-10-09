@@ -8,7 +8,6 @@ import {
   HttpStatus,
   Param,
   Patch,
-  Post,
   Put,
   UseGuards,
   ValidationPipe,
@@ -19,7 +18,6 @@ import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { TaskService } from '../services/task.service.js';
-import { CreateTaskDto } from '../dto/create-task.dto.js';
 import { UpdateTaskDto } from '../dto/update-task.dto.js';
 import { SetTaskProgressDto } from '../dto/set-task-progress.dto.js';
 
@@ -43,22 +41,6 @@ function requireOrgId(user: AuthContext): string {
 @Controller('okr')
 export class TaskController {
   constructor(private readonly taskService: TaskService) {}
-
-  @Get('key-results/:keyResultId/tasks')
-  @Permissions('okr:read')
-  list(@CurrentUser() user: AuthContext, @Param('keyResultId') keyResultId: string) {
-    return this.taskService.list(keyResultId, requireOrgId(user));
-  }
-
-  @Post('key-results/:keyResultId/tasks')
-  @Permissions('okr:write')
-  create(
-    @CurrentUser() user: AuthContext,
-    @Param('keyResultId') keyResultId: string,
-    @Body(bodyPipe) dto: CreateTaskDto,
-  ) {
-    return this.taskService.create(keyResultId, requireOrgId(user), dto, user);
-  }
 
   @Get('tasks/:id')
   @Permissions('okr:read')

@@ -28,7 +28,7 @@ const mockTx = {
     findMany: vi.fn(),
     updateMany: vi.fn(),
   },
-  keyResult: {
+  project: {
     findMany: vi.fn(),
     updateMany: vi.fn(),
   },
@@ -421,7 +421,7 @@ describe('PeriodService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('cascades deletedAt to objectives, key results, and tasks', async () => {
+    it('cascades deletedAt to objectives, projects, and tasks', async () => {
       mockPrismaRaw.period.findFirst.mockResolvedValue(basePeriod);
       mockTx.period.update.mockResolvedValue({ ...basePeriod, deletedAt: new Date() });
 
@@ -432,13 +432,9 @@ describe('PeriodService', () => {
       ]);
       mockTx.objective.updateMany.mockResolvedValue({ count: 2 });
 
-      // 3 key results across those objectives
-      mockTx.keyResult.findMany.mockResolvedValue([
-        { id: 'kr-1' },
-        { id: 'kr-2' },
-        { id: 'kr-3' },
-      ]);
-      mockTx.keyResult.updateMany.mockResolvedValue({ count: 3 });
+      // 3 projects across those objectives
+      mockTx.project.findMany.mockResolvedValue([{ id: 'p-1' }, { id: 'p-2' }, { id: 'p-3' }]);
+      mockTx.project.updateMany.mockResolvedValue({ count: 3 });
 
       // 5 tasks
       mockTx.task.updateMany.mockResolvedValue({ count: 5 });
@@ -449,7 +445,7 @@ describe('PeriodService', () => {
       expect(mockTx.objective.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: expect.objectContaining({ periodId: 'period-1' }) }),
       );
-      expect(mockTx.keyResult.updateMany).toHaveBeenCalled();
+      expect(mockTx.project.updateMany).toHaveBeenCalled();
       expect(mockTx.task.updateMany).toHaveBeenCalled();
     });
 
@@ -459,8 +455,8 @@ describe('PeriodService', () => {
 
       mockTx.objective.findMany.mockResolvedValue([{ id: 'obj-1' }, { id: 'obj-2' }]);
       mockTx.objective.updateMany.mockResolvedValue({ count: 2 });
-      mockTx.keyResult.findMany.mockResolvedValue([{ id: 'kr-1' }]);
-      mockTx.keyResult.updateMany.mockResolvedValue({ count: 1 });
+      mockTx.project.findMany.mockResolvedValue([{ id: 'p-1' }]);
+      mockTx.project.updateMany.mockResolvedValue({ count: 1 });
       mockTx.task.updateMany.mockResolvedValue({ count: 4 });
 
       await service.softDeletePeriod('period-1', mockAuthContext);
@@ -474,7 +470,7 @@ describe('PeriodService', () => {
             before: { deletedAt: null },
             after: expect.objectContaining({
               objectivesDeleted: 2,
-              keyResultsDeleted: 1,
+              projectsDeleted: 1,
               tasksDeleted: 4,
             }),
           }),
@@ -495,14 +491,14 @@ describe('PeriodService', () => {
           diff: expect.objectContaining({
             after: expect.objectContaining({
               objectivesDeleted: 0,
-              keyResultsDeleted: 0,
+              projectsDeleted: 0,
               tasksDeleted: 0,
             }),
           }),
         }),
       );
-      // Task/KR updateMany should NOT be called when no objectives
-      expect(mockTx.keyResult.findMany).not.toHaveBeenCalled();
+      // Task/project updateMany should NOT be called when no objectives
+      expect(mockTx.project.findMany).not.toHaveBeenCalled();
       expect(mockTx.task.updateMany).not.toHaveBeenCalled();
     });
 

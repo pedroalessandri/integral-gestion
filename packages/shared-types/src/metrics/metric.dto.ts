@@ -47,8 +47,6 @@ export interface MetricSummaryDto {
   expectedToDate: string;
   /** Integer 0..100 for the catalog mini progress bar. */
   progressPct: number;
-  /** Always 0 in Módulo 1; populated by Módulo 2. */
-  linkedKrCount: number;
   period: MetricPeriodDto;
   /** ISO-8601 UTC. */
   createdAt: string;

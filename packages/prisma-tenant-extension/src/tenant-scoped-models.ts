@@ -31,16 +31,9 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'Objective',
 
   /**
-   * `okr.key_result` — per ADR 0001.
-   * A KeyResult belongs to an Objective which belongs to one organization.
-   * organizationId is denormalized onto KeyResult for query efficiency.
-   */
-  'KeyResult',
-
-  /**
    * `okr.task` — per ADR 0001.
-   * A Task belongs to a KeyResult. organizationId is denormalized for
-   * the same reason as KeyResult.
+   * A Task belongs to a Project. organizationId is denormalized for
+   * query efficiency.
    */
   'Task',
 
@@ -74,16 +67,9 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set([
   /**
    * `metrics.metric_entry` — per docs/features/indicadores-modelo-comun.md.
    * An entry belongs to a Metric. organizationId is denormalized for the
-   * same reason as KeyResult/Task.
+   * same reason as Task.
    */
   'MetricEntry',
-
-  /**
-   * `metrics.metric_kr_link` — per docs/features/indicadores-okr.md (M2).
-   * Links a Metric to a KeyResult within one organization. organizationId
-   * is required and non-mutable.
-   */
-  'MetricKrLink',
 
   /**
    * `metrics.metric_objective_context` — per docs/features/indicadores-okr.md (M2).
