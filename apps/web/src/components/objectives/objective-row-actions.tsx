@@ -28,9 +28,9 @@ interface Props {
   objective: {
     id: string;
     title: string;
-    description?: string | null;
+    description: string | null;
     ownerUserId?: string | null;
-    orgUnitId?: string | null;
+    orgUnitId: string;
     axisId?: string | null;
   };
   aiEnabled?: boolean;

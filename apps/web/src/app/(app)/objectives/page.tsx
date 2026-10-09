@@ -308,6 +308,7 @@ export default async function ObjectivesPage({
                               objective={{
                                 id: obj.id,
                                 title: obj.title,
+                                description: obj.description,
                                 ownerUserId: obj.owner?.id ?? null,
                                 orgUnitId: obj.orgUnitId,
                                 axisId: obj.axisId,

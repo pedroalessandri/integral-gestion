@@ -27,9 +27,14 @@ Formato:
 - Pendiente / desvíos:
   - Editar un objetivo desde el listado: `ObjectiveSummaryDto` no trae `description`, y antes se mandaba `null` y se borraba. Ahora solo se envía si el usuario la cambia; el diálogo abre con la descripción vacía.
   - Quedan sin uso `restoreObjectiveAction`, `restoreTaskAction` y `listObjectiveContextMetricsAction` (ya lo estaban antes).
-- Preguntas abiertas:
-  - Con `orgUnitId` NOT NULL, el nodo "Sin unidad" del árbol ya no puede tener objetivos. ¿Se saca?
-  - ¿Sumar `description` a `ObjectiveSummaryDto` para editar desde el listado con el valor actual?
+- Preguntas abiertas de C23 y C24 (respondidas por Pedro el 2026-10-09 y aplicadas en un commit aparte):
+  - ✅ Se borró `lg-o3` de la DB local (objetivo ya borrado sin unidad, sin dependientes) y se aplicó ahí el contract.
+  - ✅ Migración de catálogo `20261009000002_catalog_texts_without_kr`: descripciones de `metrics:write`, `okr:read`, `okr:write` y de los módulos `okr` e `indicadores-okr` sin KR (solo UPDATE, sin cambiar keys). El módulo `indicadores-okr` se llama "Indicadores de contexto en objetivos".
+  - ✅ Se borraron de `domain-event.ts` los tipos de eventos de KR. Las filas de `audit.event` no se tocan (append-only); los lectores tipan `action` como `string`, así que los eventos viejos se leen como genéricos.
+  - ✅ Se sacó "Sin unidad" del árbol (contrato, service, `okr-domain` y vista) y la unidad del objetivo es no nula en `PlanningTreeDto`, `ObjectivePlanGanttDto` y los puertos; fuera las guardas muertas `ObjectiveWithoutOrgUnit`. La rama "entidad sin unidad" de `ORG_UNIT_SCOPE` queda muerta: `docs/tech-debt.md`.
+  - ✅ `ObjectiveSummaryDto` trae `description`: el diálogo de edición del listado abre con el valor actual (se revirtió el workaround de C24).
+  - Verificación del ajuste: `turbo run typecheck/lint/test --force` verde (api 490, web 122); `pnpm --filter web build` OK; psql: `20261009000002` aplicada en la DB local y descripciones nuevas; 6 e2e vigentes 16/16 en DB descartable (subagente).
+  - Queda: el CHECK de `ai.prompt_log.entity_type` sigue admitiendo `key_result` (hay logs históricos).
 - Fin de la Fase 10: PR abierto. Smoke grande de Pedro (regresión completa de las Fases 2–10).
 
 ## 2026-10-09 · C23 · backend-dev · feature/plan-f10-contract

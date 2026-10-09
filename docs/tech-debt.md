@@ -155,3 +155,8 @@
 - **Prioridad**: baja (se resuelve en la Fase 10).
 - **Actualización (C23)**: `GET objectives/gantt` y `ObjectiveGanttDto`/`KeyResultGanttDto` ya se borraron del backend y shared-types; queda borrar `gantt-chart.tsx` en C24 (hoy rompe el typecheck de web).
 - **Actualización (C24)**: resuelto. `components/gantt/gantt-chart.tsx` se borró junto con el resto de los componentes de KR; `gantt-row` y `gantt-bar` siguen en uso por la vista ejecutiva y el Gantt de proyecto.
+
+### `assertCanWriteInUnit(..., null)` y su rama "entidad sin unidad" quedaron sin uso (F10 ajustes)
+- **Qué**: con `Objective.orgUnitId` y `Project.orgUnitId` NOT NULL, ningún caller de `OrgUnitScope.assertCanWriteInUnit` / `assertCanWriteInAllUnits` pasa `null`; la rama "la entidad no tiene unidad → exige alcance central" (y su test en `org-unit-scope.service.spec.ts`) es código muerto. `MetricService.assertCanWriteMetric` conserva su propia regla para métricas sin objetivos (esa sí vale).
+- **Posible solución**: tipar el parámetro como `string` y borrar la rama y su test.
+- **Prioridad**: baja.

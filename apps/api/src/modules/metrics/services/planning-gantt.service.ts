@@ -157,7 +157,8 @@ export class PlanningGanttService {
     for (const r of selected) {
       const status = statuses.get(r.id);
       if (!status) continue; // inalcanzable: una entrada por cada lectura recibida
-      const unit = r.orgUnitId !== null ? unitsById.get(r.orgUnitId) : undefined;
+      const unit = unitsById.get(r.orgUnitId);
+      if (!unit) continue; // inalcanzable: una unidad con objetivos vivos no se puede borrar
       // Un eje fuera del plan activo (plan archivado) se trata como "sin eje".
       const axis = r.axisId !== null ? axesById.get(r.axisId) : undefined;
       const rows = projectsByObjective.get(r.id) ?? [];
@@ -175,9 +176,9 @@ export class PlanningGanttService {
       objectives.push({
         id: r.id,
         title: r.title,
-        orgUnitId: unit?.id ?? null,
-        orgUnitName: unit?.name ?? null,
-        orgUnitKind: unit?.kind ?? null,
+        orgUnitId: unit.id,
+        orgUnitName: unit.name,
+        orgUnitKind: unit.kind,
         axisId: axis?.id ?? null,
         axisName: axis?.name ?? null,
         startsAt:

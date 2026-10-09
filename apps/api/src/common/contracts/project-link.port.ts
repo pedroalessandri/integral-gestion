@@ -10,7 +10,7 @@ export interface ProjectLinkRef {
   id: string;
   objectiveId: string;
   /** Unidad del proyecto (RN-P20). */
-  orgUnitId: string | null;
+  orgUnitId: string;
   title: string;
   /** Fecha de fin planificada: el paso de la curva `from_projects`. */
   endsAt: Date;

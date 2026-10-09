@@ -25,7 +25,7 @@ const agg = (
 
 const objective = (
   id: string,
-  orgUnitId: string | null,
+  orgUnitId: string,
   axisId: string | null,
 ): PlanningObjectiveDto =>
   ({
@@ -59,7 +59,7 @@ const dto: PlanningTreeDto = {
   withoutAxis: {
     aggregate: agg(1, 4000, 6000),
     objectiveIds: ['o3'],
-    units: [{ orgUnitId: null, aggregate: agg(1, 4000, 6000) }],
+    units: [{ orgUnitId: 'u2', aggregate: agg(1, 4000, 6000) }],
   },
   units: [
     {
@@ -94,11 +94,10 @@ const dto: PlanningTreeDto = {
       ],
     },
   ],
-  withoutUnit: { aggregate: agg(1, 4000, 6000), objectiveIds: ['o3'] },
   objectives: [
     objective('o1', 'u2', 'a1'),
     objective('o2', 'u3', 'a1'),
-    objective('o3', null, null),
+    objective('o3', 'u2', null),
   ],
 } as PlanningTreeDto;
 
@@ -126,10 +125,10 @@ describe('buildAxesTree', () => {
     expect(empty.readings.execution.progressBp).toBeNull();
   });
 
-  it('"Sin eje" agrupa los objetivos sin unidad bajo "Sin unidad"', () => {
+  it('"Sin eje" agrupa sus objetivos bajo la unidad correspondiente', () => {
     const sinEje = root.children[2]!;
     expect(sinEje.kind).toBe('withoutAxis');
-    expect(labels(sinEje.children)).toEqual(['Sin unidad']);
+    expect(labels(sinEje.children)).toEqual(['Ministerio de Salud']);
   });
 
   it('muestra "Sin eje" aunque no tenga objetivos', () => {
@@ -139,18 +138,13 @@ describe('buildAxesTree', () => {
     });
     expect(labels(tree.children)).toEqual(['Eje Salud', 'Eje vacío', 'Sin eje']);
   });
-
-  it('muestra "Sin unidad" aunque no tenga objetivos', () => {
-    const tree = buildUnitsTree({ ...dto, withoutUnit: { aggregate: agg(0), objectiveIds: [] } });
-    expect(labels(tree.children)).toEqual(['Central', 'Sin unidad']);
-  });
 });
 
 describe('buildUnitsTree', () => {
   const root = buildUnitsTree(dto);
 
-  it('arma Plan → unidades anidadas → objetivos directos, + "Sin unidad"', () => {
-    expect(labels(root.children)).toEqual(['Central', 'Sin unidad']);
+  it('arma Plan → unidades anidadas → objetivos directos', () => {
+    expect(labels(root.children)).toEqual(['Central']);
     const central = root.children[0]!;
     expect(labels(central.children)).toEqual(['Ministerio de Salud', 'Área vacía']);
     expect(labels(central.children[0]!.children)).toEqual(['Objetivo o1']);

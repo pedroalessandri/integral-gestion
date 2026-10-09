@@ -380,6 +380,7 @@ export class ObjectiveService {
     return {
       id: o.id,
       title: o.title,
+      description: o.description,
       periodCode: o.period.code,
       resultProgressCachedBp: o.resultProgressCachedBp,
       executionProgressCachedBp: o.executionProgressCachedBp,
@@ -402,11 +403,11 @@ export class ObjectiveService {
     return {
       id: o.id,
       title: o.title,
+      description: o.description,
       periodCode: o.period.code,
       resultProgressCachedBp: o.resultProgressCachedBp,
       executionProgressCachedBp: o.executionProgressCachedBp,
       createdAt: o.createdAt.toISOString(),
-      description: o.description,
       organizationId: o.organizationId,
       periodId: o.periodId,
       updatedAt: o.updatedAt.toISOString(),

@@ -19,7 +19,7 @@ export interface ObjectiveProgressReading {
 export interface ObjectiveProgressBatchItem extends ObjectiveProgressReading {
   id: string;
   title: string;
-  orgUnitId: string | null;
+  orgUnitId: string;
   axisId: string | null;
 }
 

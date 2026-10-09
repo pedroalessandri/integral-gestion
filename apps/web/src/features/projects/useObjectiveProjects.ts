@@ -13,7 +13,7 @@ import { useWeightedGroup } from './useWeightedGroup';
 
 export function useObjectiveProjects(
   orgId: string,
-  objective: { id: string; orgUnitId: string | null },
+  objective: { id: string; orgUnitId: string },
   projects: ProjectSummaryDto[],
 ) {
   const { pending, error, run, clearError } = useActionRunner();

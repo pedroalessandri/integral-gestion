@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, FolderKanban, Pencil, Plus, Trash2 } from 'lucide-react';
+import { FolderKanban, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ProjectSummaryDto, TaskSummaryDto } from '@gestion-publica/shared-types/okr';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/empty-state';
@@ -20,8 +20,7 @@ interface Props {
   orgId: string;
   objective: {
     id: string;
-    /** null = objetivo sin unidad: no admite proyectos (422 ObjectiveWithoutOrgUnit). */
-    orgUnitId: string | null;
+    orgUnitId: string;
     periodStartsAt: string;
     periodEndsAt: string;
   };
@@ -57,21 +56,6 @@ export function ObjectiveProjectsPanel({ orgId, objective, projects, tasksByProj
     return (
       <div role="alert" className="rounded-xl border p-4 bg-red-50 border-red-200">
         <p className="text-sm text-red-700">{loadError}</p>
-      </div>
-    );
-  }
-
-  if (objective.orgUnitId === null) {
-    return (
-      <div role="alert" className="flex gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-amber-900">
-        <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden />
-        <div className="space-y-1">
-          <p className="text-sm font-semibold">Este objetivo todavía no tiene {LABELS.unit.singular.toLowerCase()}</p>
-          <p className="text-sm">
-            Un objetivo sin {LABELS.unit.singular.toLowerCase()} no admite {LABELS.project.plural.toLowerCase()}. Editalo y
-            asignale un ministerio o un área.
-          </p>
-        </div>
       </div>
     );
   }

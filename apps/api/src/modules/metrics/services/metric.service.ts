@@ -82,8 +82,7 @@ export class MetricService {
   /**
    * RN-P20: regla de escritura sobre una métrica existente (edición, borrado, cargas). Se exige poder escribir en
    * la unidad de CADA objetivo vivo que la usa como indicador. Una métrica sin objetivos es de la organización
-   * completa y se asocia a la unidad central: solo la escribe el alcance central. Un objetivo sin unidad también
-   * exige alcance central.
+   * completa y se asocia a la unidad central: solo la escribe el alcance central.
    */
   async assertCanWriteMetric(metricId: string, orgId: string, authContext: AuthContext): Promise<void> {
     const links = (await this.prisma.scoped.objectiveIndicator.findMany({

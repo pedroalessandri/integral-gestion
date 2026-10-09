@@ -29,7 +29,7 @@ interface ObjectiveInitialValues {
   title: string;
   description?: string | null;
   ownerUserId?: string | null;
-  orgUnitId?: string | null;
+  orgUnitId: string;
   axisId?: string | null;
 }
 
@@ -114,12 +114,11 @@ export function CreateObjectiveButton(props: Props) {
         orgId: props.orgId,
         objectiveId: props.initialValues.id,
         title,
-        // El listado no trae la descripción: solo se envía si el usuario la cambió (si no, se borraría).
-        ...(description !== (props.initialValues.description ?? '') && { description: description || null }),
+        description: description || null,
         ownerUserId,
         ...assignmentForUpdate(
           {
-            orgUnitId: props.initialValues.orgUnitId ?? null,
+            orgUnitId: props.initialValues.orgUnitId,
             axisId: props.initialValues.axisId ?? null,
           },
           { orgUnitId, axisId },

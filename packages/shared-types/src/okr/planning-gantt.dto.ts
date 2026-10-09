@@ -65,10 +65,9 @@ export interface ProjectGanttDto {
 export interface ObjectivePlanGanttDto {
   id: string;
   title: string;
-  /** `null` mientras haya objetivos sin unidad (migración pendiente). */
-  orgUnitId: string | null;
-  orgUnitName: string | null;
-  orgUnitKind: OrgUnitKind | null;
+  orgUnitId: string;
+  orgUnitName: string;
+  orgUnitKind: OrgUnitKind;
   /** Eje del plan activo; `null` si no tiene (o si es de un plan archivado). */
   axisId: string | null;
   axisName: string | null;

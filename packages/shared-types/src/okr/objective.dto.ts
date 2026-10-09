@@ -17,6 +17,8 @@ export interface PeriodStatusDto {
 export interface ObjectiveSummaryDto {
   id: string;
   title: string;
+  /** Descripción del objetivo; `null` si no tiene. */
+  description: string | null;
   /** Código (label libre) del período. */
   periodCode: string;
   /** Avance de resultado (desde indicadores, RN-P8). Integer 0..10000. Nunca se combina con el de gestión. */
@@ -46,7 +48,6 @@ export interface ObjectiveSummaryDto {
  * Shape per ADR 0001 "Shape de los DTOs principales".
  */
 export interface ObjectiveDetailDto extends ObjectiveSummaryDto {
-  description: string | null;
   organizationId: string;
   periodId: string;
   /** ISO-8601 UTC timestamp. */

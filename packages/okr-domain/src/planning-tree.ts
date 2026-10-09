@@ -12,7 +12,7 @@ import { aggregateDeviationBp, semaphore, type SemaphoreColor } from '@gestion-p
 /** Lectura de un objetivo ya resuelta (cachés + desvíos de cada lectura). */
 export interface ObjectiveReadingInput {
   id: string;
-  orgUnitId: string | null;
+  orgUnitId: string;
   axisId: string | null;
   /** `resultProgressCachedBp`. */
   resultProgressBp: number;
@@ -78,11 +78,11 @@ export function aggregateObjectiveReadings(items: ReadonlyArray<ObjectiveReading
 }
 
 /** Agrupa por una clave (`null` = sin asignar) y agrega cada grupo. Conserva el orden de primera aparición. */
-export function aggregateObjectiveReadingsBy(
+export function aggregateObjectiveReadingsBy<K extends string | null>(
   items: ReadonlyArray<ObjectiveReadingInput>,
-  keyOf: (item: ObjectiveReadingInput) => string | null,
-): Map<string | null, ReadingAggregate> {
-  const groups = new Map<string | null, ObjectiveReadingInput[]>();
+  keyOf: (item: ObjectiveReadingInput) => K,
+): Map<K, ReadingAggregate> {
+  const groups = new Map<K, ObjectiveReadingInput[]>();
   for (const item of items) {
     const key = keyOf(item);
     const group = groups.get(key);
@@ -112,8 +112,6 @@ export interface UnitAggregateNode {
 
 export interface UnitAggregates {
   roots: UnitAggregateNode[];
-  /** Objetivos sin unidad (o con una unidad que no está en el árbol). */
-  withoutUnit: { objectiveIds: string[]; aggregate: ReadingAggregate };
 }
 
 /**
@@ -140,15 +138,12 @@ export function buildUnitAggregates(
   const byOrder = (a: OrgUnitTreeInput, b: OrgUnitTreeInput) => a.order - b.order || a.name.localeCompare(b.name);
 
   const directOf = new Map<string, ObjectiveReadingInput[]>();
-  const orphans: ObjectiveReadingInput[] = [];
+  // Todo objetivo tiene unidad (NOT NULL desde F10). Los de una unidad que no está en la lista no se muestran.
   for (const o of objectives) {
-    if (o.orgUnitId !== null && unitIds.has(o.orgUnitId)) {
-      const list = directOf.get(o.orgUnitId);
-      if (list) list.push(o);
-      else directOf.set(o.orgUnitId, [o]);
-    } else {
-      orphans.push(o);
-    }
+    if (!unitIds.has(o.orgUnitId)) continue;
+    const list = directOf.get(o.orgUnitId);
+    if (list) list.push(o);
+    else directOf.set(o.orgUnitId, [o]);
   }
 
   const visited = new Set<string>();
@@ -170,13 +165,9 @@ export function buildUnitAggregates(
   };
 
   const builtRoots = roots.sort(byOrder).map((r) => build(r).node);
-  // Unidades inalcanzables (ciclo en datos corruptos): sus objetivos no se pierden, quedan sin unidad.
-  for (const [unitId, list] of directOf) if (!visited.has(unitId)) orphans.push(...list);
+  // Unidades inalcanzables (ciclo en datos corruptos): sus objetivos no se muestran en el árbol.
 
-  return {
-    roots: builtRoots,
-    withoutUnit: { objectiveIds: orphans.map((o) => o.id), aggregate: aggregateObjectiveReadings(orphans) },
-  };
+  return { roots: builtRoots };
 }
 
 /** Ids de la unidad y de todas sus descendientes (para el filtro por unidad). Vacío si la unidad no existe. */

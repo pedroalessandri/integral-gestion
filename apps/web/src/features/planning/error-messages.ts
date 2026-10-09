@@ -24,8 +24,6 @@ const MESSAGES: Record<string, string> = {
   StrategicPlanRequired: 'Primero tenés que crear el plan de gobierno para poder agregar ejes.',
   StrategicPlanNotFound: 'La organización todavía no tiene un plan de gobierno.',
   StrategicPlanConflict: 'Otra persona creó el plan al mismo tiempo. Recargá la página e intentá de nuevo.',
-  ObjectiveWithoutOrgUnit:
-    'El objetivo todavía no tiene unidad. Editalo y asignale un ministerio o un área para poder cargar proyectos.',
   ProjectOrgUnitOutOfScope:
     'La unidad del proyecto tiene que ser la del objetivo o una unidad dependiente de ella.',
   ProjectProgressModeNotSupported:

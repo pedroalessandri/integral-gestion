@@ -24,7 +24,7 @@ interface Props {
   orgId: string;
   /** null = crear. */
   project: ProjectDetailDto | null;
-  objective: { orgUnitId: string | null; periodStartsAt: string; periodEndsAt: string };
+  objective: { orgUnitId: string; periodStartsAt: string; periodEndsAt: string };
   pending: boolean;
   error: string | null;
   onSubmit: (values: ProjectFormValues) => Promise<boolean>;

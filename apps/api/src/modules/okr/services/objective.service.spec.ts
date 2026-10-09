@@ -430,6 +430,15 @@ describe('ObjectiveService — unidad y eje', () => {
     );
   });
 
+  it('list: el resumen incluye la descripción actual del objetivo', async () => {
+    mockObjectiveFindMany.mockResolvedValue([
+      { ...makeObjective({ id: 'obj-1' }), description: 'Descripción vigente' },
+      makeObjective({ id: 'obj-2' }),
+    ]);
+    const result = await service.list(ORG_ID);
+    expect(result.map((o) => o.description)).toEqual(['Descripción vigente', null]);
+  });
+
   it('create: persiste unidad y eje validados y los audita', async () => {
     const result = await service.create(ORG_ID, { title: 'T', orgUnitId: 'unit-1', axisId: 'axis-1' }, authCtx);
 

@@ -91,7 +91,7 @@ describe('PrismaObjectiveProgressReader', () => {
         {
           id: 'o2',
           title: 'Dos',
-          orgUnitId: null,
+          orgUnitId: 'u2',
           axisId: 'ax',
           resultProgressCachedBp: 0,
           executionProgressCachedBp: 0,
@@ -105,7 +105,7 @@ describe('PrismaObjectiveProgressReader', () => {
 
     expect(await reader.readPeriodObjectivesProgress(ORG, 'p-1', at)).toEqual([
       { id: 'o1', title: 'Uno', orgUnitId: 'u1', axisId: null, resultProgressBp: 3000, executionProgressBp: 4000, plannedExecutionProgressBp: 2500 },
-      { id: 'o2', title: 'Dos', orgUnitId: null, axisId: 'ax', resultProgressBp: 0, executionProgressBp: 0, plannedExecutionProgressBp: 0 },
+      { id: 'o2', title: 'Dos', orgUnitId: 'u2', axisId: 'ax', resultProgressBp: 0, executionProgressBp: 0, plannedExecutionProgressBp: 0 },
     ]);
     expect(objective.findMany).toHaveBeenCalledTimes(1);
     expect(objective.findMany).toHaveBeenCalledWith(

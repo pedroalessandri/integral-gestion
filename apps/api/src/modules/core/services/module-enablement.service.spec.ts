@@ -89,7 +89,7 @@ describe('ModuleEnablementService', () => {
     });
 
     it('throws ConflictException when enabling indicadores-okr without indicadores-gestion', async () => {
-      mockPrismaRaw.module.findUnique.mockResolvedValue({ key: 'indicadores-okr', name: 'Indicadores en OKRs' });
+      mockPrismaRaw.module.findUnique.mockResolvedValue({ key: 'indicadores-okr', name: 'Indicadores de contexto en objetivos' });
       // isEnabled('org-1', 'indicadores-gestion') → no active row
       mockPrismaRaw.organizationModule.findFirst.mockResolvedValue(null);
 
@@ -100,7 +100,7 @@ describe('ModuleEnablementService', () => {
     });
 
     it('enables indicadores-okr when indicadores-gestion is enabled', async () => {
-      mockPrismaRaw.module.findUnique.mockResolvedValue({ key: 'indicadores-okr', name: 'Indicadores en OKRs' });
+      mockPrismaRaw.module.findUnique.mockResolvedValue({ key: 'indicadores-okr', name: 'Indicadores de contexto en objetivos' });
       mockPrismaRaw.organizationModule.findFirst.mockResolvedValue({
         ...enabledRow,
         moduleKey: 'indicadores-gestion',
