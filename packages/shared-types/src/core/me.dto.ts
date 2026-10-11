@@ -1,3 +1,5 @@
+import type { OrganizationSector } from './sector-terms.js';
+
 /**
  * Response body for GET /api/v1/me.
  *
@@ -14,6 +16,8 @@ export interface MeDto {
     id: string;
     slug: string;
     name: string;
+    /** Sector de la org: elige el diccionario de terminología (ADR-0011). */
+    sector: OrganizationSector;
     role: {
       /** e.g. 'org-admin', 'org-user', 'org-reader'. */
       key: string;

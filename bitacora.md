@@ -15,6 +15,13 @@ Formato:
 
 ---
 
+## 2026-10-11 · C30 (backend) · backend-dev · feature/plan-f12-sector-privado
+- Hecho: `core.organization.sector` (`VarChar(10)` NOT NULL DEFAULT `public` + CHECK de los tres valores; migración `20261011000001_organization_sector`, que además neutraliza el catálogo: módulo `okr` -> "Planificación" y tres permisos sin "(planificación de gobierno)"; `indicadores-okr` ya era neutro desde `20261009000002`). `POST /orgs` acepta `sector` (default `public`, en el `after` de `organization.created`); `PATCH /orgs/:id/sector` con `SuperadminOnlyGuard` (idempotente, audit `organization.sector_changed` before/after); `sector` en `MeDto.orgs[]`, `OrganizationSummaryDto`/`DetailDto`. `shared-types/core/sector-terms.ts` (`OrganizationSector`, `SECTOR_TERMS`, `FORBIDDEN_PUBLIC_SECTOR_TERMS`). Seed dividido: `seed-demo.ts` orquesta `seed-demo-san-carrillo.ts` (con `sector: 'public'` explícito en create y update). Test guard anti-términos de gobierno del lado API (`modules/core/sector-terms.guard.spec.ts`).
+- Commit: ver `git log` de la rama.
+- Verificación: `pnpm typecheck` (7/7), `pnpm lint` sin errores, `pnpm --filter api test` 495/495, e2e nuevo `core-organization-sector.e2e-spec.ts` 5/5 contra DB local (migración aplicada con `migrate deploy`).
+- Pendiente / desvíos: los e2e viejos `core-organization/member/period/module-enablement/me` (21 tests) ya fallaban antes de C30 porque crean orgs sin `firstPeriod` y el service lo exige; no se tocaron. El ADR-0011 sigue diciendo "Pilares/Ejes" en la bitácora de C29; queda vigente "Eje". Faltan las actualizaciones de documentos que el ADR asigna a C30 y no son API: glosario de `CLAUDE.md`, nota "Amended by: 0011" en ADR-0010 y "5 pilares" -> "5 ejes" en `plan.md` C31.
+- Preguntas abiertas: ninguna nueva.
+
 ## 2026-10-11 · C29 · architect · feature/plan-f12-sector-privado
 - Hecho: `docs/adr/0011-terminologia-por-sector.md` (Proposed, enmienda 0009 y 0010). Campo `Organization.sector` (`VarChar(10)` + CHECK `public|private`, default `public`), lo cambia solo el superadmin (`POST /orgs` y `PATCH /orgs/:id/sector`), llega a la web en `MeDto.orgs[].sector`; `lib/labels` partido en compartido y por sector (`getLabels()` en server, `LabelsProvider`/`useLabels()` en client); términos núcleo en `shared-types`; test anti-textos de gobierno hardcodeados. Diccionario privado: Plan estratégico, Visión estratégica, Vigencia, Pilares, Dirección General / Dirección / Área. Fase 12 sumada a `plan.md` (se ejecuta antes de C26).
 - Commit: ver `git log` de la rama.

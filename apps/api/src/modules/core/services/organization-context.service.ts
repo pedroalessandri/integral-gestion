@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { OrganizationDetailDto } from '@gestion-publica/shared-types/core';
+import type { OrganizationDetailDto, OrganizationSector } from '@gestion-publica/shared-types/core';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 
@@ -68,6 +68,7 @@ export class OrganizationContextService {
       slug: org.slug,
       name: org.name,
       status: org.status as 'active' | 'inactive',
+      sector: org.sector as OrganizationSector,
       createdAt: org.createdAt.toISOString(),
       updatedAt: org.updatedAt.toISOString(),
       deactivatedAt: org.deactivatedAt?.toISOString() ?? null,
@@ -97,6 +98,7 @@ export class OrganizationContextService {
       slug: org.slug,
       name: org.name,
       status: org.status as 'active' | 'inactive',
+      sector: org.sector as OrganizationSector,
       createdAt: org.createdAt.toISOString(),
       updatedAt: org.updatedAt.toISOString(),
       deactivatedAt: org.deactivatedAt?.toISOString() ?? null,

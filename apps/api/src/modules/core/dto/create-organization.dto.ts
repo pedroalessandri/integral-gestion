@@ -6,8 +6,10 @@ import {
   Matches,
   MaxLength,
   IsISO8601,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ORGANIZATION_SECTORS, type OrganizationSector } from '@gestion-publica/shared-types/core';
 
 class FirstPeriodDto {
   @IsString()
@@ -35,6 +37,10 @@ export class CreateOrganizationDto {
   @IsNotEmpty()
   @MaxLength(200)
   name!: string;
+
+  @IsOptional()
+  @IsIn(ORGANIZATION_SECTORS)
+  sector?: OrganizationSector;
 
   @IsOptional()
   @ValidateNested()
