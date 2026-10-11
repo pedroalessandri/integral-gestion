@@ -166,7 +166,8 @@ function unitNode(
 const PLAN_KEY = 'plan';
 
 /** Vista "Por ejes": Plan → Ejes → Unidades del eje → Objetivos, + "Sin eje". */
-export function buildAxesTree(dto: PlanningTreeDto): TreeNode {
+/** `noPlanLabel`: rótulo de la raíz cuando no hay plan activo (depende del sector, ADR-0011). */
+export function buildAxesTree(dto: PlanningTreeDto, noPlanLabel: string): TreeNode {
   const byId = indexObjectives(dto);
   const names = unitNamesById(dto);
   const axisNodes = dto.axes.map((axis) => {
@@ -196,22 +197,22 @@ export function buildAxesTree(dto: PlanningTreeDto): TreeNode {
       ),
     ),
   ];
-  return planNode(dto, [...axisNodes, ...withoutAxis]);
+  return planNode(dto, noPlanLabel, [...axisNodes, ...withoutAxis]);
 }
 
 /** Vista "Por unidades": Plan → árbol de unidades → Objetivos directos. */
-export function buildUnitsTree(dto: PlanningTreeDto): TreeNode {
+export function buildUnitsTree(dto: PlanningTreeDto, noPlanLabel: string): TreeNode {
   const byId = indexObjectives(dto);
   const unitNodes = dto.units.map((u) => unitNode(u, PLAN_KEY, byId));
-  return planNode(dto, unitNodes);
+  return planNode(dto, noPlanLabel, unitNodes);
 }
 
-function planNode(dto: PlanningTreeDto, children: TreeNode[]): TreeNode {
-  return aggregateNode(PLAN_KEY, 'plan', dto.plan.title ?? L.noPlan, dto.plan.aggregate, children);
+function planNode(dto: PlanningTreeDto, noPlanLabel: string, children: TreeNode[]): TreeNode {
+  return aggregateNode(PLAN_KEY, 'plan', dto.plan.title ?? noPlanLabel, dto.plan.aggregate, children);
 }
 
-export function buildTree(dto: PlanningTreeDto, view: PlanningTreeViewMode): TreeNode {
-  return view === 'axes' ? buildAxesTree(dto) : buildUnitsTree(dto);
+export function buildTree(dto: PlanningTreeDto, view: PlanningTreeViewMode, noPlanLabel: string): TreeNode {
+  return view === 'axes' ? buildAxesTree(dto, noPlanLabel) : buildUnitsTree(dto, noPlanLabel);
 }
 
 /** Claves de los nodos que se pueden colapsar (tienen hijos). */
@@ -230,7 +231,7 @@ export function hasObjectives(dto: PlanningTreeDto): boolean {
   return dto.objectives.length > 0;
 }
 
-/** Datos del tablero por eje (SPEC §5.2) para la pantalla de Plan de gobierno. */
+/** Datos del tablero por eje (SPEC §5.2) para la pantalla del plan. */
 export interface AxisBoard {
   readings: NodeReadings;
   objectivesCount: number;

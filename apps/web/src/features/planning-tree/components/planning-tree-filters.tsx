@@ -3,8 +3,8 @@
 import type { AxisDto } from '@gestion-publica/shared-types/planning';
 import type { OrgUnitTreeNodeDto } from '@gestion-publica/shared-types/core';
 import { Button } from '@/components/ui/button';
-import { LABELS, ORG_UNIT_KIND_LABELS, PLANNING_TREE_LABELS as L } from '@/lib/labels';
-import { flattenTree } from '@/features/org-structure/tree';
+import { LABELS, PLANNING_TREE_LABELS as L } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';import { flattenTree } from '@/features/org-structure/tree';
 import { hasActiveFilters, type PlanningTreeFilters } from '../planning-tree-filters';
 import { usePlanningTreeFilters } from '../usePlanningTreeFilters';
 
@@ -23,6 +23,7 @@ interface Props {
 const SELECT_CLASS = 'w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm disabled:opacity-50';
 
 export function PlanningTreeFilterBar({ filters, periods, axes, unitTree }: Props) {
+  const { orgUnitKind } = useLabels();
   const { pending, update, clear } = usePlanningTreeFilters(filters);
   const units = flattenTree(unitTree);
 
@@ -75,7 +76,7 @@ export function PlanningTreeFilterBar({ filters, periods, axes, unitTree }: Prop
           {units.map((u) => (
             <option key={u.node.id} value={u.node.id}>
               {'— '.repeat(Math.max(0, u.depth - 1))}
-              {u.node.name} ({ORG_UNIT_KIND_LABELS[u.node.kind]})
+              {u.node.name} ({orgUnitKind[u.node.kind]})
             </option>
           ))}
         </select>

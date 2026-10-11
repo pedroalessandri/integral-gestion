@@ -2,7 +2,7 @@
 
 **Spec de referencia**: `docs/features/planificacion-gobierno.md` (en adelante, **SPEC**).
 **Bitácora**: `bitacora.md` (una entrada por corrida).
-**Estado**: Fase 0 · actualizado 2026-10-07.
+**Estado**: Fases 1–10 completas · Fase 12 (sector privado) en curso antes de seguir la Fase 11 · actualizado 2026-10-11.
 
 ---
 
@@ -266,6 +266,50 @@ Si el agente se traba (más de 2 horas, o vueltas sin avance): Ctrl+C, revisar `
 - Pantallas y componentes de KR, y referencias de "KR" en el copy.
 - `TODO.md`: agregar "[F] Adaptar copiloto de IA al modelo de planificación".
 - 🔍 Pedro: smoke de regresión completo. Merge.
+
+---
+
+## Fase 11 — Conector para asistentes de IA (MCP) · rama `feature/plan-f11-conector-mcp`
+
+Objetivo: que un usuario pueda consultar y cargar el plan desde Claude o ChatGPT con su propia identidad, con los mismos permisos, alcance por unidad y auditoría que en la web. Un solo servidor MCP remoto sirve a los dos clientes. Decisiones en ADR-0010.
+
+### C25 — ADR-0010 del conector MCP (architect)
+- Dónde vive el servidor (módulo de la API o app aparte), transporte, autenticación OAuth con Auth0 y su relación con `AuthGuard`, elección de la organización activa, catálogo de herramientas (lectura y escritura), confirmaciones, límites de uso, auditoría y qué datos salen hacia el proveedor del modelo.
+- Artefacto: `docs/adr/0010-conector-mcp.md` con preguntas abiertas para Pedro.
+
+### C26 — MVP de consultas (backend-dev)
+- Servidor MCP con OAuth y las herramientas de lectura del ADR (objetivos con sus dos lecturas, árbol de planificación, proyectos atrasados, serie de indicador).
+- Tests de integración: cada herramienta respeta tenant y alcance por unidad.
+- 🔍 Pedro: conectar el demo a Claude y a ChatGPT y consultar el plan de San Carrillo.
+
+### C27 — Herramientas de carga (backend-dev)
+- Escrituras del ADR (carga de indicador, avance de tarea, alta de proyecto y tarea), marcadas como destructivas para que el cliente pida confirmación, con auditoría y sin borrados.
+
+### C28 — Revisión de seguridad del conector (security-reviewer)
+- Revisar el diff de la Fase 11: tokens, audiencia, tenant scoping, alcance, inyección de prompts vía datos y límites de uso. Hallazgos críticos → C28b.
+- 🔍 Pedro: carga real desde los dos clientes. Merge de la Fase 11.
+
+---
+
+## Fase 12 — Sector privado: terminología por organización y seed de una fábrica · rama `feature/plan-f12-sector-privado`
+
+Pedro (2026-10-11): la plataforma tiene que poder mostrarse al sector privado (ADR-0006). Se ejecuta **antes** de C26–C28 de la Fase 11. La rama sale de `feature/plan-f11-conector-mcp`, así que su PR incluye también el ADR-0010 (C25, solo documentación).
+
+Decisión de Pedro: opción C, terminología por organización. Tres diccionarios fijos (sector público, sector privado y organizaciones sin fines de lucro) elegidos por un campo de la organización; sin editor de etiquetas por ahora (ADR-0011, Accepted).
+
+### C29 — ADR-0011 terminología por sector (architect)
+- Campo de la organización, valor por defecto, quién lo cambia y dónde, cómo llega a la web, cómo se resuelve el diccionario (`lib/labels.ts`) en server y client components, qué pasa con el copy de los prompts del copiloto, los textos del catálogo y las descripciones de las herramientas MCP (ADR-0010).
+- Diccionario privado propuesto completo (plan, visión, ejes, tipos de unidad, tablero).
+- Artefacto: `docs/adr/0011-terminologia-por-sector.md` con preguntas abiertas.
+
+### C30 — Terminología por sector (backend-dev + frontend-dev)
+- Migración del campo, exposición en la API y selector en Configuración.
+- `labels.ts` con los tres diccionarios y su resolución por org activa; ningún texto de gobierno hardcodeado fuera del diccionario.
+- Tests: la org privada no muestra "gobierno" en las pantallas principales.
+
+### C31 — Seed "Lumbre Electrodomésticos S.A." (backend-dev)
+- Segunda org del demo, sector privado, planta en Rosario: plan estratégico 2026–2028, estructura (Dirección General → direcciones → áreas), 5 ejes, 7 objetivos con indicadores (OEE, reclamos en garantía a la baja, participación online, NPS, modelos inverter con `from_projects` y aportes, kWh por unidad, accidentes con baja) y proyectos con tareas. Sin tocar la org de San Carrillo.
+- 🔍 Pedro: recorrer las dos orgs con el selector. Merge de la Fase 12.
 
 ---
 

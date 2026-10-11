@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import type {
   OrganizationDetailDto,
+  OrganizationSector,
   OrganizationSummaryDto,
   PeriodDetailDto,
 } from '@gestion-publica/shared-types/core';
@@ -25,6 +26,7 @@ export interface FirstPeriodInput {
 export interface CreateOrganizationInput {
   slug: string;
   name: string;
+  sector?: OrganizationSector;
   firstPeriod?: FirstPeriodInput;
 }
 
@@ -77,6 +79,7 @@ export class OrganizationService {
     authContext: AuthContext,
   ): Promise<CreateOrganizationResult> {
     const now = new Date();
+    const sector = input.sector ?? 'public';
 
     if (!input.firstPeriod) {
       throw new Error('firstPeriod is required when creating an organization');
@@ -98,6 +101,7 @@ export class OrganizationService {
               slug: input.slug,
               name: input.name,
               status: 'active',
+              sector,
             },
           });
 
@@ -120,7 +124,7 @@ export class OrganizationService {
             entityId: org.id,
             diff: {
               before: null,
-              after: { slug: org.slug, name: org.name, status: 'active' },
+              after: { slug: org.slug, name: org.name, status: 'active', sector },
             },
           });
 
@@ -205,6 +209,38 @@ export class OrganizationService {
               values: updated.values,
               context: updated.context,
             },
+          },
+        });
+
+        return this.toDetailDto(updated);
+      }),
+    );
+  }
+
+  /**
+   * Cambia el sector (terminología) de la org. Solo superadmin (guard en el controller). ADR-0011 D2.
+   * Idempotente: si el valor no cambia, responde sin escribir ni auditar.
+   */
+  async updateSector(
+    id: string,
+    sector: OrganizationSector,
+    authContext: AuthContext,
+  ): Promise<OrganizationDetailDto> {
+    const org = await this.prismaService.raw.organization.findUnique({ where: { id } });
+    if (!org) throw new NotFoundException(`Organization ${id} not found`);
+    if (org.sector === sector) return this.toDetailDto(org);
+
+    return tenantContextStorage.run(authContext, () =>
+      this.prismaService.runInTransaction(async (tx) => {
+        const updated = await tx.organization.update({ where: { id }, data: { sector } });
+
+        await this.auditEmitter.emit({
+          action: 'organization.sector_changed',
+          entityType: 'core.organization',
+          entityId: id,
+          diff: {
+            before: { sector: org.sector as OrganizationSector },
+            after: { sector },
           },
         });
 
@@ -348,6 +384,7 @@ export class OrganizationService {
     slug: string;
     name: string;
     status: string;
+    sector: string;
     createdAt: Date;
   }): OrganizationSummaryDto {
     return {
@@ -355,6 +392,7 @@ export class OrganizationService {
       slug: org.slug,
       name: org.name,
       status: org.status as 'active' | 'inactive',
+      sector: org.sector as OrganizationSector,
       createdAt: org.createdAt.toISOString(),
     };
   }
@@ -364,6 +402,7 @@ export class OrganizationService {
     slug: string;
     name: string;
     status: string;
+    sector: string;
     createdAt: Date;
     updatedAt: Date;
     deactivatedAt: Date | null;
@@ -378,6 +417,7 @@ export class OrganizationService {
       slug: org.slug,
       name: org.name,
       status: org.status as 'active' | 'inactive',
+      sector: org.sector as OrganizationSector,
       createdAt: org.createdAt.toISOString(),
       updatedAt: org.updatedAt.toISOString(),
       deactivatedAt: org.deactivatedAt?.toISOString() ?? null,

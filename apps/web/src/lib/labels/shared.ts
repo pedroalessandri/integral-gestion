@@ -1,18 +1,16 @@
-import type { OrgUnitKind } from '@gestion-publica/shared-types/core';
+import type { OrganizationSector } from '@gestion-publica/shared-types/core';
 import type {
   ExpectedCurveMode,
-  MetricKind,
   ObjectiveIndicatorLinkMode,
   SemaphoreColor,
 } from '@gestion-publica/shared-types/metrics';
 
 /**
- * Diccionario único de etiquetas de UI (ADR-0006 D2, SPEC §5).
- * La UI usa los términos de planificación de gobierno; el código mantiene los nombres
- * técnicos (ADR-0009 D1). Ver glosario UI ↔ código en CLAUDE.md.
+ * Etiquetas de UI compartidas por los tres sectores (ADR-0006 D2, ADR-0011 D3).
+ * Lo que depende del sector (plan, tipos de unidad, hints de indicador, placeholders y errores)
+ * vive en `sector/*`. El código mantiene los nombres técnicos (ADR-0009 D1).
  */
 export const LABELS = {
-  plan: { singular: 'Plan de gobierno', vision: 'Visión general de gobierno' },
   planningTree: 'Árbol de planificación',
   axis: { singular: 'Eje', plural: 'Ejes' },
   unit: {
@@ -47,23 +45,11 @@ export const LABELS = {
   },
 } as const;
 
-export const ORG_UNIT_KIND_LABELS: Record<OrgUnitKind, string> = {
-  central: 'Central',
-  ministry: 'Ministerio / Secretaría',
-  area: 'Área / Dirección',
-};
-
 /** Alcance null = toda la organización (unidad central, RN-P19). */
 export const SCOPE_WHOLE_ORG_LABEL = 'Toda la organización';
 
 /** Opción del selector de eje cuando el objetivo no tiene eje (RN-P2). */
 export const NO_AXIS_LABEL = 'Sin eje';
-
-/** Tipo de indicador (RN-P12): producto admite aportes de proyectos; resultado se carga a mano. */
-export const INDICATOR_KIND_LABELS: Record<MetricKind, { label: string; hint: string }> = {
-  output: { label: 'Producto', hint: 'lo que se entrega (km, obras, cantidad)' },
-  outcome: { label: 'Resultado', hint: 'el cambio que se busca (alfabetización, calidad)' },
-};
 
 /** Semáforo del desvío contra lo esperado (RN-P9). Adelantado cuenta como "En tiempo". */
 export const SEMAPHORE_LABELS: Record<SemaphoreColor, string> = {
@@ -221,7 +207,6 @@ export const INVITE_SCOPE_LABELS = {
 export const PLANNING_TREE_LABELS = {
   nav: 'Árbol de planificación',
   title: 'Árbol de planificación',
-  subtitle: 'Cómo avanza el plan de gobierno, por eje o por unidad. El resultado y la gestión se leen por separado.',
   views: { legend: 'Vista', axes: 'Por ejes', units: 'Por unidades' },
   filters: {
     period: 'Período',
@@ -238,8 +223,6 @@ export const PLANNING_TREE_LABELS = {
   expand: (name: string) => `Expandir ${name}`,
   collapse: (name: string) => `Colapsar ${name}`,
   withoutAxis: 'Sin eje',
-  noPlan: 'Sin plan de gobierno activo',
-  noPlanHint: 'Podés ver igual los objetivos del período por unidad. Creá el plan en Plan de gobierno para agruparlos por eje.',
   noObjectives: 'Sin objetivos',
   noObjectivesInAxis: 'Este eje todavía no tiene objetivos en el período.',
   emptyTitle: 'No hay objetivos en este período',
@@ -286,4 +269,25 @@ export const EXECUTIVE_GANTT_LABELS = {
   loadError: 'No pudimos cargar la vista ejecutiva.',
   mobileHint: 'Esta vista está optimizada para pantallas grandes.',
   mobileLink: 'Ir a la lista estándar →',
+} as const;
+
+/** Sector de la organización (ADR-0011): elige el diccionario de terminología. */
+export const SECTOR_LABELS: Record<OrganizationSector, string> = {
+  public: 'Sector público',
+  private: 'Sector privado',
+  nonprofit: 'Organizaciones sin fines de lucro',
+};
+
+export const SECTOR_FIELD_LABELS = {
+  title: 'Terminología',
+  field: 'Terminología de la organización',
+  hint: 'Son los nombres que ve toda la organización (plan, tipos de unidad, ejemplos).',
+  warning:
+    'Solo cambian las etiquetas de la interfaz. Los nombres que cargaron los usuarios (unidades, plan, objetivos) no se modifican.',
+  readOnly: (sector: string) => `Esta organización usa la terminología de: ${sector}.`,
+  readOnlyHint: 'Solo un superadmin puede cambiarla.',
+  save: 'Guardar terminología',
+  saving: 'Guardando...',
+  saved: 'Terminología actualizada.',
+  badgeColumn: 'Terminología',
 } as const;

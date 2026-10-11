@@ -19,6 +19,16 @@
 - Posible solución: en `/metrics/[id]`, si la métrica está vinculada a objetivos, mostrar un aviso "Este indicador se evalúa distinto en cada objetivo" con link a cada `ObjectiveIndicator` y su desvío; o no mostrar semáforo standalone cuando hay vínculos. Relacionado con "[F] Serie del indicador con base y meta del indicador".
 - Origen: capturas de la demo (2026-10-11).
 
+### [B] El throttler global limita por IP y no por usuario
+- Por qué: `CustomThrottlerGuard.getTracker` (`apps/api/src/common/guards/throttler.guard.ts`) usa `req.user?.auth0Sub`, que nadie llena (`AuthGuard` escribe `request.authContext`), y además corre antes que `AuthGuard`. En los hechos el límite de 100/min es por IP; sin `trust proxy`, detrás del proxy de Railway podría ser compartido por todos los usuarios. Bloquea el conector MCP (ADR-0010 D7), donde el tráfico llega desde pocas IPs del proveedor.
+- Posible solución: tracker que lea el `sub` del token ya verificado (o mover el throttle después del `AuthGuard`) y `app.set('trust proxy', …)` según Railway; verificar en el demo con dos usuarios.
+- Origen: C25 (2026-10-11), hallazgo del architect.
+
+### [B] `X-Request-Id` sin validar rompe la mutación si no es UUID
+- Por qué: `RequestContextInterceptor` acepta cualquier string como request id, pero `audit.event.request_id` es `@db.Uuid`: un valor no UUID hace fallar el INSERT de audit y con él la mutación (500).
+- Posible solución: aceptar el header solo si es UUID válido; si no, generar uno.
+- Origen: C25 (2026-10-11), hallazgo del architect.
+
 ### [F] Adaptar copiloto de IA al modelo de planificación
 - Por qué: ADR-0009 D9 dejó el copiloto (`POST ai/draft` y `ai/validate`) solo para objetivos (`entityType: 'objective'`, sin `objectiveContext`) cuando se eliminó el KR. Falta llevarlo a los indicadores (redacción de nombre y meta) y a los proyectos (redacción y validación de alcance), con el objetivo como contexto.
 - Posible solución: ampliar `entityType` en el DTO de `ai` (`indicator` | `project`), prompts por entidad y reincorporar el contexto del objetivo; en el front, sumar `AiSuggestPanel`/`SmartFeedbackPanel` a los formularios de indicador y proyecto.
@@ -79,11 +89,6 @@
 - Por qué: `GET members` pide `core:member:manage`; sin ese permiso la sección de alcance de Estructura muestra un error genérico. Pedro (2026-10-07): es lo esperado, pero el mensaje tiene que decir qué permiso falta para que un admin lo corrija.
 - Origen: pregunta abierta de C06.
 
-### [F] Unidad obligatoria en el Objetivo
-- Por qué: Pedro (2026-10-07): la unidad del objetivo es obligatoria. Hoy el selector la deja vacía al crear y `CreateObjectiveDto.orgUnitId` es opcional. Requerirla en create (UI + DTO); la columna sigue nullable hasta la fase migrate por los objetivos existentes (plan.md), y el NOT NULL va con el contract.
-- Origen: pregunta abierta de C06.
-- Actualización (C24): resuelto de punta a punta. El DTO y el NOT NULL salieron en C23; en C24 el selector de unidad del formulario de objetivo es obligatorio (sin opción vacía, validación antes de enviar). Pendiente de mover a Completados cuando se mergee la Fase 10.
-
 ### [F] Validar proyectos y tareas al editar las fechas de un período (ADR-0009 D7, RN-P3)
 - Por qué: D7 pide que editar un período con un rango que deja afuera proyectos, tareas o cargas responda 422 con la lista (puertos `PERIOD_RANGE_CHECKER_OKR` / `_METRICS`). C08 crea los proyectos y tareas que hay que chequear, pero el puerto y el chequeo en `PeriodService` no están en ninguna corrida del plan.
 - Posible solución: puerto en `common/contracts` que implementa `okr` (proyectos y tareas fuera del rango nuevo) e inyecta `core`; el de `metrics` va con F4.
@@ -109,6 +114,7 @@
 - Por qué: `ObjectiveIndicatorController` y `ProjectContributionController` (módulo `metrics`) no usan `@RequiresModule`. `POST okr/objectives/:id/indicators` con `metric` inline crea una `Metric` con solo `okr:write`, aunque la org tenga el módulo deshabilitado.
 - Posible solución: `ModuleEnabledGuard` en esos controllers o exigir `metrics:write` con `metric` inline.
 - Origen: C20 (2026-10-08).
+- Actualización (C25, 2026-10-11): también falta en los controllers de `okr`, `planning-tree` y `planning-gantt` (TODO sin resolver). El conector MCP (ADR-0010) replica esa ausencia a propósito; conviene resolverlo antes de C26.
 
 ### [B] Borrar un objetivo deja vivos proyectos, indicadores y aportes (C20 #4, media)
 - Por qué: `ObjectiveService.softDelete` solo cuenta KRs. Los proyectos huérfanos pueden seguir disparando cargas automáticas (sospecha) y la métrica deja de contar ese objetivo en `assertCanWriteMetric`. Amplía el ítem "Borrar un objetivo no da de baja sus ObjectiveIndicator".
@@ -176,6 +182,7 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [F] Unidad obligatoria en el Objetivo (DTO, selector sin opción vacía y `org_unit_id` NOT NULL; C23–C24) — mergeado el 9 octubre 2026
 - [B] El throttler `ai` limitaba todas las rutas de la API a 10 req/min (C21) — mergeado el 9 octubre 2026
 - [F] Semáforos y "carga pendiente" en el listado de objetivos, vía `GET okr/planning-tree` (C21) — mergeado el 9 octubre 2026
 - [B] Guards y tenant scoping en `PeriodController` y `OrganizationController` (C20 crítico) y vincular una métrica existente exige poder escribirla (C20 alto) — mergeado el 9 octubre 2026

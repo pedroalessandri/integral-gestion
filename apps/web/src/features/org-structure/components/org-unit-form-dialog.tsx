@@ -14,8 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LABELS, ORG_UNIT_KIND_LABELS } from '@/lib/labels';
-import { toCreateDto, toUpdateDto, type OrgUnitFormValues } from '../org-unit-form';
+import { LABELS } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';import { toCreateDto, toUpdateDto, type OrgUnitFormValues } from '../org-unit-form';
 import { allowedChildKinds, candidateParents, type EditableKind, type FlatUnit } from '../tree';
 import type { CreateOrgUnitDto, UpdateOrgUnitDto } from '@gestion-publica/shared-types/core';
 
@@ -33,6 +33,7 @@ const selectClass =
   'w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm disabled:opacity-50';
 
 export function OrgUnitFormDialog(props: Props) {
+  const { orgUnitKind, placeholders } = useLabels();
   const { tree, pending, error, onClose } = props;
   const editing = props.mode === 'edit' ? props.unit : null;
   const isCentral = editing?.kind === 'central';
@@ -99,7 +100,7 @@ export function OrgUnitFormDialog(props: Props) {
               id="unit-name"
               value={values.name}
               onChange={(e) => set('name', e.target.value)}
-              placeholder="Ej: Secretaría de Obras Públicas"
+              placeholder={placeholders.unitName}
               required
               maxLength={200}
             />
@@ -117,7 +118,7 @@ export function OrgUnitFormDialog(props: Props) {
                 >
                   {kindOptions.map((k) => (
                     <option key={k} value={k}>
-                      {ORG_UNIT_KIND_LABELS[k]}
+                      {orgUnitKind[k]}
                     </option>
                   ))}
                 </select>

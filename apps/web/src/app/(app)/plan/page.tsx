@@ -1,5 +1,5 @@
 import { getActiveOrgId } from '@/lib/active-org';
-import { LABELS } from '@/lib/labels';
+import { getLabels } from '@/lib/labels/server';
 import { listPeriodsAction } from '@/components/objectives/actions';
 import { PeriodSelector } from '@/components/periods/period-selector';
 import { buildAxisBoards, getPlanningTreeAction, resolvePeriodId } from '@/features/planning-tree';
@@ -11,6 +11,7 @@ export default async function PlanPage({
   searchParams: Promise<{ periodId?: string }>;
 }) {
   const orgId = await getActiveOrgId();
+  const labels = await getLabels();
   const { periodId: requestedPeriodId } = await searchParams;
 
   if (!orgId) {
@@ -21,7 +22,7 @@ export default async function PlanPage({
             Seleccioná una organización
           </h2>
           <p className="mt-2 text-sm" style={{ color: '#92400e' }}>
-            Para ver el plan de gobierno, primero elegí una organización activa en el selector de arriba.
+            {labels.plan.noOrg}
           </p>
         </div>
       </div>
@@ -40,10 +41,10 @@ export default async function PlanPage({
   return (
     <div className="space-y-6 max-w-6xl">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">{LABELS.plan.singular}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">{labels.plan.singular}</h1>
         <p className="text-sm text-neutral-500 mt-1">
-          {LABELS.plan.vision} y {LABELS.axis.plural.toLowerCase()} que ordenan los{' '}
-          {LABELS.objective.plural.toLowerCase()}.
+          {labels.plan.vision} y {labels.axis.plural.toLowerCase()} que ordenan los{' '}
+          {labels.objective.plural.toLowerCase()}.
         </p>
         <div className="mt-2">
           <PeriodSelector periods={periods} currentPeriodId={periodId ?? undefined} baseHref="/plan" />

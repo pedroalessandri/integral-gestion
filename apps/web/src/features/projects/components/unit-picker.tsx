@@ -1,7 +1,7 @@
 'use client';
 
-import { ORG_UNIT_KIND_LABELS, LABELS } from '@/lib/labels';
-import { useProjectUnits } from '../useProjectUnits';
+import { LABELS } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';import { useProjectUnits } from '../useProjectUnits';
 
 interface Props {
   id?: string;
@@ -13,6 +13,7 @@ interface Props {
 }
 
 export function UnitPicker({ id, orgId, objectiveUnitId, value, onChange }: Props) {
+  const { orgUnitKind } = useLabels();
   const { units, loading, error } = useProjectUnits(orgId, objectiveUnitId);
   return (
     <div className="space-y-1">
@@ -26,7 +27,7 @@ export function UnitPicker({ id, orgId, objectiveUnitId, value, onChange }: Prop
         {units.map((u, i) => (
           <option key={u.node.id} value={u.node.id}>
             {'— '.repeat(i === 0 ? 0 : Math.max(1, u.depth - (units[0]?.depth ?? u.depth)))}
-            {u.node.name} ({ORG_UNIT_KIND_LABELS[u.node.kind]})
+            {u.node.name} ({orgUnitKind[u.node.kind]})
           </option>
         ))}
       </select>

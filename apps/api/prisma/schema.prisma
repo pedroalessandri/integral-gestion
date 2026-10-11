@@ -28,6 +28,8 @@ model Organization {
   name                String    @db.VarChar(200)
   /// 'active' | 'inactive' — CHECK constraint in migration
   status              String    @default("active") @db.VarChar(10)
+  /// 'public' | 'private' | 'nonprofit'. Elige el diccionario de terminología de la UI (ADR-0011). CHECK en la migración.
+  sector              String    @default("public") @db.VarChar(10)
   deactivatedAt       DateTime? @map("deactivated_at")
   deactivatedByUserId String?   @map("deactivated_by_user_id")
   /// Organizational context for AI copilot (D3 ADR-0005)

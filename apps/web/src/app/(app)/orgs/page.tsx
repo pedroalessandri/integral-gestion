@@ -1,6 +1,8 @@
 import { Building2, Trash2, CalendarDays, Users, Settings2 } from 'lucide-react';
 import Link from 'next/link';
+import type { OrganizationSector } from '@gestion-publica/shared-types/core';
 import { apiFetch } from '@/lib/api-client';
+import { SECTOR_FIELD_LABELS, SECTOR_LABELS } from '@/lib/labels';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -12,6 +14,7 @@ interface OrgItem {
   slug: string;
   name: string;
   status: 'active' | 'inactive';
+  sector: OrganizationSector;
   createdAt: string;
 }
 
@@ -83,6 +86,12 @@ export default async function OrgsPage() {
                   className="text-xs uppercase tracking-wider font-medium"
                   style={{ color: 'var(--color-neutral-500)' }}
                 >
+                  {SECTOR_FIELD_LABELS.badgeColumn}
+                </TableHead>
+                <TableHead
+                  className="text-xs uppercase tracking-wider font-medium"
+                  style={{ color: 'var(--color-neutral-500)' }}
+                >
                   Estado
                 </TableHead>
                 <TableHead
@@ -102,7 +111,7 @@ export default async function OrgsPage() {
             <TableBody>
               {orgs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="p-0">
+                  <TableCell colSpan={6} className="p-0">
                     <EmptyState
                       icon={Building2}
                       title="No hay organizaciones todavía"
@@ -123,6 +132,9 @@ export default async function OrgsPage() {
                     </TableCell>
                     <TableCell className="font-mono text-xs" style={{ color: 'var(--color-neutral-500)' }}>
                       {org.slug}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{SECTOR_LABELS[org.sector]}</Badge>
                     </TableCell>
                     <TableCell>
                       <Badge

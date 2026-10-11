@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LABELS } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';
 import { isMandateRangeValid, planToFormValues, toUpsertPlanDto, type PlanFormValues } from '../plan-form';
 
 interface Props {
@@ -26,6 +26,7 @@ interface Props {
 }
 
 export function PlanFormDialog({ plan, pending, error, onSubmit, onClose }: Props) {
+  const labels = useLabels();
   const [values, setValues] = useState<PlanFormValues>(() => planToFormValues(plan));
   const set = <K extends keyof PlanFormValues>(key: K, value: string) => setValues((v) => ({ ...v, [key]: value }));
 
@@ -46,9 +47,9 @@ export function PlanFormDialog({ plan, pending, error, onSubmit, onClose }: Prop
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{plan ? `Editar ${LABELS.plan.singular}` : `Crear ${LABELS.plan.singular}`}</DialogTitle>
+          <DialogTitle>{plan ? `Editar ${labels.plan.singular}` : `Crear ${labels.plan.singular}`}</DialogTitle>
           <DialogDescription>
-            Es la {LABELS.plan.vision.toLowerCase()} del mandato. Solo hay un plan vigente por organización.
+            {labels.plan.formDescription}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -58,25 +59,25 @@ export function PlanFormDialog({ plan, pending, error, onSubmit, onClose }: Prop
               id="plan-title"
               value={values.title}
               onChange={(e) => set('title', e.target.value)}
-              placeholder="Ej: Plan de gobierno 2026-2029"
+              placeholder={labels.plan.titlePlaceholder}
               required
               maxLength={200}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="plan-vision">{LABELS.plan.vision}</Label>
+            <Label htmlFor="plan-vision">{labels.plan.vision}</Label>
             <Textarea
               id="plan-vision"
               value={values.vision}
               onChange={(e) => set('vision', e.target.value)}
-              placeholder="Hacia dónde va el gobierno durante este mandato..."
+              placeholder={labels.plan.visionPlaceholder}
               rows={5}
               required
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="plan-start">Inicio del mandato</Label>
+              <Label htmlFor="plan-start">{labels.plan.termStart}</Label>
               <Input
                 id="plan-start"
                 type="date"
@@ -86,7 +87,7 @@ export function PlanFormDialog({ plan, pending, error, onSubmit, onClose }: Prop
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="plan-end">Fin del mandato</Label>
+              <Label htmlFor="plan-end">{labels.plan.termEnd}</Label>
               <Input
                 id="plan-end"
                 type="date"
@@ -97,7 +98,7 @@ export function PlanFormDialog({ plan, pending, error, onSubmit, onClose }: Prop
             </div>
           </div>
           {rangeInvalid && (
-            <p className="text-sm text-red-600">El fin del mandato tiene que ser posterior al inicio.</p>
+            <p className="text-sm text-red-600">{labels.plan.rangeInvalid}</p>
           )}
           {error && (
             <div role="alert" className="bg-red-50 border border-red-200 rounded p-3">

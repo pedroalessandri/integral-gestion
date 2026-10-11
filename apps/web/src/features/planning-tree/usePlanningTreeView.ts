@@ -3,14 +3,19 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { PlanningTreeDto } from '@gestion-publica/shared-types/okr';
 import { DEFAULT_VIEW, type PlanningTreeViewMode } from './planning-tree-filters';
+import { useLabels } from '@/lib/labels/labels-provider';
 import { buildTree, expandableKeys } from './planning-tree-view';
 
 /** Estado de la vista del árbol: modo (ejes/unidades) y nodos colapsados. No hace requests. */
 export function usePlanningTreeView(dto: PlanningTreeDto, initialView: PlanningTreeViewMode = DEFAULT_VIEW) {
+  const labels = useLabels();
   const [view, setViewState] = useState<PlanningTreeViewMode>(initialView);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
 
-  const root = useMemo(() => buildTree(dto, view), [dto, view]);
+  const root = useMemo(
+    () => buildTree(dto, view, labels.planningTreeText.noPlan),
+    [dto, view, labels.planningTreeText.noPlan],
+  );
   const allExpandable = useMemo(() => expandableKeys(root), [root]);
 
   const setView = useCallback((next: PlanningTreeViewMode) => {

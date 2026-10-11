@@ -27,11 +27,11 @@ import { FREQUENCY_LABELS, UNIT_LABELS } from '@/components/metrics/format';
 import {
   EXPECTED_CURVE_MODE_LABELS,
   FROM_PROJECTS_UNAVAILABLE_LABELS,
-  INDICATOR_KIND_LABELS,
   LABELS,
   LINK_MODE_FIELD_LABELS,
   LINK_MODE_LABELS,
 } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';
 import {
   fromProjectsAvailability,
   type FromProjectsAvailability,
@@ -129,6 +129,7 @@ export function IndicatorFormDialog({
   }
 
   const shownError = localError ?? error;
+  const { indicatorKind: INDICATOR_KIND_LABELS, placeholders } = useLabels();
   const noun = LABELS.indicator.singular.toLowerCase();
 
   return (
@@ -282,7 +283,7 @@ export function IndicatorFormDialog({
                   value={values.source}
                   onChange={(e) => set('source', e.target.value)}
                   maxLength={500}
-                  placeholder="Ej: Registro de obras de la Secretaría"
+                  placeholder={placeholders.metricSource}
                 />
               </div>
               <div className="space-y-2">
@@ -484,7 +485,7 @@ function CurveEditor({
           )}
           <p className="text-xs text-neutral-600">
             Indicá cuánto esperás tener acumulado al inicio de cada intervalo. Si dejás uno vacío,
-            se interpola entre los vecinos. El último intervalo es siempre la meta.
+            se interpola entre el intervalo anterior y el siguiente que tengan valor. El último intervalo es siempre la meta.
           </p>
           <ul className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
             {buckets.map((bucket) => {

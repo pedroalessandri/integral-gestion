@@ -2,14 +2,18 @@ import type { LinkedProjectRefDto } from '@gestion-publica/shared-types/metrics'
 import type { ApiErrorInfo } from '@/lib/api-errors';
 import { CONTRIBUTION_ERROR_MESSAGES, LINKED_PROJECT_LINK_LABELS } from '@/lib/labels';
 
-/** Mensajes en español para los 409/422 tipados de Estructura, Plan y asignación de objetivos. */
+/**
+ * Mensajes en español para los 409/422 tipados de Estructura, Plan y asignación de objetivos.
+ * Los códigos con vocabulario de sector (`SECTOR_ERROR_CODES`) llevan acá un texto neutro de respaldo; la versión de
+ * cada sector se resuelve en el cliente (`resolveSectorError`, ADR-0011 D3).
+ */
 const MESSAGES: Record<string, string> = {
   OrgUnitScopeForbidden:
     'Tu alcance no incluye esta unidad: podés ver toda la organización, pero solo editar en tu unidad y las que dependen de ella.',
   OrgUnitMaxDepthExceeded:
     'El árbol no puede tener más de 4 niveles. Elegí una unidad padre de un nivel más alto.',
   OrgUnitInvalidParentKind:
-    'Ese tipo de unidad no puede depender de la unidad padre elegida. Una unidad central o un ministerio admiten ministerios y áreas; un área solo admite áreas.',
+    'Ese tipo de unidad no puede depender de la unidad padre elegida. Revisá qué tipos admite cada nivel de la estructura.',
   OrgUnitCycle: 'No podés mover una unidad dentro de sí misma ni de una de sus unidades dependientes.',
   CentralRootImmutable: 'La unidad central no se puede mover, cambiar de tipo ni borrar.',
   OrgUnitHasChildren: 'La unidad tiene unidades dependientes. Borralas o movelas antes de eliminarla.',
@@ -19,10 +23,10 @@ const MESSAGES: Record<string, string> = {
     'La unidad tiene miembros con alcance asignado. Reasignales el alcance antes de eliminarla.',
   OrgUnitNotFound: 'La unidad elegida no existe en esta organización.',
   OrgUnitKindInvalid:
-    'Un objetivo solo se puede asignar a un ministerio/secretaría o a un área/dirección, no a la unidad central.',
-  AxisNotInActivePlan: 'El eje elegido no pertenece al plan de gobierno vigente.',
-  StrategicPlanRequired: 'Primero tenés que crear el plan de gobierno para poder agregar ejes.',
-  StrategicPlanNotFound: 'La organización todavía no tiene un plan de gobierno.',
+    'Un objetivo no se puede asignar a la unidad central. Elegí otra unidad de la estructura.',
+  AxisNotInActivePlan: 'El eje elegido no pertenece al plan vigente.',
+  StrategicPlanRequired: 'Primero tenés que crear el plan para poder agregar ejes.',
+  StrategicPlanNotFound: 'La organización todavía no tiene un plan.',
   StrategicPlanConflict: 'Otra persona creó el plan al mismo tiempo. Recargá la página e intentá de nuevo.',
   ProjectOrgUnitOutOfScope:
     'La unidad del proyecto tiene que ser la del objetivo o una unidad dependiente de ella.',
@@ -54,7 +58,7 @@ const MESSAGES: Record<string, string> = {
     'Los puntos de la curva manual no son válidos. Cada punto tiene que caer en el inicio de un intervalo del período y el último tiene que ser igual a la meta.',
   ...CONTRIBUTION_ERROR_MESSAGES,
   OwnerNotMember: 'La persona responsable tiene que ser miembro de la organización.',
-  MandateRangeInvalid: 'El fin del mandato tiene que ser posterior al inicio.',
+  MandateRangeInvalid: 'El fin de la vigencia tiene que ser posterior al inicio.',
 };
 
 /** Códigos cuyo detalle (qué punto falló y por qué) vale la pena mostrar junto al mensaje fijo. */

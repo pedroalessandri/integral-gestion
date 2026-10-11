@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { auth0 } from '@/lib/auth0';
 import { apiFetch } from '@/lib/api-client';
+import { getMe } from '@/lib/me';
 import { AppShell } from '@/components/app-shell';
 
 interface AiUsage {
@@ -15,19 +16,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await auth0.getSession();
   if (!session) redirect('/auth/login');
 
-  let me: {
-    userId: string;
-    email: string;
-    displayName: string;
-    isSuperadmin: boolean;
-    orgs: Array<{ id: string; slug: string; name: string; enabledModules?: string[] }>;
-  } | null = null;
-  try {
-    const res = await apiFetch('/api/v1/me');
-    if (res.ok) me = await res.json();
-  } catch {
-    // me stays null — AppShell will show a warning banner
-  }
+  // Compartido con getLabels() vía React.cache: /me se pide una sola vez por request.
+  const me = await getMe();
 
   const cookieStore = await cookies();
   const cookieOrgId = cookieStore.get('activeOrgId')?.value ?? null;

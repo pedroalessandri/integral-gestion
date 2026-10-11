@@ -28,7 +28,10 @@ interface BaseEvent<TAction extends string, TEntityType extends string, TDiff> {
 type OrganizationCreatedEvent = BaseEvent<
   'organization.created',
   'core.organization',
-  { before: null; after: { slug: string; name: string; status: 'active' } }
+  {
+    before: null;
+    after: { slug: string; name: string; status: 'active'; sector?: 'public' | 'private' | 'nonprofit' };
+  }
 >;
 
 type OrganizationUpdatedEvent = BaseEvent<
@@ -37,6 +40,15 @@ type OrganizationUpdatedEvent = BaseEvent<
   {
     before: { name: string; mission?: string | null; vision?: string | null; values?: string | null; context?: string | null };
     after: { name: string; mission?: string | null; vision?: string | null; values?: string | null; context?: string | null };
+  }
+>;
+
+type OrganizationSectorChangedEvent = BaseEvent<
+  'organization.sector_changed',
+  'core.organization',
+  {
+    before: { sector: 'public' | 'private' | 'nonprofit' };
+    after: { sector: 'public' | 'private' | 'nonprofit' };
   }
 >;
 
@@ -594,9 +606,10 @@ type MetricObjectiveContextUnlinkedEvent = BaseEvent<
 // ---------------------------------------------------------------------------
 
 export type DomainEvent =
-  // Core — organization (4)
+  // Core — organization (5)
   | OrganizationCreatedEvent
   | OrganizationUpdatedEvent
+  | OrganizationSectorChangedEvent
   | OrganizationActivatedEvent
   | OrganizationDeactivatedEvent
   // Core — period (5)
