@@ -4,6 +4,7 @@ import type {
   PlanningObjectiveDto,
   PlanningTreeDto,
 } from '@gestion-publica/shared-types/okr';
+import { getSectorLabels } from '@/lib/labels';
 import {
   buildAxesTree,
   buildAxisBoards,
@@ -12,6 +13,8 @@ import {
   expandableKeys,
   type TreeNode,
 } from './planning-tree-view';
+
+const NO_PLAN = getSectorLabels('public').planningTreeText.noPlan;
 
 const agg = (
   n: number,
@@ -104,7 +107,7 @@ const dto: PlanningTreeDto = {
 const labels = (nodes: TreeNode[]) => nodes.map((n) => n.label);
 
 describe('buildAxesTree', () => {
-  const root = buildAxesTree(dto);
+  const root = buildAxesTree(dto, NO_PLAN);
 
   it('arma Plan → Ejes (incluso vacíos) → "Sin eje"', () => {
     expect(root.label).toBe('Plan 2026');
@@ -135,13 +138,13 @@ describe('buildAxesTree', () => {
     const tree = buildAxesTree({
       ...dto,
       withoutAxis: { aggregate: agg(0), objectiveIds: [], units: [] },
-    });
+    }, NO_PLAN);
     expect(labels(tree.children)).toEqual(['Eje Salud', 'Eje vacío', 'Sin eje']);
   });
 });
 
 describe('buildUnitsTree', () => {
-  const root = buildUnitsTree(dto);
+  const root = buildUnitsTree(dto, NO_PLAN);
 
   it('arma Plan → unidades anidadas → objetivos directos', () => {
     expect(labels(root.children)).toEqual(['Central']);
@@ -161,7 +164,7 @@ describe('buildUnitsTree', () => {
 
 describe('nodos objetivo', () => {
   it('llevan las dos lecturas por separado y el link a la ficha', () => {
-    const o = buildUnitsTree(dto).children[0]!.children[0]!.children[0]!;
+    const o = buildUnitsTree(dto, NO_PLAN).children[0]!.children[0]!.children[0]!;
     expect(o.href).toBe('/objectives/o1');
     expect(o.readings.result).toMatchObject({
       progressBp: 4000,
@@ -178,7 +181,7 @@ describe('nodos objetivo', () => {
         keys.push(n.key);
         n.children.forEach(walk);
       };
-      walk(buildTree(dto, view));
+      walk(buildTree(dto, view, NO_PLAN));
       expect(new Set(keys).size).toBe(keys.length);
     }
   });
@@ -186,14 +189,26 @@ describe('nodos objetivo', () => {
 
 describe('plan sin plan activo', () => {
   it('muestra el rótulo de sin plan', () => {
-    const tree = buildAxesTree({ ...dto, plan: { ...dto.plan, id: null, title: null }, axes: [] });
+    const tree = buildAxesTree({ ...dto, plan: { ...dto.plan, id: null, title: null }, axes: [] }, NO_PLAN);
     expect(tree.label).toBe('Sin plan de gobierno activo');
+  });
+
+  it('usa el rótulo de cada sector', () => {
+    const noPlan = { ...dto, plan: { ...dto.plan, id: null, title: null }, axes: [] };
+    for (const [sector, expected] of [
+      ['private', 'Sin plan estratégico activo'],
+      ['nonprofit', 'Sin plan estratégico institucional activo'],
+    ] as const) {
+      const label = getSectorLabels(sector).planningTreeText.noPlan;
+      expect(buildAxesTree(noPlan, label).label).toBe(expected);
+      expect(buildUnitsTree(noPlan, label).label).toBe(expected);
+    }
   });
 });
 
 describe('expandableKeys', () => {
   it('solo incluye nodos con hijos', () => {
-    const keys = expandableKeys(buildUnitsTree(dto));
+    const keys = expandableKeys(buildUnitsTree(dto, NO_PLAN));
     expect(keys).toContain('plan');
     expect(keys).toContain('plan/u:u1/u:u2');
     expect(keys).not.toContain('plan/u:u1/u:u3');

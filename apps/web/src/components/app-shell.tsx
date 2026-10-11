@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { setActiveOrgAction } from '@/lib/set-active-org-action';
-import { LABELS } from '@/lib/labels';
+import type { OrganizationSector } from '@gestion-publica/shared-types/core';
+import { getLabelsForSector } from '@/lib/labels';
+import { LabelsProvider } from '@/lib/labels/labels-provider';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ChevronDown, X } from 'lucide-react';
@@ -37,7 +39,7 @@ interface AppShellProps {
     displayName: string;
     isSuperadmin: boolean;
     /** enabledModules gates module-specific nav entries (e.g. 'indicadores-gestion'). */
-    orgs: Array<{ id: string; slug: string; name: string; enabledModules?: string[] }>;
+    orgs: Array<{ id: string; slug: string; name: string; sector: OrganizationSector; enabledModules?: string[] }>;
   } | null;
   initialOrgId: string | null;
   aiUsage?: AiUsage | null;
@@ -50,6 +52,8 @@ export function AppShell({ user, me, initialOrgId, aiUsage, children }: AppShell
   const [activeOrgId, setActiveOrgId] = useState<string | null>(initialOrgId ?? me?.orgs[0]?.id ?? null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const activeOrg = me?.orgs.find((o) => o.id === activeOrgId) ?? null;
+  const sector = activeOrg?.sector ?? 'public';
+  const labels = getLabelsForSector(sector);
 
   useEffect(() => {
     if (!initialOrgId) return;
@@ -76,8 +80,8 @@ export function AppShell({ user, me, initialOrgId, aiUsage, children }: AppShell
   const navItems: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/orgs', label: 'Organizaciones', superadminOnly: true },
-    { href: '/plan', label: LABELS.plan.singular, requiresOrg: true },
-    { href: '/planning', label: LABELS.planningTree, requiresOrg: true },
+    { href: '/plan', label: labels.plan.navLabel, requiresOrg: true },
+    { href: '/planning', label: labels.planningTree, requiresOrg: true },
     { href: '/objectives', label: 'Objetivos', requiresOrg: true },
     { href: '/objectives/executive', label: 'Vista Ejecutiva', requiresOrg: true },
     { href: '/metrics', label: 'Indicadores de gestión', requiresOrg: true, requiresModule: 'indicadores-gestion' },
@@ -92,6 +96,7 @@ export function AppShell({ user, me, initialOrgId, aiUsage, children }: AppShell
   });
 
   return (
+    <LabelsProvider sector={sector}>
     <div className="min-h-screen flex" style={{ backgroundColor: 'var(--color-neutral-50)' }}>
       {/* Sidebar */}
       <aside
@@ -328,5 +333,6 @@ export function AppShell({ user, me, initialOrgId, aiUsage, children }: AppShell
         </main>
       </div>
     </div>
+    </LabelsProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { Network } from 'lucide-react';
 import { getActiveOrgId } from '@/lib/active-org';
 import { PLANNING_TREE_LABELS as L } from '@/lib/labels';
+import { getLabels } from '@/lib/labels/server';
 import { EmptyState } from '@/components/empty-state';
 import { listPeriodsAction } from '@/components/objectives/actions';
 import { listAxesAction } from '@/features/strategic-plan';
@@ -20,6 +21,7 @@ export default async function PlanningTreePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const orgId = await getActiveOrgId();
+  const labels = await getLabels();
   const requested = parseFilters(await searchParams);
 
   if (!orgId) {
@@ -52,7 +54,7 @@ export default async function PlanningTreePage({
     <div className="space-y-6 max-w-6xl">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">{L.title}</h1>
-        <p className="mt-1 text-sm text-neutral-500">{L.subtitle}</p>
+        <p className="mt-1 text-sm text-neutral-500">{labels.planningTreeText.subtitle}</p>
       </div>
 
       {periodId === null ? (

@@ -1,6 +1,7 @@
 'use client';
 
 import { LABELS, NO_AXIS_LABEL } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';
 import { useAxisOptions } from '../useAxisOptions';
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 /** Selector de eje del plan activo, con opción "Sin eje". */
 export function AxisSelect({ id, orgId, value, onChange }: Props) {
   const { axes, loading, error } = useAxisOptions(orgId);
+  const labels = useLabels();
 
   return (
     <div className="space-y-1">
@@ -33,7 +35,7 @@ export function AxisSelect({ id, orgId, value, onChange }: Props) {
       {error && <p className="text-xs text-red-600">{error}</p>}
       {!loading && !error && axes.length === 0 && (
         <p className="text-xs text-neutral-500">
-          Todavía no hay {LABELS.axis.plural.toLowerCase()}. Podés crearlos en Plan de gobierno.
+          Todavía no hay {LABELS.axis.plural.toLowerCase()}. {labels.plan.axisCreateHint}
         </p>
       )}
     </div>

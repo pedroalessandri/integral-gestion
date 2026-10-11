@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { PlanningTreeDto } from '@gestion-publica/shared-types/okr';
 import { Button } from '@/components/ui/button';
 import { PLANNING_TREE_LABELS as L } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';
 import type { PlanningTreeViewMode } from '../planning-tree-filters';
 import type { TreeNode } from '../planning-tree-view';
 import { usePlanningTreeView } from '../usePlanningTreeView';
@@ -19,6 +20,7 @@ const VIEWS: PlanningTreeViewMode[] = ['axes', 'units'];
 
 export function PlanningTreeView({ data, initialView }: Props) {
   const t = usePlanningTreeView(data, initialView);
+  const labels = useLabels();
   const hasPlan = data.plan.id !== null;
 
   return (
@@ -51,7 +53,7 @@ export function PlanningTreeView({ data, initialView }: Props) {
 
       {!hasPlan && t.view === 'axes' && (
         <p role="status" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {L.noPlanHint}
+          {labels.planningTreeText.noPlanHint}
         </p>
       )}
 

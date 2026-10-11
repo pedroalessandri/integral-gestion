@@ -15,7 +15,8 @@ import { ContributionShortfallAlert } from '@/features/contributions/components/
 import { contributionShortfall, projectTitleMap } from '@/features/contributions/contributions';
 import type { ActionResult } from '@/features/planning/error-messages';
 import { formatBpPercent } from '@/features/projects/weights';
-import { EXPECTED_CURVE_MODE_LABELS, INDICATOR_KIND_LABELS, LABELS, LINK_MODE_LABELS } from '@/lib/labels';
+import { EXPECTED_CURVE_MODE_LABELS, LABELS, LINK_MODE_LABELS } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';
 import { seriesForIndicator } from '../chart-data';
 import { formatBucketDate } from '../curve-form';
 import type { IndicatorChartData, IndicatorExtras } from '../indicator-actions';
@@ -34,6 +35,7 @@ interface Props {
 }
 
 export function IndicatorCard({ orgId, indicator, chart, extras, readOnly, defaultOpen, onEdit, onDelete }: Props) {
+  const { indicatorKind: INDICATOR_KIND_LABELS } = useLabels();
   const [open, setOpen] = useState(defaultOpen);
   const pct = Math.max(0, Math.min(10000, indicator.progressCachedBp)) / 100;
   const detailsId = `indicator-details-${indicator.id}`;

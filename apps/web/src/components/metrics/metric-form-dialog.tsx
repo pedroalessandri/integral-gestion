@@ -21,7 +21,7 @@ import type {
   MetricKind,
 } from '@gestion-publica/shared-types/metrics';
 import { Textarea } from '@/components/ui/textarea';
-import { INDICATOR_KIND_LABELS } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';
 import { UNIT_LABELS, FREQUENCY_LABELS } from './format';
 import { createMetricAction, updateMetricAction } from './actions';
 
@@ -59,6 +59,7 @@ type Props = CreateProps | EditProps;
 const DECIMAL_RE = /^-?\d{1,14}(\.\d{1,4})?$/;
 
 export function MetricFormDialog(props: Props) {
+  const { indicatorKind: INDICATOR_KIND_LABELS, placeholders } = useLabels();
   const router = useRouter();
   const isEdit = props.mode === 'edit';
   const isControlled = props.open !== undefined && props.onOpenChange !== undefined;
@@ -257,7 +258,7 @@ export function MetricFormDialog(props: Props) {
             value={source}
             onChange={(e) => setSource(e.target.value)}
             maxLength={500}
-            placeholder="Ej: Registro de obras de la Secretaría"
+            placeholder={placeholders.metricSource}
           />
         </div>
 
