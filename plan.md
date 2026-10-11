@@ -2,7 +2,7 @@
 
 **Spec de referencia**: `docs/features/planificacion-gobierno.md` (en adelante, **SPEC**).
 **Bitácora**: `bitacora.md` (una entrada por corrida).
-**Estado**: Fase 0 · actualizado 2026-10-07.
+**Estado**: Fases 1–10 completas · Fase 11 en curso · actualizado 2026-10-11.
 
 ---
 
@@ -266,6 +266,28 @@ Si el agente se traba (más de 2 horas, o vueltas sin avance): Ctrl+C, revisar `
 - Pantallas y componentes de KR, y referencias de "KR" en el copy.
 - `TODO.md`: agregar "[F] Adaptar copiloto de IA al modelo de planificación".
 - 🔍 Pedro: smoke de regresión completo. Merge.
+
+---
+
+## Fase 11 — Conector para asistentes de IA (MCP) · rama `feature/plan-f11-conector-mcp`
+
+Objetivo: que un usuario pueda consultar y cargar el plan desde Claude o ChatGPT con su propia identidad, con los mismos permisos, alcance por unidad y auditoría que en la web. Un solo servidor MCP remoto sirve a los dos clientes. Decisiones en ADR-0010.
+
+### C25 — ADR-0010 del conector MCP (architect)
+- Dónde vive el servidor (módulo de la API o app aparte), transporte, autenticación OAuth con Auth0 y su relación con `AuthGuard`, elección de la organización activa, catálogo de herramientas (lectura y escritura), confirmaciones, límites de uso, auditoría y qué datos salen hacia el proveedor del modelo.
+- Artefacto: `docs/adr/0010-conector-mcp.md` con preguntas abiertas para Pedro.
+
+### C26 — MVP de consultas (backend-dev)
+- Servidor MCP con OAuth y las herramientas de lectura del ADR (objetivos con sus dos lecturas, árbol de planificación, proyectos atrasados, serie de indicador).
+- Tests de integración: cada herramienta respeta tenant y alcance por unidad.
+- 🔍 Pedro: conectar el demo a Claude y a ChatGPT y consultar el plan de San Carrillo.
+
+### C27 — Herramientas de carga (backend-dev)
+- Escrituras del ADR (carga de indicador, avance de tarea, alta de proyecto y tarea), marcadas como destructivas para que el cliente pida confirmación, con auditoría y sin borrados.
+
+### C28 — Revisión de seguridad del conector (security-reviewer)
+- Revisar el diff de la Fase 11: tokens, audiencia, tenant scoping, alcance, inyección de prompts vía datos y límites de uso. Hallazgos críticos → C28b.
+- 🔍 Pedro: carga real desde los dos clientes. Merge de la Fase 11.
 
 ---
 
