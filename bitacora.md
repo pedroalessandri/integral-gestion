@@ -15,6 +15,16 @@ Formato:
 
 ---
 
+## 2026-10-11 · Deploy del contract (F10) en producción · Pedro + Claude · chore/cierre-fase-10
+- Hecho: el deploy de la API en Railway del merge del PR #26 falló (2026-10-09). La migración `20261009000001_contract_drop_key_result` abortó en su chequeo inicial: había 13 objetivos sin unidad y 30 tareas sin proyecto (datos del modelo OKR viejo que nunca pasaron por la migración de F5), en 6 orgs. No se aplicó nada; Prisma la marcó fallida (P3009 en los reintentos).
+  - Backup previo: `pg_dump` completo de producción en `~/backups/gestion-integral-prod-pre-contract-20261009T191252Z.dump` (máquina de Pedro).
+  - Con el OK de Pedro (PA-1: datos descartables), Pedro corrió `~/backups/contract-cleanup.sql` en una transacción con chequeos: se borraron 13 objetivos, 18 KRs, 30 tareas, 2 vínculos métrica↔KR y 2 indicadores de contexto. `audit.event` no se tocó.
+  - `prisma migrate resolve --rolled-back 20261009000001_contract_drop_key_result` y redeploy.
+- Verificación (2026-10-11, lectura): `_prisma_migrations` con `20261009000001` y `20261009000002` aplicadas; no existen `okr.key_result` ni `metrics.metric_kr_link`; descripciones del catálogo sin KR; deploy de la API en `success`; `GET /api/v1/health` → 200 y `GET /api/v1/okr/planning-tree` sin auth → 401.
+- Pendiente / desvíos: la herramienta de permisos de la sesión bloqueó el borrado desde el agente (escritura en un recurso compartido); lo corrió Pedro. La CLI de Railway quedó instalada en `~/.local/bin/railway` y vinculada a `postgres-4ukf`.
+- Lección: antes de mergear una migración con precondiciones (contract), correr las consultas de chequeo contra producción.
+- Fin de la Fase 10 y del plan de reorientación (C01–C24). Pendiente: smoke grande de Pedro.
+
 ## 2026-10-09 · C24 · frontend-dev · feature/plan-f10-contract
 - Hecho:
   - `apps/web` sin KR: se borraron 11 componentes (crear/editar KR, vínculo métrica↔KR, progreso automático de KR, rebalanceo de pesos, menú de KR, `gantt-chart` viejo, `progress-ring` del número único y dos componentes de tareas huérfanos). La ficha de objetivo queda con encabezado de dos lecturas y pestañas Indicadores / Proyectos / Contexto (SPEC §5.4); el listado muestra dos barras rotuladas (Resultado / Gestión) más los semáforos por lectura; `/metrics` sin la columna y el filtro de vínculos con KR.
@@ -35,7 +45,7 @@ Formato:
   - ✅ `ObjectiveSummaryDto` trae `description`: el diálogo de edición del listado abre con el valor actual (se revirtió el workaround de C24).
   - Verificación del ajuste: `turbo run typecheck/lint/test --force` verde (api 490, web 122); `pnpm --filter web build` OK; psql: `20261009000002` aplicada en la DB local y descripciones nuevas; 6 e2e vigentes 16/16 en DB descartable (subagente).
   - Queda: el CHECK de `ai.prompt_log.entity_type` sigue admitiendo `key_result` (hay logs históricos).
-- Fin de la Fase 10: PR abierto. Smoke grande de Pedro (regresión completa de las Fases 2–10).
+- Fin de la Fase 10: mergeada por Pedro (PR #26, 2026-10-09). Smoke grande de Pedro pendiente.
 
 ## 2026-10-09 · C23 · backend-dev · feature/plan-f10-contract
 - Hecho (contract, ADR-0009 D6 y D9):
