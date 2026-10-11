@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { DEFAULT_ORGANIZATION_SECTOR, type OrganizationSector } from '@gestion-publica/shared-types/core';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,7 +15,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { SECTOR_FIELD_LABELS, getSectorLabels } from '@/lib/labels';
 import { createOrgAction } from './actions';
+import { SectorSelect } from './sector-select';
 
 // ---------------------------------------------------------------------------
 // Helpers (local to this form — not shared)
@@ -129,6 +132,8 @@ export function CreateOrgButton() {
   const [serverError, setServerError] = useState<string | null>(null);
 
   // Form fields
+  const [sector, setSector] = useState<OrganizationSector>(DEFAULT_ORGANIZATION_SECTOR);
+  const placeholders = getSectorLabels(sector).placeholders;
   const [slug, setSlug] = useState('');
   const [name, setName] = useState('');
   const [startsAt, setStartsAt] = useState(today);
@@ -142,6 +147,7 @@ export function CreateOrgButton() {
   function resetForm() {
     const newToday = todayAsDateString();
     setSlug('');
+    setSector(DEFAULT_ORGANIZATION_SECTOR);
     setName('');
     setStartsAt(newToday);
     setEndsAt(dateStringPlusDays(newToday, 90));
@@ -202,6 +208,7 @@ export function CreateOrgButton() {
     const result = await createOrgAction({
       slug,
       name,
+      sector,
       firstPeriod: {
         code: periodCode.trim(),
         startsAt: toUtcMidnight(startsAt),
@@ -243,7 +250,7 @@ export function CreateOrgButton() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => handleFieldBlur('name')}
-              placeholder="Ej: Ministerio de Salud"
+              placeholder={placeholders.orgName}
             />
             {fieldErrors.name && (
               <p className="text-xs text-red-600">{fieldErrors.name}</p>
@@ -260,13 +267,17 @@ export function CreateOrgButton() {
                 setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))
               }
               onBlur={() => handleFieldBlur('slug')}
-              placeholder="ej-ministerio-salud"
+              placeholder={placeholders.orgSlug}
             />
             <p className="text-xs text-muted-foreground">Solo minúsculas, números y guiones.</p>
             {fieldErrors.slug && (
               <p className="text-xs text-red-600">{fieldErrors.slug}</p>
             )}
           </div>
+
+          {/* Terminología (sector) */}
+          <SectorSelect id="org-sector" value={sector} onChange={setSector} disabled={loading} />
+          <p className="text-xs text-muted-foreground">{SECTOR_FIELD_LABELS.warning}</p>
 
           <hr className="border-border" />
 

@@ -23,6 +23,7 @@ import { UnitSelect } from '@/features/org-structure';
 import { AxisSelect } from '@/features/strategic-plan';
 import { assignmentForCreate, assignmentForUpdate, hasUnit } from '@/features/planning/objective-assignment';
 import { LABELS } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';
 
 interface ObjectiveInitialValues {
   id: string;
@@ -61,6 +62,7 @@ interface EditProps {
 type Props = CreateProps | EditProps;
 
 export function CreateObjectiveButton(props: Props) {
+  const { placeholders } = useLabels();
   const router = useRouter();
   const isEdit = props.mode === 'edit';
   const aiEnabled = props.aiEnabled ?? true;
@@ -171,7 +173,7 @@ export function CreateObjectiveButton(props: Props) {
             id="obj-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ej: Mejorar atención ciudadana"
+            placeholder={placeholders.objectiveTitle}
             required
             maxLength={200}
           />

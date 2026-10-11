@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { MeDto } from '@gestion-publica/shared-types/core';
+import type { MeDto, OrganizationSector } from '@gestion-publica/shared-types/core';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 
 /**
@@ -52,6 +52,7 @@ export class MeService {
             id: org.id,
             slug: org.slug,
             name: org.name,
+            sector: org.sector as OrganizationSector,
             role: {
               // superadmin sentinel — user is not a member of the org but has cross-tenant access
               key: 'superadmin',
@@ -86,6 +87,7 @@ export class MeService {
             id: m.organization.id,
             slug: m.organization.slug,
             name: m.organization.name,
+            sector: m.organization.sector as OrganizationSector,
             role: {
               // TODO(ADR-0004): resolve real role key + permissions via auth.role join
               // For now, return roleId as key and name with empty permissions

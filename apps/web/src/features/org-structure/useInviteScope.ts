@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { listOrgUnitTreeAction } from './org-structure-actions';
+import { useLabels } from '@/lib/labels/labels-provider';
 import { buildInviteScopeOptions } from './invite-scope';
 
 /** Carga el árbol de unidades y arma las opciones del selector de alcance de la invitación. */
 export function useInviteScope(orgId: string, enabled: boolean) {
+  const { orgUnitKind } = useLabels();
   const [tree, setTree] = useState<Awaited<ReturnType<typeof listOrgUnitTreeAction>> | null>(null);
 
   useEffect(() => {
@@ -19,6 +21,9 @@ export function useInviteScope(orgId: string, enabled: boolean) {
     };
   }, [orgId, enabled]);
 
-  const options = useMemo(() => (tree?.ok ? buildInviteScopeOptions(tree.data) : []), [tree]);
+  const options = useMemo(
+    () => (tree?.ok ? buildInviteScopeOptions(tree.data, orgUnitKind) : []),
+    [tree, orgUnitKind],
+  );
   return { options, loading: enabled && tree === null, error: tree && !tree.ok ? tree.error : null };
 }

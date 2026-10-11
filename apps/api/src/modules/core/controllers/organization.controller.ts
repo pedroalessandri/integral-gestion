@@ -14,6 +14,7 @@ import {
 import { OrganizationService } from '../services/organization.service.js';
 import { CreateOrganizationDto } from '../dto/create-organization.dto.js';
 import { UpdateOrganizationDto } from '../dto/update-organization.dto.js';
+import { UpdateOrganizationSectorDto } from '../dto/update-organization-sector.dto.js';
 import { DeactivateOrganizationDto } from '../dto/deactivate-organization.dto.js';
 import { ListOrgsQueryDto } from '../dto/list-orgs-query.dto.js';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
@@ -73,6 +74,7 @@ export class OrganizationController {
       {
         slug: body.slug,
         name: body.name,
+        sector: body.sector,
         firstPeriod: body.firstPeriod,
       },
       user,
@@ -93,6 +95,21 @@ export class OrganizationController {
     @CurrentUser() user: AuthContext,
   ) {
     return this.organizationService.update(id, body, user);
+  }
+
+  /**
+   * PATCH /api/v1/orgs/:id/sector
+   * Cambia la terminología (sector) de la org. Superadmin only (ADR-0011 D2).
+   */
+  @Patch(':id/sector')
+  @UseGuards(SuperadminOnlyGuard)
+  async updateSector(
+    @Param('id') id: string,
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    body: UpdateOrganizationSectorDto,
+    @CurrentUser() user: AuthContext,
+  ) {
+    return this.organizationService.updateSector(id, body.sector, user);
   }
 
   /**

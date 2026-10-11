@@ -6,8 +6,8 @@ import type { MemberDto, OrgUnitTreeNodeDto } from '@gestion-publica/shared-type
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/empty-state';
-import { LABELS, ORG_UNIT_KIND_LABELS, SCOPE_WHOLE_ORG_LABEL } from '@/lib/labels';
-import { useOrgStructure } from '../useOrgStructure';
+import { LABELS, SCOPE_WHOLE_ORG_LABEL } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';import { useOrgStructure } from '../useOrgStructure';
 import { canAddChild, flattenTree, type FlatUnit } from '../tree';
 import { OrgUnitFormDialog } from './org-unit-form-dialog';
 import { DeleteOrgUnitDialog } from './delete-org-unit-dialog';
@@ -31,6 +31,7 @@ type DialogState =
 const selectClass = 'rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm disabled:opacity-50';
 
 export function OrgStructurePanel({ orgId, tree, members, loadError, membersError }: Props) {
+  const { orgUnitKind } = useLabels();
   const s = useOrgStructure({ orgId, tree, members });
   const [dialog, setDialog] = useState<DialogState>(null);
   const [scopeUserId, setScopeUserId] = useState<string | null>(null);
@@ -93,7 +94,7 @@ export function OrgStructurePanel({ orgId, tree, members, loadError, membersErro
                       {unit.depth > 1 && <ChevronRight className="h-3.5 w-3.5 text-neutral-400" aria-hidden />}
                       <span className="font-medium text-neutral-900">{unit.node.name}</span>
                       <Badge variant="outline" className="text-xs">
-                        {ORG_UNIT_KIND_LABELS[unit.node.kind]}
+                        {orgUnitKind[unit.node.kind]}
                       </Badge>
                     </div>
                     {(unit.node.vision || unit.node.mission) && (

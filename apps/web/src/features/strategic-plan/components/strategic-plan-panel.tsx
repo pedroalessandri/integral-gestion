@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Compass, Landmark, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Compass, Flag, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { AxisDto, StrategicPlanDto } from '@gestion-publica/shared-types/planning';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/empty-state';
-import { LABELS, PLANNING_TREE_LABELS } from '@/lib/labels';
+import { PLANNING_TREE_LABELS } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';
 import { AxisBoardLink, AxisBoardSection } from '@/features/planning-tree/components/axis-board';
 import type { AxisBoard } from '@/features/planning-tree/planning-tree-view';
 import { useStrategicPlan } from '../useStrategicPlan';
@@ -39,6 +40,7 @@ const dateFmt = new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeZone: 
 const formatDate = (iso: string) => dateFmt.format(new Date(iso));
 
 export function StrategicPlanPanel({ orgId, plan, axes, loadError, board }: Props) {
+  const labels = useLabels();
   const s = useStrategicPlan(orgId);
   const [dialog, setDialog] = useState<DialogState>(null);
   const editingAxisId = dialog?.type === 'axis' && dialog.axis ? dialog.axis.id : '';
@@ -64,10 +66,10 @@ export function StrategicPlanPanel({ orgId, plan, axes, loadError, board }: Prop
     return (
       <>
         <EmptyState
-          icon={Landmark}
-          title="Aún no hay plan de gobierno"
-          description="Creá el plan con la visión general y el período del mandato. Después vas a poder agregar los ejes."
-          action={<Button onClick={() => open({ type: 'plan' })}>Crear plan de gobierno</Button>}
+          icon={Flag}
+          title={labels.plan.emptyTitle}
+          description={labels.plan.emptyDescription}
+          action={<Button onClick={() => open({ type: 'plan' })}>{labels.plan.emptyCta}</Button>}
         />
         {dialog?.type === 'plan' && (
           <PlanFormDialog plan={null} pending={s.pending} error={s.error} onSubmit={s.savePlan} onClose={close} />
@@ -94,7 +96,7 @@ export function StrategicPlanPanel({ orgId, plan, axes, loadError, board }: Prop
               {plan.title}
             </h2>
             <p className="text-xs text-neutral-500">
-              Mandato: {formatDate(plan.mandateStartsAt)} al {formatDate(plan.mandateEndsAt)}
+              {labels.plan.termRange(formatDate(plan.mandateStartsAt), formatDate(plan.mandateEndsAt))}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => open({ type: 'plan' })}>
@@ -103,7 +105,7 @@ export function StrategicPlanPanel({ orgId, plan, axes, loadError, board }: Prop
           </Button>
         </div>
         <div>
-          <h3 className="text-xs font-medium uppercase tracking-wider text-neutral-500">{LABELS.plan.vision}</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-neutral-500">{labels.plan.vision}</h3>
           <p className="mt-1 whitespace-pre-line text-sm text-neutral-800">{plan.vision}</p>
         </div>
       </section>
@@ -112,10 +114,10 @@ export function StrategicPlanPanel({ orgId, plan, axes, loadError, board }: Prop
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 id="axes-heading" className="text-lg font-semibold text-neutral-900">
-              {LABELS.axis.plural}
+              {labels.axis.plural}
             </h2>
             <p className="text-sm text-neutral-500">
-              Agrupan {LABELS.objective.plural.toLowerCase()} de una o más unidades.
+              Agrupan {labels.objective.plural.toLowerCase()} de una o más unidades.
             </p>
           </div>
           <Button onClick={() => open({ type: 'axis', axis: null })}>

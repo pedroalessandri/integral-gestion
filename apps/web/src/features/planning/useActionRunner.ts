@@ -2,7 +2,9 @@
 
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLabels } from '@/lib/labels/labels-provider';
 import type { ActionFailure, ActionResult } from './error-messages';
+import { resolveSectorError } from './sector-errors';
 
 /**
  * Ejecuta una server action de mutación, maneja pending/error y refresca los Server Components
@@ -10,6 +12,7 @@ import type { ActionFailure, ActionResult } from './error-messages';
  */
 export function useActionRunner() {
   const router = useRouter();
+  const { errors } = useLabels();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,12 +24,14 @@ export function useActionRunner() {
       setPending(false);
       if (result.ok) {
         router.refresh();
-      } else {
-        setError(result.error);
+        return result;
       }
-      return result;
+      // Los códigos con vocabulario de sector se muestran con el texto del diccionario de la org (ADR-0011 D3).
+      const error = resolveSectorError(errors, result.code, result.error);
+      setError(error);
+      return { ...result, error };
     },
-    [router],
+    [router, errors],
   );
 
   const clearError = useCallback(() => setError(null), []);

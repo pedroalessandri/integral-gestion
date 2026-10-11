@@ -1,8 +1,12 @@
+import type { OrganizationSector } from './sector-terms.js';
+
 export interface OrganizationSummaryDto {
   id: string;
   slug: string;
   name: string;
   status: 'active' | 'inactive';
+  /** Sector de la organización: elige la terminología de la UI (ADR-0011). */
+  sector: OrganizationSector;
   /** ISO-8601 UTC timestamp. */
   createdAt: string;
 }
@@ -23,6 +27,8 @@ export interface OrganizationDetailDto extends OrganizationSummaryDto {
 export interface CreateOrganizationDto {
   slug: string;
   name: string;
+  /** Opcional; default 'public' (ADR-0011). */
+  sector?: OrganizationSector;
   /** Required: first period must be provided at org creation time. */
   firstPeriod: {
     /** Free string, 1-50 chars. */
@@ -47,4 +53,9 @@ export interface UpdateOrganizationDto {
 /** Request body for POST /api/v1/orgs/:id/deactivate. */
 export interface DeactivateOrganizationDto {
   reason?: string;
+}
+
+/** Request body for PATCH /api/v1/orgs/:id/sector. Superadmin only (ADR-0011 D2). */
+export interface UpdateOrganizationSectorDto {
+  sector: OrganizationSector;
 }

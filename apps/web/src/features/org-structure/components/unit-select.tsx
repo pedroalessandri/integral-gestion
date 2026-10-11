@@ -1,7 +1,7 @@
 'use client';
 
-import { LABELS, ORG_UNIT_KIND_LABELS } from '@/lib/labels';
-import { useAssignableUnits } from '../useAssignableUnits';
+import { LABELS } from '@/lib/labels';
+import { useLabels } from '@/lib/labels/labels-provider';import { useAssignableUnits } from '../useAssignableUnits';
 
 interface Props {
   id?: string;
@@ -10,8 +10,9 @@ interface Props {
   onChange: (unitId: string | null) => void;
 }
 
-/** Selector de unidad para objetivos (obligatoria, RN-P3): solo ministerios y áreas (la central no admite objetivos). */
+/** Selector de unidad para objetivos (obligatoria, RN-P3): solo unidades `ministry` y `area` (la central no admite objetivos). */
 export function UnitSelect({ id, orgId, value, onChange }: Props) {
+  const { orgUnitKind, orgUnit } = useLabels();
   const { units, loading, error } = useAssignableUnits(orgId);
 
   return (
@@ -28,14 +29,14 @@ export function UnitSelect({ id, orgId, value, onChange }: Props) {
         {units.map((u) => (
           <option key={u.node.id} value={u.node.id}>
             {'— '.repeat(Math.max(0, u.depth - 2))}
-            {u.node.name} ({ORG_UNIT_KIND_LABELS[u.node.kind]})
+            {u.node.name} ({orgUnitKind[u.node.kind]})
           </option>
         ))}
       </select>
       {error && <p className="text-xs text-red-600">{error}</p>}
       {!loading && !error && units.length === 0 && (
         <p className="text-xs text-neutral-500">
-          Todavía no hay ministerios ni áreas. Creá la estructura en Configuración → Estructura.
+          {orgUnit.noAssignableUnits}
         </p>
       )}
     </div>

@@ -166,9 +166,9 @@ La UI usa los términos de planificación de gobierno; el código mantiene nombr
 
 | Término UI | Código (modelo Prisma / tabla) |
 |---|---|
-| Visión general de gobierno / Plan de gobierno | `StrategicPlan` / `planning.strategic_plan` |
+| Plan de gobierno (público) / Plan estratégico (privado) / Plan estratégico institucional (sin fines de lucro); su visión: Visión general de gobierno / Visión estratégica / Visión institucional | `StrategicPlan` / `planning.strategic_plan` |
 | Eje | `Axis` / `planning.axis` |
-| Unidad (central, ministerio/secretaría, área/dirección) | `OrgUnit` (`kind`: `central` \| `ministry` \| `area`) / `core.org_unit` |
+| Unidad. Tipos: público Central / Ministerio-Secretaría / Área-Dirección; privado Dirección General / Dirección / Área; sin fines de lucro Dirección Ejecutiva / Área / Programa | `OrgUnit` (`kind`: `central` \| `ministry` \| `area`) / `core.org_unit` |
 | Objetivo estratégico | `Objective` / `okr.objective` |
 | Indicador (del objetivo) | `ObjectiveIndicator` (vínculo con base, meta y curva) → `Metric` (serie) |
 | Carga de indicador | `MetricEntry` |
@@ -181,7 +181,7 @@ La UI usa los términos de planificación de gobierno; el código mantiene nombr
 | Período | `Period` / `core.period` |
 | Módulo de planificación | módulo Nest, schema y paquete `okr` / `okr-domain` |
 
-Las etiquetas de UI viven en un diccionario centralizado (ADR-0006 D2), no hardcodeadas en componentes.
+Las etiquetas de UI viven en un diccionario centralizado (ADR-0006 D2), no hardcodeadas en componentes. Desde ADR-0011 los términos que varían dependen del sector de la organización (`Organization.sector`: `public` \| `private` \| `nonprofit`): `apps/web/src/lib/labels/` (compartido) + `sector/*.ts` (uno por sector), con `getLabels()` en server y `useLabels()` en client. El vocabulario de gobierno solo puede vivir en `sector/public.ts` (test guard).
 
 ## TODO.md handling
 

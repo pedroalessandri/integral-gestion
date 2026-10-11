@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getOrganizationAction, getAiUsageAction } from '@/components/orgs/actions';
-import { apiFetch } from '@/lib/api-client';
+import { getMe } from '@/lib/me';
 import { OrgContextForm } from '@/components/orgs/org-context-form';
+import { SectorCard } from '@/components/orgs/sector-card';
 import { AiUsageCard } from '@/components/orgs/ai-usage-card';
 import { SettingsTabs } from '@/components/settings/settings-tabs';
 import { ModulesPanel } from '@/components/settings/modules-panel';
@@ -10,21 +11,17 @@ import { OrgStructurePanel, listOrgUnitTreeAction, listScopeMembersAction } from
 export default async function OrgSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: orgId } = await params;
 
-  const [orgResult, usageResult, meRes, treeResult, membersResult] = await Promise.all([
+  const [orgResult, usageResult, me, treeResult, membersResult] = await Promise.all([
     getOrganizationAction(orgId),
     getAiUsageAction(orgId),
-    apiFetch('/api/v1/me'),
+    getMe(),
     listOrgUnitTreeAction(orgId),
     listScopeMembersAction(orgId),
   ]);
 
   if (orgResult.error || !orgResult.organization) notFound();
 
-  let isSuperadmin = false;
-  if (meRes.ok) {
-    const me = (await meRes.json()) as { isSuperadmin?: boolean };
-    isSuperadmin = me.isSuperadmin === true;
-  }
+  const isSuperadmin = me?.isSuperadmin === true;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -38,7 +35,12 @@ export default async function OrgSettingsPage({ params }: { params: Promise<{ id
       </div>
 
       <SettingsTabs
-        general={<OrgContextForm organization={orgResult.organization} />}
+        general={
+          <div className="space-y-6">
+            <OrgContextForm organization={orgResult.organization} />
+            <SectorCard orgId={orgId} sector={orgResult.organization.sector} canEdit={isSuperadmin} />
+          </div>
+        }
         estructura={
           <OrgStructurePanel
             orgId={orgId}

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useLabels } from '@/lib/labels/labels-provider';
 import { updateOrganizationAction } from './actions';
 
 interface Org {
@@ -20,6 +21,7 @@ interface Org {
 
 export function OrgContextForm({ organization }: { organization: Org }) {
   const router = useRouter();
+  const { placeholders } = useLabels();
   const [name, setName] = useState(organization.name);
   const [mission, setMission] = useState(organization.mission ?? '');
   const [vision, setVision] = useState(organization.vision ?? '');
@@ -66,7 +68,7 @@ export function OrgContextForm({ organization }: { organization: Org }) {
           id="mission"
           value={mission}
           onChange={(e) => setMission(e.target.value)}
-          placeholder="Ej: Facilitar el acceso de los ciudadanos a los servicios públicos mediante tecnología accesible..."
+          placeholder={placeholders.orgMission}
           rows={3}
           maxLength={5000}
         />
@@ -79,7 +81,7 @@ export function OrgContextForm({ organization }: { organization: Org }) {
           id="vision"
           value={vision}
           onChange={(e) => setVision(e.target.value)}
-          placeholder="Ej: Ser la organización líder en servicios públicos digitales del país..."
+          placeholder={placeholders.orgVision}
           rows={3}
           maxLength={5000}
         />
@@ -92,7 +94,7 @@ export function OrgContextForm({ organization }: { organization: Org }) {
           id="values"
           value={values}
           onChange={(e) => setValues(e.target.value)}
-          placeholder="Ej: Transparencia, cercanía, innovación, respeto por el ciudadano..."
+          placeholder={placeholders.orgValues}
           rows={3}
           maxLength={5000}
         />

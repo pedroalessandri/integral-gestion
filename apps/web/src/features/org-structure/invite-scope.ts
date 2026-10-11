@@ -1,7 +1,7 @@
-import type { OrgUnitTreeNodeDto } from '@gestion-publica/shared-types/core';
+import type { OrgUnitKind, OrgUnitTreeNodeDto } from '@gestion-publica/shared-types/core';
 import type { ApiErrorInfo } from '@/lib/api-errors';
 import { describeApiError } from '@/features/planning/error-messages';
-import { INVITE_SCOPE_LABELS, ORG_UNIT_KIND_LABELS, SCOPE_WHOLE_ORG_LABEL } from '@/lib/labels';
+import { INVITE_SCOPE_LABELS, SCOPE_WHOLE_ORG_LABEL } from '@/lib/labels';
 import { flattenTree } from './tree';
 
 /** Valor del <select> sin elección (el usuario tiene que elegir). */
@@ -14,13 +14,19 @@ export interface InviteScopeOption {
   label: string;
 }
 
-/** Opciones: "Toda la organización" + unidades del árbol indentadas por nivel (la central equivale a toda la org). */
-export function buildInviteScopeOptions(tree: OrgUnitTreeNodeDto[]): InviteScopeOption[] {
+/**
+ * Opciones: "Toda la organización" + unidades del árbol indentadas por nivel (la central equivale a toda la org).
+ * `orgUnitKind` son los nombres de tipo de unidad del sector de la org (ADR-0011).
+ */
+export function buildInviteScopeOptions(
+  tree: OrgUnitTreeNodeDto[],
+  orgUnitKind: Record<OrgUnitKind, string>,
+): InviteScopeOption[] {
   const units = flattenTree(tree)
     .filter((u) => u.node.kind !== 'central')
     .map((u) => ({
       value: u.node.id,
-      label: `${'— '.repeat(Math.max(0, u.depth - 2))}${u.node.name} (${ORG_UNIT_KIND_LABELS[u.node.kind]})`,
+      label: `${'— '.repeat(Math.max(0, u.depth - 2))}${u.node.name} (${orgUnitKind[u.node.kind]})`,
     }));
   return [{ value: INVITE_SCOPE_WHOLE_ORG, label: SCOPE_WHOLE_ORG_LABEL }, ...units];
 }

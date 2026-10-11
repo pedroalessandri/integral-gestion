@@ -8,7 +8,7 @@ import {
   resolveInviteOrgUnitId,
   validateInviteScope,
 } from './invite-scope';
-import { INVITE_SCOPE_LABELS, SCOPE_WHOLE_ORG_LABEL } from '@/lib/labels';
+import { INVITE_SCOPE_LABELS, SCOPE_WHOLE_ORG_LABEL, getSectorLabels } from '@/lib/labels';
 
 const node = (id: string, kind: OrgUnitTreeNodeDto['kind'], children: OrgUnitTreeNodeDto[] = []) =>
   ({ id, name: id, kind, children }) as unknown as OrgUnitTreeNodeDto;
@@ -17,7 +17,7 @@ const tree = [node('c', 'central', [node('m', 'ministry', [node('a', 'area')])])
 
 describe('invite-scope', () => {
   it('arma opciones con toda la organización primero y unidades indentadas', () => {
-    const opts = buildInviteScopeOptions(tree);
+    const opts = buildInviteScopeOptions(tree, getSectorLabels('public').orgUnitKind);
     expect(opts.map((o) => o.value)).toEqual([INVITE_SCOPE_WHOLE_ORG, 'm', 'a']);
     expect(opts[0]?.label).toBe(SCOPE_WHOLE_ORG_LABEL);
     expect(opts[1]?.label.startsWith('m')).toBe(true);
