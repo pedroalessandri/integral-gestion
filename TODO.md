@@ -8,6 +8,17 @@
 
 ## 🟡 Prioridad media — próximas semanas
 
+### [B] En móvil el menú lateral no se colapsa y la página se desborda de costado
+- Por qué: `components/app-shell.tsx` renderiza el `<aside className="w-64 …">` fijo en todos los anchos. Con un viewport de 390 px el menú ocupa media pantalla, el contenido queda aplastado y la página mide ~800 px de ancho (scroll horizontal). El proyecto es desktop-first pero con responsive móvil (CLAUDE.md).
+- Posible solución: ocultar el `aside` debajo de `md` (`hidden md:flex`) y sumar un botón hamburguesa en el header que lo abra como `Sheet` de shadcn/ui; revisar tablas y el Gantt con `overflow-x-auto` dentro de su contenedor para que no empujen la página.
+- Evidencia: capturas `19/20-movil-…-BUG-menu-lateral-no-colapsa` en `~/capturas-demo-2026-10-11/`.
+- Origen: capturas de la demo (2026-10-11).
+
+### [B] La misma métrica muestra desvíos distintos en el objetivo y en la vista del indicador
+- Por qué: en la demo, "Kilómetros de ciclovía habilitados" figura **En tiempo, +35 pts** en la pestaña Indicadores del objetivo (curva `from_projects` y base/meta del `ObjectiveIndicator`) y **−42,8 %** en `/metrics/[id]` (recta lineal con base/meta de la `Metric`). Es coherente con ADR-0009 D8 (en la vista standalone rige la `Metric`), pero el usuario ve dos semáforos contradictorios para el mismo dato sin explicación.
+- Posible solución: en `/metrics/[id]`, si la métrica está vinculada a objetivos, mostrar un aviso "Este indicador se evalúa distinto en cada objetivo" con link a cada `ObjectiveIndicator` y su desvío; o no mostrar semáforo standalone cuando hay vínculos. Relacionado con "[F] Serie del indicador con base y meta del indicador".
+- Origen: capturas de la demo (2026-10-11).
+
 ### [F] Adaptar copiloto de IA al modelo de planificación
 - Por qué: ADR-0009 D9 dejó el copiloto (`POST ai/draft` y `ai/validate`) solo para objetivos (`entityType: 'objective'`, sin `objectiveContext`) cuando se eliminó el KR. Falta llevarlo a los indicadores (redacción de nombre y meta) y a los proyectos (redacción y validación de alcance), con el objetivo como contexto.
 - Posible solución: ampliar `entityType` en el DTO de `ai` (`indicator` | `project`), prompts por entidad y reincorporar el contexto del objetivo; en el front, sumar `AiSuggestPanel`/`SmartFeedbackPanel` a los formularios de indicador y proyecto.
