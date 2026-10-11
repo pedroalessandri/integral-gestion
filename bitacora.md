@@ -15,6 +15,13 @@ Formato:
 
 ---
 
+## 2026-10-11 · C29 · architect · feature/plan-f12-sector-privado
+- Hecho: `docs/adr/0011-terminologia-por-sector.md` (Proposed, enmienda 0009 y 0010). Campo `Organization.sector` (`VarChar(10)` + CHECK `public|private`, default `public`), lo cambia solo el superadmin (`POST /orgs` y `PATCH /orgs/:id/sector`), llega a la web en `MeDto.orgs[].sector`; `lib/labels` partido en compartido y por sector (`getLabels()` en server, `LabelsProvider`/`useLabels()` en client); términos núcleo en `shared-types`; test anti-textos de gobierno hardcodeados. Diccionario privado: Plan estratégico, Visión estratégica, Vigencia, Pilares, Dirección General / Dirección / Área. Fase 12 sumada a `plan.md` (se ejecuta antes de C26).
+- Commit: ver `git log` de la rama.
+- Verificación: solo documentación; se verificó a mano que el schema no usa enums de Prisma y que el módulo `okr` figura como "OKR" en el catálogo.
+- Pendiente / desvíos: 27 líneas de gobierno hardcodeadas en 11 archivos de web, a resolver en C30.
+- Preguntas abiertas: las 11 del ADR (pilares vs ejes, tipos de unidad, quién cambia el sector, VarChar vs enum, términos núcleo, copiloto, renombrar "OKR", Playwright, errores por sector, cambio de sector con datos, tercer sector).
+
 ## 2026-10-11 · C25 · architect · feature/plan-f11-conector-mcp
 - Hecho: `docs/adr/0010-conector-mcp.md` (Proposed). Servidor MCP como módulo `mcp` de la API (`POST /mcp`, SDK oficial, Streamable HTTP sin sesiones), OAuth con Auth0 y API propia del conector (scopes `plan:read`/`plan:write`, DCR, RFC 9728), token que termina en el mismo `AuthContext` (permiso = scope ∧ RBAC ∧ alcance), `organizacionId` por herramienta, 8 herramientas de lectura (C26) y 4 de escritura sin borrados (C27), audit con `channel`/`client_id`, limitador propio por usuario, módulo habilitable `mcp` apagado por defecto y saneo de textos contra inyección de prompts. Fase 11 sumada a `plan.md`.
 - Commit: ver `git log` de la rama.

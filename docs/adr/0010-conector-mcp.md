@@ -1,6 +1,7 @@
 # 0010 — Conector MCP para Claude y ChatGPT
 
 **Status**: Proposed
+Amended by: 0011
 **Supersedes**: none. **Superseded by**: none.
 **Date**: 2026-10-11
 **Author**: architect subagent
