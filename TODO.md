@@ -68,11 +68,6 @@
 - Por qué: `GET members` pide `core:member:manage`; sin ese permiso la sección de alcance de Estructura muestra un error genérico. Pedro (2026-10-07): es lo esperado, pero el mensaje tiene que decir qué permiso falta para que un admin lo corrija.
 - Origen: pregunta abierta de C06.
 
-### [F] Unidad obligatoria en el Objetivo
-- Por qué: Pedro (2026-10-07): la unidad del objetivo es obligatoria. Hoy el selector la deja vacía al crear y `CreateObjectiveDto.orgUnitId` es opcional. Requerirla en create (UI + DTO); la columna sigue nullable hasta la fase migrate por los objetivos existentes (plan.md), y el NOT NULL va con el contract.
-- Origen: pregunta abierta de C06.
-- Actualización (C24): resuelto de punta a punta. El DTO y el NOT NULL salieron en C23; en C24 el selector de unidad del formulario de objetivo es obligatorio (sin opción vacía, validación antes de enviar). Pendiente de mover a Completados cuando se mergee la Fase 10.
-
 ### [F] Validar proyectos y tareas al editar las fechas de un período (ADR-0009 D7, RN-P3)
 - Por qué: D7 pide que editar un período con un rango que deja afuera proyectos, tareas o cargas responda 422 con la lista (puertos `PERIOD_RANGE_CHECKER_OKR` / `_METRICS`). C08 crea los proyectos y tareas que hay que chequear, pero el puerto y el chequeo en `PeriodService` no están en ninguna corrida del plan.
 - Posible solución: puerto en `common/contracts` que implementa `okr` (proyectos y tareas fuera del rango nuevo) e inyecta `core`; el de `metrics` va con F4.
@@ -165,6 +160,7 @@
 
 ## ✅ Recientemente completados (últimos 30 días)
 
+- [F] Unidad obligatoria en el Objetivo (DTO, selector sin opción vacía y `org_unit_id` NOT NULL; C23–C24) — mergeado el 9 octubre 2026
 - [B] El throttler `ai` limitaba todas las rutas de la API a 10 req/min (C21) — mergeado el 9 octubre 2026
 - [F] Semáforos y "carga pendiente" en el listado de objetivos, vía `GET okr/planning-tree` (C21) — mergeado el 9 octubre 2026
 - [B] Guards y tenant scoping en `PeriodController` y `OrganizationController` (C20 crítico) y vincular una métrica existente exige poder escribirla (C20 alto) — mergeado el 9 octubre 2026
