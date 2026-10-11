@@ -295,7 +295,7 @@ Objetivo: que un usuario pueda consultar y cargar el plan desde Claude o ChatGPT
 
 Pedro (2026-10-11): la plataforma tiene que poder mostrarse al sector privado (ADR-0006). Se ejecuta **antes** de C26–C28 de la Fase 11. La rama sale de `feature/plan-f11-conector-mcp`, así que su PR incluye también el ADR-0010 (C25, solo documentación).
 
-Decisión de Pedro: opción C, terminología por organización. Dos diccionarios fijos (sector público y sector privado) elegidos por un campo de la organización; sin editor de etiquetas por ahora.
+Decisión de Pedro: opción C, terminología por organización. Tres diccionarios fijos (sector público, sector privado y organizaciones sin fines de lucro) elegidos por un campo de la organización; sin editor de etiquetas por ahora (ADR-0011, Accepted).
 
 ### C29 — ADR-0011 terminología por sector (architect)
 - Campo de la organización, valor por defecto, quién lo cambia y dónde, cómo llega a la web, cómo se resuelve el diccionario (`lib/labels.ts`) en server y client components, qué pasa con el copy de los prompts del copiloto, los textos del catálogo y las descripciones de las herramientas MCP (ADR-0010).
@@ -304,11 +304,11 @@ Decisión de Pedro: opción C, terminología por organización. Dos diccionarios
 
 ### C30 — Terminología por sector (backend-dev + frontend-dev)
 - Migración del campo, exposición en la API y selector en Configuración.
-- `labels.ts` con los dos diccionarios y su resolución por org activa; ningún texto de gobierno hardcodeado fuera del diccionario.
+- `labels.ts` con los tres diccionarios y su resolución por org activa; ningún texto de gobierno hardcodeado fuera del diccionario.
 - Tests: la org privada no muestra "gobierno" en las pantallas principales.
 
 ### C31 — Seed "Lumbre Electrodomésticos S.A." (backend-dev)
-- Segunda org del demo, sector privado, planta en Rosario: plan estratégico 2026–2028, estructura (Dirección General → direcciones → áreas), 5 pilares, 7 objetivos con indicadores (OEE, reclamos en garantía a la baja, participación online, NPS, modelos inverter con `from_projects` y aportes, kWh por unidad, accidentes con baja) y proyectos con tareas. Sin tocar la org de San Carrillo.
+- Segunda org del demo, sector privado, planta en Rosario: plan estratégico 2026–2028, estructura (Dirección General → direcciones → áreas), 5 ejes, 7 objetivos con indicadores (OEE, reclamos en garantía a la baja, participación online, NPS, modelos inverter con `from_projects` y aportes, kWh por unidad, accidentes con baja) y proyectos con tareas. Sin tocar la org de San Carrillo.
 - 🔍 Pedro: recorrer las dos orgs con el selector. Merge de la Fase 12.
 
 ---
