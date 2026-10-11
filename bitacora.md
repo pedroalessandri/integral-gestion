@@ -15,6 +15,13 @@ Formato:
 
 ---
 
+## 2026-10-11 · C25 · architect · feature/plan-f11-conector-mcp
+- Hecho: `docs/adr/0010-conector-mcp.md` (Proposed). Servidor MCP como módulo `mcp` de la API (`POST /mcp`, SDK oficial, Streamable HTTP sin sesiones), OAuth con Auth0 y API propia del conector (scopes `plan:read`/`plan:write`, DCR, RFC 9728), token que termina en el mismo `AuthContext` (permiso = scope ∧ RBAC ∧ alcance), `organizacionId` por herramienta, 8 herramientas de lectura (C26) y 4 de escritura sin borrados (C27), audit con `channel`/`client_id`, limitador propio por usuario, módulo habilitable `mcp` apagado por defecto y saneo de textos contra inyección de prompts. Fase 11 sumada a `plan.md`.
+- Commit: ver `git log` de la rama.
+- Verificación: solo documentación; se verificó a mano en el código el hallazgo del throttler (`getTracker` lee `req.user`, que nadie llena).
+- Pendiente / desvíos: tres hallazgos laterales a `TODO.md` (throttler por IP, `X-Request-Id` sin validar, `ModuleEnabledGuard` faltante). "Unidad obligatoria en el Objetivo" movido a completados.
+- Preguntas abiertas: las 9 del ADR (dominio de la API, capacidades del tenant de Auth0, superadmin, escrituras v1, datos personales, aviso al organismo, límites, cuentas de prueba, retención de `mcp.tool_call`).
+
 ## 2026-10-11 · Deploy del contract (F10) en producción · Pedro + Claude · chore/cierre-fase-10
 - Hecho: el deploy de la API en Railway del merge del PR #26 falló (2026-10-09). La migración `20261009000001_contract_drop_key_result` abortó en su chequeo inicial: había 13 objetivos sin unidad y 30 tareas sin proyecto (datos del modelo OKR viejo que nunca pasaron por la migración de F5), en 6 orgs. No se aplicó nada; Prisma la marcó fallida (P3009 en los reintentos).
   - Backup previo: `pg_dump` completo de producción en `~/backups/gestion-integral-prod-pre-contract-20261009T191252Z.dump` (máquina de Pedro).

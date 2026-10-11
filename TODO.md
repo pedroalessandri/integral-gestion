@@ -8,6 +8,16 @@
 
 ## 🟡 Prioridad media — próximas semanas
 
+### [B] El throttler global limita por IP y no por usuario
+- Por qué: `CustomThrottlerGuard.getTracker` (`apps/api/src/common/guards/throttler.guard.ts`) usa `req.user?.auth0Sub`, que nadie llena (`AuthGuard` escribe `request.authContext`), y además corre antes que `AuthGuard`. En los hechos el límite de 100/min es por IP; sin `trust proxy`, detrás del proxy de Railway podría ser compartido por todos los usuarios. Bloquea el conector MCP (ADR-0010 D7), donde el tráfico llega desde pocas IPs del proveedor.
+- Posible solución: tracker que lea el `sub` del token ya verificado (o mover el throttle después del `AuthGuard`) y `app.set('trust proxy', …)` según Railway; verificar en el demo con dos usuarios.
+- Origen: C25 (2026-10-11), hallazgo del architect.
+
+### [B] `X-Request-Id` sin validar rompe la mutación si no es UUID
+- Por qué: `RequestContextInterceptor` acepta cualquier string como request id, pero `audit.event.request_id` es `@db.Uuid`: un valor no UUID hace fallar el INSERT de audit y con él la mutación (500).
+- Posible solución: aceptar el header solo si es UUID válido; si no, generar uno.
+- Origen: C25 (2026-10-11), hallazgo del architect.
+
 ### [F] Adaptar copiloto de IA al modelo de planificación
 - Por qué: ADR-0009 D9 dejó el copiloto (`POST ai/draft` y `ai/validate`) solo para objetivos (`entityType: 'objective'`, sin `objectiveContext`) cuando se eliminó el KR. Falta llevarlo a los indicadores (redacción de nombre y meta) y a los proyectos (redacción y validación de alcance), con el objetivo como contexto.
 - Posible solución: ampliar `entityType` en el DTO de `ai` (`indicator` | `project`), prompts por entidad y reincorporar el contexto del objetivo; en el front, sumar `AiSuggestPanel`/`SmartFeedbackPanel` a los formularios de indicador y proyecto.
@@ -93,6 +103,7 @@
 - Por qué: `ObjectiveIndicatorController` y `ProjectContributionController` (módulo `metrics`) no usan `@RequiresModule`. `POST okr/objectives/:id/indicators` con `metric` inline crea una `Metric` con solo `okr:write`, aunque la org tenga el módulo deshabilitado.
 - Posible solución: `ModuleEnabledGuard` en esos controllers o exigir `metrics:write` con `metric` inline.
 - Origen: C20 (2026-10-08).
+- Actualización (C25, 2026-10-11): también falta en los controllers de `okr`, `planning-tree` y `planning-gantt` (TODO sin resolver). El conector MCP (ADR-0010) replica esa ausencia a propósito; conviene resolverlo antes de C26.
 
 ### [B] Borrar un objetivo deja vivos proyectos, indicadores y aportes (C20 #4, media)
 - Por qué: `ObjectiveService.softDelete` solo cuenta KRs. Los proyectos huérfanos pueden seguir disparando cargas automáticas (sospecha) y la métrica deja de contar ese objetivo en `assertCanWriteMetric`. Amplía el ítem "Borrar un objetivo no da de baja sus ObjectiveIndicator".
