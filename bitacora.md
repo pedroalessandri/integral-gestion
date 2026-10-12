@@ -15,6 +15,88 @@ Formato:
 
 ---
 
+## 2026-10-12 · C26 · backend-dev · feature/plan-f11-conector-mcp
+- Hecho: MVP de solo lectura del conector MCP (ADR-0010) dentro de la API.
+  - **Módulo `mcp`** (`apps/api/src/modules/mcp/`): `POST /mcp` Streamable HTTP sin sesiones y con respuesta JSON (un `McpServer` + transporte por request), `GET`/`DELETE` 405, batches 400, validación de `Origin` (403, allow-list `MCP_ALLOWED_ORIGINS`, admite `http://localhost:*`), kill switch `MCP_ENABLED` (default `false`: `/mcp` y la metadata dan 404). SDK `@modelcontextprotocol/sdk` **1.30.1** exacta.
+  - **Auth (D3)**: `McpAuthGuard` verifica el JWT contra la audiencia `MCP_AUTH0_AUDIENCE` (por defecto la URL del recurso) con el `AccessTokenVerifier` extraído de `AuthGuard` (refactor sin cambio de comportamiento; `TenantGuard` delega igual en el nuevo `TenantMembershipResolver`), arma el `AuthContext` con `UserSyncService`, y responde 401 con `WWW-Authenticate: Bearer resource_metadata="<URL>", scope="plan:read"` (+ `error="invalid_token"` si había token). Metadata RFC 9728 en `/.well-known/oauth-protected-resource` y `/.well-known/oauth-protected-resource/mcp`. Audiencias separadas en los dos sentidos (token de la web en `/mcp` → 401; token del conector en `/api/v1/*` → 401).
+  - **Organización (D4)**: `organizacionId` por herramienta; sin él se usa la única org con `mcp` habilitado, con dos o más el error `OrganizationRequired` lista las opciones. Sin bypass de superadmin: el contexto que ven los services tiene `isSuperadmin = false` (si no, la extensión de tenant de Prisma saltearía el filtro por org).
+  - **Módulo `mcp` del catálogo (D7)**: migración `20261012000001_mcp_module_and_tool_call` (fila en `core.module`, apagado por defecto), aplicada con `prisma migrate deploy` en la DB local 5433 (no Railway); habilitado en el seed de las tres orgs demo (`demo`, `lumbre`, `semillero`; seed corrido en local).
+  - **8 herramientas (D5)**: `listar_organizaciones`, `listar_periodos`, `ver_arbol_planificacion`, `listar_objetivos`, `ver_objetivo`, `ver_indicador`, `listar_proyectos_atrasados`, `ver_proyecto`. Dos lecturas siempre separadas (`avanceResultado` / `avanceGestion`, sin ningún campo `avance` sin calificar), bp entero + texto decimal exacto, desvíos en puntos con signo, semáforo en español, `terminologia` de la org desde `SECTOR_TERMS` (ADR-0011) y `tipoEtiqueta` por unidad, descripciones neutras, saneo de textos (controles, `![`, recortes) más una pasada final sobre toda cadena de salida, paginación (`limite` 25/100) y tope `MCP_MAX_RESPONSE_CHARS` (recorta el listado y marca `truncado`). Sin emails ni ids de usuario (solo el nombre visible del responsable del objetivo).
+  - **Límites y log (D8, D10)**: `McpRateLimiter` por usuario (lectura 60/min; escritura 10/min y 300/día, ya previstas para C27) y `mcp.tool_call` (una fila por llamada, también las rechazadas; sin argumentos ni respuestas; purga diaria a 180 días).
+  - **`okr-domain`**: `parsePercentStringToBp`, `formatBpAsPercentString`, `computeProjectStatus`, `isProjectDelayed` con tests (incluida la propiedad `parse(format(bp)) === bp`).
+  - **Superficie de otros módulos**: `metrics` exporta `PlanningTreeService` y `PlanningGanttService`; `auth` exporta `AccessTokenVerifier` y `TenantMembershipResolver`.
+- Rutas finales: endpoint **`/mcp`** (fuera de `/api` y del versionado; en el demo `https://gestion-publicaapi-production.up.railway.app/mcp`) y metadata **`/.well-known/oauth-protected-resource`** y **`/.well-known/oauth-protected-resource/mcp`** (RFC 9728 §3.1; la URL anunciada en el 401 es la segunda). `MCP_RESOURCE_URL` debe terminar en `/mcp` (lo valida `env.validation.ts`).
+- Env vars nuevas (en `apps/api/.env.example`, sin valores reales): `MCP_ENABLED`, `MCP_RESOURCE_URL`, `MCP_AUTH0_AUDIENCE`, `MCP_ALLOWED_ORIGINS`, `MCP_RATE_READ_PER_MIN`, `MCP_RATE_WRITE_PER_MIN`, `MCP_RATE_WRITE_PER_DAY`, `MCP_MAX_RESPONSE_CHARS`.
+- Commit: 9c8e961 (okr-domain), 5e4ccd6 (refactor auth), 47c160e (SDK, env y rutas), b89b045 (migración y seed), 25db9a5 (módulo `mcp`), más el de esta documentación (ver `git log`).
+- Dependencia (justificación): `@modelcontextprotocol/sdk` 1.30.1 es el SDK oficial y lo pide el ADR-0010 D2; implementa el transporte Streamable HTTP, el protocolo y el cliente que usan los tests. Se eligió 1.30.1 (publicada el 2026-09-23, 19 días) porque 1.31.0 salió el 2026-09-28 (justo en el límite de dos semanas) y 1.32.x es más nueva; `latest` hoy es 1.32.1. Trae `express`, `hono`, `jose`, `ajv`, etc. como dependencias transitivas (no se usan: solo el transporte Node y el servidor). `zod` 3.25.76 se declara explícito porque pnpm no expone el transitivo. `tsconfig.json` mapea `@modelcontextprotocol/sdk/*` a `dist/cjs` (moduleResolution `Node` ignora `exports`; es el mismo build que resuelve Node en runtime).
+- Verificación: `pnpm typecheck` 7/7 OK · `pnpm lint` 0 errores (warnings previos en `openai.provider.ts` y `web/api-client.ts`) · `pnpm test` workspace OK (api 62 archivos, 580 tests; `okr-domain` 137) · `pnpm --filter okr-domain test` 137/137 · e2e con DB real: `test/mcp.e2e-spec.ts` **85/85** (cliente del SDK + JWKS local; matriz herramienta × tenant × scope × RBAC × módulo × `indicadores-gestion`, audiencias cruzadas, 401 con metadata, kill switch, límite, `mcp.tool_call`, inyección, paridad) y el resto igual que antes (los 19 de `firstPeriod` siguen igual: 120 pasan, 19 fallan) · `pnpm --filter api build` OK · API levantada local con `MCP_ENABLED=true`: metadata 200 (con y sin sufijo), `POST /mcp` sin token → 401 con el `WWW-Authenticate` correcto, `GET /mcp` sin token 401, `/api/v1/okr/planning-tree` sin token 401.
+- Spike de Auth0 (tenant `gestion-publica-dev`, solo lectura de metadata pública): `/.well-known/openid-configuration` y `/.well-known/oauth-authorization-server` responden 200 con `registration_endpoint` (`/oidc/register`, DCR), PKCE `S256`, `token_endpoint_auth_methods_supported` incluye `none`, `offline_access` y `refresh_token`. **No pude verificar desde acá** (requiere el dashboard o un login real): que Auth0 trate `resource` como `audience` en este plan, que el consentimiento de apps DCR (third-party) funcione con las conexiones promovidas a nivel dominio, que la Action reciba el `redirect_uri`, y la URL de callback de Claude (ver abajo).
+- Desvíos del ADR:
+  1. **Limitador propio en memoria** y no `ThrottlerStorage`: `ThrottlerModule.forRoot` no es global, su storage no se puede inyectar desde `mcp` sin duplicar el módulo, y es un contador por request. Mismo contrato (clave por usuario y tipo, `RateLimited` con `reintentarEnSegundos`, un solo nodo).
+  2. **`listar_organizaciones` no usa `MeService`** (no se exportó): para el superadmin devuelve todas las orgs activas, lo que contradice "sin bypass" (D4). Usa `TenantMembershipResolver.listMemberships` (membresías reales, orgs activas, unidad de alcance, sector).
+  3. **Módulos exigidos = unión de los endpoints REST que reutiliza**: C25b ya puso `ModuleEnabledGuard` (`okr`) en los controllers de planificación y `okr` + `indicadores-gestion` en los de indicadores, así que `ver_objetivo` y `ver_indicador` exigen `okr` + `indicadores-gestion` (no solo `mcp` como decía el ADR) y las demás de plan exigen `okr`. La serie de `ver_indicador` se omite con `serieNoDisponible` solo si falta `metrics:read` (el módulo ya viene exigido). El test de paridad lee los metadatos reales (`@Permissions`, `@RequiresModule`) de los controllers y los compara con el registro, así que no hay tabla de permisos duplicada a mano.
+  4. **Columnas `channel` / `client_id` de `audit.event` (D6): diferidas a C27.** Solo sirven para escrituras; las lecturas quedan en `mcp.tool_call`. Tampoco se tocó `RequestContext` ni el emisor de audit. Sin migración sobre `audit.event` en esta corrida.
+  5. **Nombre del responsable**: solo el del objetivo (`OwnerSummaryDto.displayName`). Los DTOs de proyecto y tarea traen únicamente `ownerUserId`, así que `ver_proyecto` no expone responsable (nunca el id). Anotado en TODO.
+  6. **`WWW-Authenticate` suma `scope="plan:read"`** (pista para el cliente). En C27 habrá que decidir si se anuncia también `plan:write`.
+  7. **Sin cache de módulos**: `ModuleEnablementService.isEnabled` en cada llamada (el corte al deshabilitar es inmediato; son 1–3 consultas livianas por llamada).
+  8. **CORS**: `/mcp` y la metadata salen del CORS del navegador (`app.setup.ts`); el `Origin` de `/mcp` lo valida el guard (403). La metadata lleva `Access-Control-Allow-Origin: *`.
+  9. Los resultados con error (`isError`) llevan solo el bloque de texto con `codigo` y `mensaje` (sin `structuredContent`); el `requestId` de cada llamada a herramienta lo genera siempre el servidor.
+  10. `AuthGuard` sigue importando `UserSyncService` desde un interno de `core` (preexistente); `McpAuthGuard` sí lo importa por el `index.ts`. Anotado en tech-debt.
+- Pendiente: C27 (escrituras + columnas de audit + anti-duplicado), C28 (revisión de seguridad), 🔍 Pedro: la configuración de Auth0/Railway de abajo y conectar el demo a Claude. Los e2e dejan en la DB local orgs `e2e-mcp-*` y usuarios `mcp-*` (comportamiento del harness).
+- Preguntas abiertas: (a) ¿se anuncia `plan:write` en el 401/consentimiento ya en C26 o recién en C27? (hoy no hay herramientas de escritura). (b) Si el dominio propio (`apigestion.pialab.dev`) llega más tarde, cambiar `MCP_RESOURCE_URL` y la audiencia obliga a reconectar a cada usuario.
+
+### Configuración para Pedro (C26)
+No toqué Railway ni Auth0. Todo lo de abajo lo hacés vos; lo marcado **[sin verificar]** no lo pude comprobar desde acá.
+
+**1. Auth0: API del conector** (Dashboard → Applications → APIs → Create API)
+- Name: `Gestión Integral — Conector MCP`.
+- Identifier: **`https://gestion-publicaapi-production.up.railway.app/mcp`** (exactamente igual a `MCP_RESOURCE_URL`, sin barra final). Signing algorithm: RS256.
+- Settings: *Access Token Lifetime* = 3600 s; **Allow Offline Access = ON** (refresh tokens); dejá **RBAC apagado** (los scopes salen de lo que el usuario consiente, el permiso real lo resuelve la DB local).
+- Permissions (scopes): `plan:read` ("Leer el plan") y `plan:write` ("Cargar avances en el plan", sin herramientas todavía pero ya anunciado en la metadata).
+- Tab *Application Access*: que las apps DCR puedan pedir esta API (para *User Access* dejá "Authorized" o "Allow" con los scopes `plan:read plan:write`).
+
+**2. Auth0: registro dinámico de clientes (recomendado) o app pre-registrada**
+- Recomendado: **DCR**. El discovery del tenant ya publica `registration_endpoint` (`/oidc/register`), así que Claude se registra solo. Verificá en Settings → Advanced → *OIDC Dynamic Application Registration* = ON.
+- Las apps creadas por DCR son *third-party*: piden pantalla de consentimiento y exigen que las conexiones de login (Username-Password / Google) estén **promovidas a nivel dominio** (Authentication → cada conexión → *Promote Connection to Domain Level*; el lugar exacto del switch puede variar con la versión del dashboard) **[sin verificar en este plan]**.
+- Plan B si DCR no anda: crear una *Regular Web Application* "Claude (conector MCP)" con *Token Endpoint Authentication Method* = Post (o None si Claude no manda secreto), *Allowed Callback URLs* = la URL de callback de Claude y grant types *Authorization Code* + *Refresh Token*; autorizarla en la API del conector (tab *Application Access*) y cargar su Client ID/Secret en la configuración avanzada del conector de Claude.
+- **URL de callback de Claude: no la pude verificar.** Lo que recuerdo de la documentación de Anthropic es `https://claude.ai/api/mcp/auth_callback` (y una variante `https://claude.com/api/mcp/auth_callback`), pero **confirmalo en la documentación vigente de conectores personalizados de Claude antes de cargarla**. Solo la necesitás para el Plan B o si agregás una allow-list de `redirect_uri` en la Action.
+
+**3. Auth0: el parámetro `resource` ([sin verificar])**
+- Los clientes MCP piden el token con `resource=<URL del recurso>` (RFC 8707) y Auth0 históricamente usa `audience`. Probá primero conectar tal cual: si el token que vuelve trae `aud` = la URL del conector, está resuelto. Si Auth0 devuelve un token opaco o con la audiencia de la web, buscá en Settings → Advanced la opción de compatibilidad del *resource parameter* (perfil "compatibility") y activala.
+- Plan B: Settings → General → *API Authorization Settings* → **Default Audience** = el identifier del conector. **Antes** confirmá que la web siempre manda `audience` explícito (`NEXT_PUBLIC_AUTH0_AUDIENCE`); si no, sus tokens cambiarían de audiencia y la API de la web los rechazaría.
+
+**4. Auth0: Action post-login** (el `AuthGuard` y el `McpAuthGuard` exigen `sub` y `email` en el access token)
+- Mirá cómo la web consigue hoy `email` en su access token (Action o regla existente) y asegurate de que también corra para la API del conector. Ejemplo mínimo:
+```js
+exports.onExecutePostLogin = async (event, api) => {
+  const MCP = 'https://gestion-publicaapi-production.up.railway.app/mcp';
+  if (event.resource_server?.identifier !== MCP) return;
+  if (!event.user.email_verified) {
+    api.access.deny('Verificá tu email antes de usar el conector.');
+    return;
+  }
+  api.accessToken.setCustomClaim('email', event.user.email);
+};
+```
+  (`UserSyncService` reclama invitaciones pendientes por email, por eso se exige `email_verified`.) Una allow-list de `redirect_uri` en la Action depende de qué campo del evento lo exponga **[sin verificar]**.
+
+**5. Railway (servicio de la API)** — variables nuevas
+- `MCP_ENABLED=true`
+- `MCP_RESOURCE_URL=https://gestion-publicaapi-production.up.railway.app/mcp`
+- `MCP_AUTH0_AUDIENCE=https://gestion-publicaapi-production.up.railway.app/mcp` (opcional: si no está, usa `MCP_RESOURCE_URL`)
+- No definas `MCP_ALLOWED_ORIGINS` (vacío en producción). Los límites (`MCP_RATE_*`, `MCP_MAX_RESPONSE_CHARS`) tienen defaults razonables.
+- Ya existentes y necesarios: `AUTH0_ISSUER_BASE_URL=https://gestion-publica-dev.us.auth0.com/` y `AUTH0_AUDIENCE` (la de la web, sin tocar).
+- El arranque corre `prisma migrate deploy`: aplica sola la migración `20261012000001_mcp_module_and_tool_call` (módulo `mcp` en el catálogo + schema `mcp`). **Las orgs no nacen con `mcp` habilitado**: habilitalo por org en el backoffice (Módulos, solo superadmin) o re-corriendo el seed del demo.
+- Comprobación rápida tras el deploy: `curl -i https://gestion-publicaapi-production.up.railway.app/.well-known/oauth-protected-resource/mcp` (200 con `resource` y `authorization_servers`) y `curl -i -X POST https://gestion-publicaapi-production.up.railway.app/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}'` (401 con `WWW-Authenticate: Bearer resource_metadata="…"`).
+
+**6. Agregar el conector en Claude** (solo Claude por ahora; ChatGPT queda para después)
+- Claude (web o desktop) → Settings → Connectors → *Add custom connector* → URL **`https://gestion-publicaapi-production.up.railway.app/mcp`** → *Add*. Claude detecta el 401, lee la metadata, se registra por DCR, te manda a Auth0 para iniciar sesión y consentir, y vuelve. En planes Team/Enterprise lo agrega primero un owner de la organización de Claude y después cada persona lo conecta con su cuenta.
+- Qué planes de Claude permiten conectores personalizados remotos **[sin verificar]**: lo recordado es que están en los planes de pago (Pro, Max, Team, Enterprise); confirmalo en la cuenta que uses.
+- Probá: "¿A qué organizaciones tengo acceso?" → `listar_organizaciones`; "Mostrame el árbol del plan de <org>"; "¿Qué proyectos están atrasados?"; "Detalle del objetivo X con sus indicadores". El usuario de Auth0 tiene que existir como miembro de la org (la membresía y el rol salen de la DB local) y la org necesita el módulo `mcp` habilitado (en el demo local ya lo está).
+- Si algo falla, el log operativo ayuda: `select tool_name, outcome, error_code, created_at from mcp.tool_call order by created_at desc limit 20;`.
+
+---
+
 ## 2026-10-12 · C25b · backend-dev · feature/plan-f11-conector-mcp
 - Hecho: (a) `CustomThrottlerGuard` ahora se registra después de `AuthGuard` y su tracker usa `request.authContext` (`user:<userId>`), con fallback a `ip:<req.ip>` en rutas públicas; `main.ts` fija `trust proxy = 1` (un salto: proxy de Railway) para que la IP del fallback sea la del cliente; se mantiene el throttler `ai`. (b) `RequestContextInterceptor` acepta `X-Request-Id` solo si es UUID válido; si no, genera uno. (c) `ModuleEnabledGuard` + `@RequiresModule('okr')` en `ObjectiveController`, `TaskController`, `ProjectController`, `PlanningTreeController` y `PlanningGanttController`; `ObjectiveIndicatorController` y `ProjectContributionController` exigen `okr` + `indicadores-gestion` (crean métricas inline). Sin módulo: 403 `ModuleDisabled`.
 - Commit: 8a3228b (throttler), b854321 (request id), 850471c (module guard).

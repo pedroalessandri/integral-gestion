@@ -31,6 +31,15 @@
 - Origen: C25 (2026-10-11), hallazgo del architect.
 - Actualización (C25b, 2026-10-12): resuelto en la rama, pendiente de merge.
 
+### [F] Responsable (nombre visible) de proyectos y tareas en `ProjectDetailDto` / `TaskSummaryDto`
+- Por qué: el conector MCP (ADR-0010 D9, Pregunta abierta 5) debería mostrar solo el nombre visible del responsable. Los DTOs de proyecto y tarea traen únicamente `ownerUserId`, así que `ver_proyecto` no puede informar quién es sin exponer el id (que está prohibido) ni consultar usuarios desde `mcp`.
+- Posible solución: sumar `owner: { displayName } | null` a los DTOs de `okr` (como ya hace `ObjectiveSummaryDto.owner`, sin email) y proyectarlo en `ver_proyecto`.
+- Origen: C26 (2026-10-12).
+
+### [F] Anunciar `plan:write` en el flujo OAuth recién cuando haya herramientas de escritura
+- Por qué: hoy `WWW-Authenticate` pide `scope="plan:read"` y la metadata lista `plan:write`. En C27 hay que decidir si el consentimiento inicial pide ambos o si se reconecta para escribir (el mensaje `ScopeMissing` ya lo explica).
+- Origen: C26 (2026-10-12).
+
 ### [F] Adaptar copiloto de IA al modelo de planificación
 - Por qué: ADR-0009 D9 dejó el copiloto (`POST ai/draft` y `ai/validate`) solo para objetivos (`entityType: 'objective'`, sin `objectiveContext`) cuando se eliminó el KR. Falta llevarlo a los indicadores (redacción de nombre y meta) y a los proyectos (redacción y validación de alcance), con el objetivo como contexto.
 - Posible solución: ampliar `entityType` en el DTO de `ai` (`indicator` | `project`), prompts por entidad y reincorporar el contexto del objetivo; en el front, sumar `AiSuggestPanel`/`SmartFeedbackPanel` a los formularios de indicador y proyecto.

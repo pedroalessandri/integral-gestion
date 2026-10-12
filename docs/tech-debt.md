@@ -160,3 +160,20 @@
 - **Qué**: con `Objective.orgUnitId` y `Project.orgUnitId` NOT NULL, ningún caller de `OrgUnitScope.assertCanWriteInUnit` / `assertCanWriteInAllUnits` pasa `null`; la rama "la entidad no tiene unidad → exige alcance central" (y su test en `org-unit-scope.service.spec.ts`) es código muerto. `MetricService.assertCanWriteMetric` conserva su propia regla para métricas sin objetivos (esa sí vale).
 - **Posible solución**: tipar el parámetro como `string` y borrar la rama y su test.
 - **Prioridad**: baja.
+
+### `AuthGuard` importa `UserSyncService` desde un interno de `core` (C26)
+- **Qué**: `apps/api/src/modules/auth/guards/auth.guard.ts` hace `import … from '../../core/services/user-sync.service.js'`, saltando el `index.ts` de `core`. Es anterior a C26 (el refactor de C26 no lo tocó); `McpAuthGuard` sí importa por la superficie pública.
+- **Por qué importa**: rompe la regla de boundaries (CLAUDE.md regla 1) y acopla `auth` con `core` (que ya depende de `auth`).
+- **Posible solución**: inyectar `UserSyncService` por el token exportado de `core/index.ts` (el APP_GUARD vive en `AppModule`, que ya importa `CoreModule`) o mover el upsert a un puerto en `common/contracts`.
+- **Prioridad**: baja.
+
+### Limitador del conector MCP en memoria y sin límite antes de autenticar (C26)
+- **Qué**: `McpRateLimiter` guarda las marcas por usuario en un `Map` del proceso (ventana deslizante); el endpoint `/mcp` saltea el throttler global y no tiene límite propio antes de autenticar (solo cuesta una verificación de JWT con JWKS cacheado).
+- **Por qué importa**: con más de una réplica en Railway el cupo se multiplica por réplica; un flood de requests sin token no tiene freno.
+- **Posible solución**: store compartido (Redis) cuando se escale, y un límite por IP solo para respuestas 401 si aparece abuso (ADR-0010, Consecuencias).
+- **Prioridad**: baja.
+
+### Los e2e del conector MCP dejan datos en la DB local (C26)
+- **Qué**: `apps/api/test/mcp.e2e-spec.ts` crea orgs `e2e-mcp-*` y usuarios `mcp-*` y no los borra (igual que el resto del harness; no se pueden borrar por las FKs con `RESTRICT` y el audit append-only).
+- **Posible solución**: DB de test descartable (testcontainers) o limpieza por prefijo con el superusuario de la DB.
+- **Prioridad**: baja.
