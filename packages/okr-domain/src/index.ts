@@ -19,8 +19,15 @@ export {
 export { plannedProgress, plannedTaskProgressBp, plannedExecutionProgress } from './planned';
 export type { ScheduledProjectInput } from './planned';
 export { validateWeightSumInvariant, projectSumAfterDelete, weightMode } from './invariants';
-export { computeTaskStatus, computeProgressStatus } from './status';
-export type { TaskStatus, ProgressStatus } from './status';
+export { computeTaskStatus, computeProgressStatus, computeProjectStatus, isProjectDelayed } from './status';
+export type {
+  TaskStatus,
+  ProgressStatus,
+  ProjectStatus,
+  ProjectDelayInput,
+  ProjectDelayReason,
+} from './status';
+export { parsePercentStringToBp, formatBpAsPercentString } from './percent-text';
 export {
   aggregateObjectiveReadings,
   aggregateObjectiveReadingsBy,

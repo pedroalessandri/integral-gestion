@@ -23,11 +23,22 @@
 - Por qué: `CustomThrottlerGuard.getTracker` (`apps/api/src/common/guards/throttler.guard.ts`) usa `req.user?.auth0Sub`, que nadie llena (`AuthGuard` escribe `request.authContext`), y además corre antes que `AuthGuard`. En los hechos el límite de 100/min es por IP; sin `trust proxy`, detrás del proxy de Railway podría ser compartido por todos los usuarios. Bloquea el conector MCP (ADR-0010 D7), donde el tráfico llega desde pocas IPs del proveedor.
 - Posible solución: tracker que lea el `sub` del token ya verificado (o mover el throttle después del `AuthGuard`) y `app.set('trust proxy', …)` según Railway; verificar en el demo con dos usuarios.
 - Origen: C25 (2026-10-11), hallazgo del architect.
+- Actualización (C25b, 2026-10-12): resuelto en la rama, pendiente de merge.
 
 ### [B] `X-Request-Id` sin validar rompe la mutación si no es UUID
 - Por qué: `RequestContextInterceptor` acepta cualquier string como request id, pero `audit.event.request_id` es `@db.Uuid`: un valor no UUID hace fallar el INSERT de audit y con él la mutación (500).
 - Posible solución: aceptar el header solo si es UUID válido; si no, generar uno.
 - Origen: C25 (2026-10-11), hallazgo del architect.
+- Actualización (C25b, 2026-10-12): resuelto en la rama, pendiente de merge.
+
+### [F] Responsable (nombre visible) de proyectos y tareas en `ProjectDetailDto` / `TaskSummaryDto`
+- Por qué: el conector MCP (ADR-0010 D9, Pregunta abierta 5) debería mostrar solo el nombre visible del responsable. Los DTOs de proyecto y tarea traen únicamente `ownerUserId`, así que `ver_proyecto` no puede informar quién es sin exponer el id (que está prohibido) ni consultar usuarios desde `mcp`.
+- Posible solución: sumar `owner: { displayName } | null` a los DTOs de `okr` (como ya hace `ObjectiveSummaryDto.owner`, sin email) y proyectarlo en `ver_proyecto`.
+- Origen: C26 (2026-10-12).
+
+### [F] Anunciar `plan:write` en el flujo OAuth recién cuando haya herramientas de escritura
+- Por qué: hoy `WWW-Authenticate` pide `scope="plan:read"` y la metadata lista `plan:write`. En C27 hay que decidir si el consentimiento inicial pide ambos o si se reconecta para escribir (el mensaje `ScopeMissing` ya lo explica).
+- Origen: C26 (2026-10-12).
 
 ### [F] Adaptar copiloto de IA al modelo de planificación
 - Por qué: ADR-0009 D9 dejó el copiloto (`POST ai/draft` y `ai/validate`) solo para objetivos (`entityType: 'objective'`, sin `objectiveContext`) cuando se eliminó el KR. Falta llevarlo a los indicadores (redacción de nombre y meta) y a los proyectos (redacción y validación de alcance), con el objetivo como contexto.
@@ -115,6 +126,7 @@
 - Posible solución: `ModuleEnabledGuard` en esos controllers o exigir `metrics:write` con `metric` inline.
 - Origen: C20 (2026-10-08).
 - Actualización (C25, 2026-10-11): también falta en los controllers de `okr`, `planning-tree` y `planning-gantt` (TODO sin resolver). El conector MCP (ADR-0010) replica esa ausencia a propósito; conviene resolverlo antes de C26.
+- Actualización (C25b, 2026-10-12): resuelto en la rama, pendiente de merge.
 
 ### [B] Borrar un objetivo deja vivos proyectos, indicadores y aportes (C20 #4, media)
 - Por qué: `ObjectiveService.softDelete` solo cuenta KRs. Los proyectos huérfanos pueden seguir disparando cargas automáticas (sospecha) y la métrica deja de contar ese objetivo en `assertCanWriteMetric`. Amplía el ítem "Borrar un objetivo no da de baja sus ObjectiveIndicator".
@@ -151,6 +163,16 @@
 ### [R] Renombrar el ítem de menú "Indicadores de gestión" (`/metrics`)
 - Por qué: en el modelo nuevo "indicador" es el `ObjectiveIndicator` y "gestión" es el avance de proyectos y tareas; la página `/metrics` es el catálogo de métricas sueltas y el nombre confunde (pasó en la preparación de la demo). Candidatos: "Métricas" o "Catálogo de métricas", vía `lib/labels.ts`.
 - Origen: cierre de la Fase 5 (2026-10-08), aprobado por Pedro.
+
+### [B] Sanear links y HTML de textos de usuario antes de las escrituras del conector (C26b, hallazgo #5)
+- Por qué: los textos libres (nombres, descripciones) llegan al modelo con saneo de controles e imágenes (`![`), pero no de links Markdown ni HTML. Con C27 (escrituras) un texto cargado por un usuario podría inducir exfiltración vía links.
+- Posible solución: extender `text.presenter.ts` (neutralizar `[x](url)` y etiquetas HTML) antes de C27.
+- Origen: revisión de seguridad de C26.
+
+### [B] La web enlaza usuarios por email sin exigir `email_verified` (C26b)
+- Por qué: `UserSyncService.upsertFromJwt` enlaza por email también para la web (`AuthGuard`); el conector ya rechaza `email_verified === false`, la web no. Cambiarlo afecta a la web, así que queda fuera de C26b.
+- Posible solución: pedir el claim `email_verified` en el access token de la web y rechazar `false` en `AuthGuard`.
+- Origen: revisión de seguridad de C26.
 
 ## 🔵 Prioridad baja / cuando haya tiempo
 

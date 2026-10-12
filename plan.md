@@ -277,17 +277,22 @@ Objetivo: que un usuario pueda consultar y cargar el plan desde Claude o ChatGPT
 - Dónde vive el servidor (módulo de la API o app aparte), transporte, autenticación OAuth con Auth0 y su relación con `AuthGuard`, elección de la organización activa, catálogo de herramientas (lectura y escritura), confirmaciones, límites de uso, auditoría y qué datos salen hacia el proveedor del modelo.
 - Artefacto: `docs/adr/0010-conector-mcp.md` con preguntas abiertas para Pedro.
 
+### C25b — Prerrequisitos del conector (backend-dev)
+- Pedro (2026-10-12): primero solo Claude; ChatGPT queda para después. Se toman las recomendaciones del ADR-0010 en sus preguntas abiertas, salvo el dominio: en el demo el recurso usa la URL de Railway (el dominio propio va con la infra de producción).
+- Throttler por usuario y no por IP (`CustomThrottlerGuard`), `X-Request-Id` validado como UUID y `ModuleEnabledGuard` en los controllers que lo tienen pendiente (ítems de TODO.md).
+
 ### C26 — MVP de consultas (backend-dev)
 - Servidor MCP con OAuth y las herramientas de lectura del ADR (objetivos con sus dos lecturas, árbol de planificación, proyectos atrasados, serie de indicador).
 - Tests de integración: cada herramienta respeta tenant y alcance por unidad.
-- 🔍 Pedro: conectar el demo a Claude y a ChatGPT y consultar el plan de San Carrillo.
+- Spike al inicio: qué acepta el tenant de Auth0 (parámetro `resource`, DCR o cliente pre-registrado para Claude) y la URL de callback de Claude.
+- 🔍 Pedro: conectar el demo a Claude y consultar el plan de las tres orgs.
 
 ### C27 — Herramientas de carga (backend-dev)
 - Escrituras del ADR (carga de indicador, avance de tarea, alta de proyecto y tarea), marcadas como destructivas para que el cliente pida confirmación, con auditoría y sin borrados.
 
 ### C28 — Revisión de seguridad del conector (security-reviewer)
 - Revisar el diff de la Fase 11: tokens, audiencia, tenant scoping, alcance, inyección de prompts vía datos y límites de uso. Hallazgos críticos → C28b.
-- 🔍 Pedro: carga real desde los dos clientes. Merge de la Fase 11.
+- 🔍 Pedro: carga real desde Claude. Merge de la Fase 11. ChatGPT queda para una fase posterior.
 
 ---
 

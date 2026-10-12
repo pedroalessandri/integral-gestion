@@ -3,6 +3,7 @@ import { ForbiddenException, ValidationPipe } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
+import { ModuleEnabledGuard } from '../../../common/guards/module-enabled.guard.js';
 import { CreateObjectiveIndicatorDto } from '../dto/create-objective-indicator.dto.js';
 import { UpdateObjectiveIndicatorDto } from '../dto/update-objective-indicator.dto.js';
 import { SetIndicatorTargetPointsDto } from '../dto/indicator-target-point.dto.js';
@@ -63,8 +64,8 @@ describe('ObjectiveIndicatorController', () => {
     }
   });
 
-  it('el controller completo está detrás de TenantGuard + PermissionsGuard', () => {
-    expect(Reflect.getMetadata(GUARDS_METADATA, ObjectiveIndicatorController)).toEqual([TenantGuard, PermissionsGuard]);
+  it('el controller completo está detrás de TenantGuard + ModuleEnabledGuard + PermissionsGuard', () => {
+    expect(Reflect.getMetadata(GUARDS_METADATA, ObjectiveIndicatorController)).toEqual([TenantGuard, ModuleEnabledGuard, PermissionsGuard]);
   });
 
   it('los endpoints de estado y de puntos usan el organizationId del contexto', async () => {

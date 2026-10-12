@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsEmail,
   IsInt,
+  IsBoolean,
   Min,
   Max,
   validateSync,
@@ -77,6 +78,93 @@ class EnvVars {
   @IsOptional()
   @IsString()
   AI_DEFAULT_PROVIDER: string = 'anthropic';
+
+  // ── Conector MCP (ADR-0010) ──────────────────────────────────────────────────
+
+  /** Kill switch global del conector. Apagado por defecto: con `false`, `/mcp` y la metadata responden 404. */
+  @IsOptional()
+  @IsBoolean()
+  // Se lee el valor ORIGINAL (`obj`): con `enableImplicitConversion`, `value` ya llega como Boolean("false") = true.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => parseBooleanFlag(obj['MCP_ENABLED']))
+  MCP_ENABLED: boolean = false;
+
+  /**
+   * URL EXACTA del endpoint MCP (https://<host>/mcp). Es el identificador del recurso (RFC 9728) y la audiencia
+   * por defecto del token. Obligatoria si `MCP_ENABLED=true`.
+   */
+  @IsOptional()
+  @IsString()
+  MCP_RESOURCE_URL?: string;
+
+  /** Audiencia (identifier de la API del conector en Auth0). Por defecto, `MCP_RESOURCE_URL`. */
+  @IsOptional()
+  @IsString()
+  MCP_AUTH0_AUDIENCE?: string;
+
+  /** Orígenes permitidos para requests con `Origin` (coma-separados; admite `http://localhost:*`). Vacío en prod. */
+  @IsOptional()
+  @IsString()
+  MCP_ALLOWED_ORIGINS?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100_000)
+  @Transform(({ value }: { value: unknown }) => parseIntOrDefault(value, 60))
+  MCP_RATE_READ_PER_MIN: number = 60;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100_000)
+  @Transform(({ value }: { value: unknown }) => parseIntOrDefault(value, 10))
+  MCP_RATE_WRITE_PER_MIN: number = 10;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  @Transform(({ value }: { value: unknown }) => parseIntOrDefault(value, 300))
+  MCP_RATE_WRITE_PER_DAY: number = 300;
+
+  /** Tope HTTP por IP del cliente, ANTES de autenticar (cualquier request a `/mcp`). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  @Transform(({ value }: { value: unknown }) => parseIntOrDefault(value, 120))
+  MCP_RATE_IP_PER_MIN: number = 120;
+
+  /** Tope HTTP por usuario autenticado (todo request, incluidos `initialize` y `tools/list`). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  @Transform(({ value }: { value: unknown }) => parseIntOrDefault(value, 300))
+  MCP_RATE_HTTP_PER_MIN: number = 300;
+
+  /** Tope duro de caracteres de una respuesta de herramienta (ADR-0010 D9). */
+  @IsOptional()
+  @IsInt()
+  @Min(1_000)
+  @Max(1_000_000)
+  @Transform(({ value }: { value: unknown }) => parseIntOrDefault(value, 60_000))
+  MCP_MAX_RESPONSE_CHARS: number = 60_000;
+}
+
+function parseBooleanFlag(value: unknown): unknown {
+  if (value === undefined || value === null || value === '') return false;
+  if (typeof value === 'boolean') return value;
+  const v = String(value).trim().toLowerCase();
+  if (v === 'true' || v === '1') return true;
+  if (v === 'false' || v === '0') return false;
+  return value; // inválido: lo rechaza @IsBoolean
+}
+
+function parseIntOrDefault(value: unknown, fallback: number): unknown {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isInteger(n) ? n : value; // inválido: lo rechaza @IsInt
 }
 
 /**
@@ -93,12 +181,36 @@ export function validateEnv(config: Record<string, unknown>): EnvVars {
 
   const errors = validateSync(validated, { skipMissingProperties: false });
 
-  if (errors.length > 0) {
-    const messages = errors
-      .map((e) => Object.values(e.constraints ?? {}).join(', '))
-      .join('; ');
-    throw new Error(`Environment validation failed: ${messages}`);
+  const messages = errors.map((e) => Object.values(e.constraints ?? {}).join(', '));
+
+  if (validated.MCP_ENABLED) {
+    const resource = validated.MCP_RESOURCE_URL;
+    if (!resource) {
+      messages.push('MCP_RESOURCE_URL is required when MCP_ENABLED=true');
+    } else if (!isValidResourceUrl(resource, validated.NODE_ENV)) {
+      messages.push('MCP_RESOURCE_URL must be an absolute https URL ending in /mcp (http only allowed for localhost), without query or fragment');
+    }
+    // Audiencias separadas (ADR-0010 D3): si coinciden, un token de la web valdría en /mcp y viceversa.
+    const mcpAudience = validated.MCP_AUTH0_AUDIENCE || resource;
+    if (mcpAudience && mcpAudience === validated.AUTH0_AUDIENCE) {
+      messages.push('MCP audience (MCP_AUTH0_AUDIENCE or MCP_RESOURCE_URL) must differ from AUTH0_AUDIENCE');
+    }
+  }
+
+  if (messages.length > 0) {
+    throw new Error(`Environment validation failed: ${messages.join('; ')}`);
   }
 
   return validated;
+}
+
+function isValidResourceUrl(value: string, nodeEnv: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.search !== '' || url.hash !== '' || url.pathname !== '/mcp') return false;
+    if (url.protocol === 'https:') return true;
+    return url.protocol === 'http:' && nodeEnv !== 'production' && ['localhost', '127.0.0.1'].includes(url.hostname);
+  } catch {
+    return false;
+  }
 }

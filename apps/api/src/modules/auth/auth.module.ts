@@ -1,4 +1,6 @@
 import { Global, Module } from '@nestjs/common';
+import { AccessTokenVerifier } from './services/access-token-verifier.service.js';
+import { TenantMembershipResolver } from './services/tenant-membership-resolver.service.js';
 import { PrismaService } from './prisma/prisma.service.js';
 import { TenantGuard } from './guards/tenant.guard.js';
 import { PermissionsGuard } from './guards/permissions.guard.js';
@@ -21,7 +23,21 @@ import { RolesController, PermissionsController } from './auth.controller.js';
 @Global()
 @Module({
   controllers: [RolesController, PermissionsController],
-  providers: [PrismaService, TenantGuard, PermissionsGuard, SuperadminOnlyGuard],
-  exports: [PrismaService, TenantGuard, PermissionsGuard, SuperadminOnlyGuard],
+  providers: [
+    PrismaService,
+    AccessTokenVerifier,
+    TenantMembershipResolver,
+    TenantGuard,
+    PermissionsGuard,
+    SuperadminOnlyGuard,
+  ],
+  exports: [
+    PrismaService,
+    AccessTokenVerifier,
+    TenantMembershipResolver,
+    TenantGuard,
+    PermissionsGuard,
+    SuperadminOnlyGuard,
+  ],
 })
 export class AuthModule {}

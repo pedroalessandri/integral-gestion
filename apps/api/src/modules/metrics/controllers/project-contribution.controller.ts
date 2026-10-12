@@ -15,6 +15,8 @@ import {
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
+import { ModuleEnabledGuard } from '../../../common/guards/module-enabled.guard.js';
+import { RequiresModule } from '../../../common/decorators/requires-module.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import { ProjectContributionService } from '../services/project-contribution.service.js';
@@ -35,8 +37,8 @@ function requireOrgId(user: AuthContext): string {
  * Lectura `okr:read`, escritura `okr:write` (el aporte es parte del objetivo, igual que el indicador).
  * Sin lógica de negocio acá: todo vive en `ProjectContributionService`.
  */
-// TODO: add ModuleEnabledGuard once it is implemented for okr (mismo criterio que ObjectiveIndicatorController)
-@UseGuards(TenantGuard, PermissionsGuard)
+@UseGuards(TenantGuard, ModuleEnabledGuard, PermissionsGuard)
+@RequiresModule('okr', 'indicadores-gestion')
 @Controller('okr')
 export class ProjectContributionController {
   constructor(private readonly contributionService: ProjectContributionService) {}

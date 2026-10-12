@@ -60,6 +60,9 @@ import { ProjectContributionController } from './controllers/project-contributio
     ObjectiveIndicatorService,
     IndicatorStatusService,
     ProjectContributionService,
+    // Lecturas de planificación consumidas por el conector MCP (ADR-0010 D1): solo superficie, sin cambio de lógica.
+    PlanningTreeService,
+    PlanningGanttService,
   ],
 })
 export class MetricsModule {}

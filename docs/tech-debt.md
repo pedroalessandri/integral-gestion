@@ -160,3 +160,32 @@
 - **Qué**: con `Objective.orgUnitId` y `Project.orgUnitId` NOT NULL, ningún caller de `OrgUnitScope.assertCanWriteInUnit` / `assertCanWriteInAllUnits` pasa `null`; la rama "la entidad no tiene unidad → exige alcance central" (y su test en `org-unit-scope.service.spec.ts`) es código muerto. `MetricService.assertCanWriteMetric` conserva su propia regla para métricas sin objetivos (esa sí vale).
 - **Posible solución**: tipar el parámetro como `string` y borrar la rama y su test.
 - **Prioridad**: baja.
+
+### `AuthGuard` importa `UserSyncService` desde un interno de `core` (C26)
+- **Qué**: `apps/api/src/modules/auth/guards/auth.guard.ts` hace `import … from '../../core/services/user-sync.service.js'`, saltando el `index.ts` de `core`. Es anterior a C26 (el refactor de C26 no lo tocó); `McpAuthGuard` sí importa por la superficie pública.
+- **Por qué importa**: rompe la regla de boundaries (CLAUDE.md regla 1) y acopla `auth` con `core` (que ya depende de `auth`).
+- **Posible solución**: inyectar `UserSyncService` por el token exportado de `core/index.ts` (el APP_GUARD vive en `AppModule`, que ya importa `CoreModule`) o mover el upsert a un puerto en `common/contracts`.
+- **Prioridad**: baja.
+
+### Limitador del conector MCP en memoria (C26, actualizado en C26b)
+- **Qué**: `McpRateLimiter` (topes por herramienta, por IP y por usuario) guarda las marcas en un `Map` del proceso. C26b sumó los topes HTTP por IP (antes de autenticar) y por usuario.
+- **Por qué importa**: con más de una réplica en Railway cada cupo se multiplica por réplica.
+- **Posible solución**: store compartido (Redis) cuando se escale a más de una réplica.
+- **Prioridad**: baja.
+
+### `trust proxy` fijo en 1 condiciona el límite por IP del conector (C26b)
+- **Qué**: `main.ts` fija `trust proxy` en 1 (un proxy, Railway); el tope por IP de `/mcp` usa `req.ip`.
+- **Por qué importa**: si cambia la topología (CDN delante, más saltos), `req.ip` sería la del proxy (todos comparten cupo) o spoofeable por `X-Forwarded-For`.
+- **Posible solución**: revisar el valor de `trust proxy` en cualquier cambio de hosting o proxy.
+- **Prioridad**: baja.
+
+### FKs `ON DELETE RESTRICT` de `mcp.tool_call` frente a pedidos de supresión (C26b)
+- **Qué**: `mcp.tool_call` referencia usuario y organización con `ON DELETE RESTRICT`; no hay borrado de usuarios que lo contemple (la purga a 180 días solo borra por fecha).
+- **Por qué importa**: un pedido de supresión de datos personales no podría borrar al usuario mientras tenga filas en el log.
+- **Posible solución**: decidir la política (anonimizar `userId`, `SET NULL` o purga previa por usuario) cuando exista el flujo de supresión.
+- **Prioridad**: baja.
+
+### Los e2e del conector MCP dejan datos en la DB local (C26)
+- **Qué**: `apps/api/test/mcp.e2e-spec.ts` crea orgs `e2e-mcp-*` y usuarios `mcp-*` y no los borra (igual que el resto del harness; no se pueden borrar por las FKs con `RESTRICT` y el audit append-only).
+- **Posible solución**: DB de test descartable (testcontainers) o limpieza por prefijo con el superusuario de la DB.
+- **Prioridad**: baja.

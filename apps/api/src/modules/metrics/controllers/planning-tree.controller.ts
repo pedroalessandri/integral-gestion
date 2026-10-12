@@ -3,6 +3,8 @@ import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import type { PlanningTreeDto } from '@gestion-publica/shared-types/okr';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
+import { ModuleEnabledGuard } from '../../../common/guards/module-enabled.guard.js';
+import { RequiresModule } from '../../../common/decorators/requires-module.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import { PlanningTreeService } from '../services/planning-tree.service.js';
@@ -14,8 +16,8 @@ const queryPipe = new ValidationPipe({ transform: true, whitelist: true, forbidN
  * Árbol de planificación y tableros (SPEC §5.2/§5.3). Default deny: TenantGuard + PermissionsGuard, `okr:read`.
  * Las lecturas están abiertas a toda la organización (RN-P20): sin filtro por alcance de unidad.
  */
-// TODO: add ModuleEnabledGuard once it is implemented for okr (mismo criterio que el resto de los controllers de okr)
-@UseGuards(TenantGuard, PermissionsGuard)
+@UseGuards(TenantGuard, ModuleEnabledGuard, PermissionsGuard)
+@RequiresModule('okr')
 @Controller('okr')
 export class PlanningTreeController {
   constructor(private readonly planningTreeService: PlanningTreeService) {}

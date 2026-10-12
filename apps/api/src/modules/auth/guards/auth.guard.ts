@@ -6,33 +6,25 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { JwksClient } from 'jwks-rsa';
-import * as jwt from 'jsonwebtoken';
+import type * as jwt from 'jsonwebtoken';
 import { UserSyncService } from '../../core/services/user-sync.service.js';
 import { tenantContextStorage } from '../context/tenant-context-storage.js';
 import { requestContextStorage } from '../../audit/context/request-context-storage.js';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
+import { AccessTokenVerifier } from '../services/access-token-verifier.service.js';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  private readonly jwksClient: JwksClient;
-  private readonly issuer: string;
   private readonly audience: string;
 
   constructor(
     private readonly reflector: Reflector,
-    private readonly config: ConfigService,
+    config: ConfigService,
     private readonly userSyncService: UserSyncService,
+    private readonly tokenVerifier: AccessTokenVerifier,
   ) {
-    this.issuer = this.config.getOrThrow<string>('AUTH0_ISSUER_BASE_URL');
-    this.audience = this.config.getOrThrow<string>('AUTH0_AUDIENCE');
-    this.jwksClient = new JwksClient({
-      jwksUri: `${this.issuer.replace(/\/+$/, '')}/.well-known/jwks.json`,
-      cache: true,
-      cacheMaxAge: 10 * 60 * 1000,
-      rateLimit: true,
-    });
+    this.audience = config.getOrThrow<string>('AUTH0_AUDIENCE');
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -60,18 +52,7 @@ export class AuthGuard implements CanActivate {
     // Bearer present → always run full JWT validation (even if dev stub context exists).
     // The real Auth0 flow takes precedence.
 
-    let payload: jwt.JwtPayload;
-    try {
-      payload = await this.verifyToken(token);
-    } catch (err) {
-      if (err instanceof jwt.TokenExpiredError) {
-        throw new UnauthorizedException('JwtExpired');
-      }
-      if (err instanceof jwt.JsonWebTokenError) {
-        throw new UnauthorizedException('JwtSignatureInvalid');
-      }
-      throw new UnauthorizedException('JwtMalformed');
-    }
+    const payload: jwt.JwtPayload = await this.tokenVerifier.verify(token, { audience: this.audience });
 
     const sub = payload['sub'] as string;
     const email = payload['email'] as string;
@@ -108,21 +89,5 @@ export class AuthGuard implements CanActivate {
     const auth = request.headers['authorization'];
     if (!auth?.startsWith('Bearer ')) return null;
     return auth.slice(7);
-  }
-
-  private async verifyToken(token: string): Promise<jwt.JwtPayload> {
-    const decoded = jwt.decode(token, { complete: true });
-    if (!decoded || typeof decoded === 'string')
-      throw new jwt.JsonWebTokenError('invalid token');
-
-    const kid = decoded.header.kid;
-    const key = await this.jwksClient.getSigningKey(kid);
-    const publicKey = key.getPublicKey();
-
-    return jwt.verify(token, publicKey, {
-      issuer: `${this.issuer.replace(/\/+$/, '')}/`,
-      audience: this.audience,
-      algorithms: ['RS256'],
-    }) as jwt.JwtPayload;
   }
 }

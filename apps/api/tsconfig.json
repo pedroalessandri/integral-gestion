@@ -32,6 +32,9 @@
     // Map subpath imports of workspace ESM packages to their dist declaration files.
     // This is required with moduleResolution: Node (which doesn't read package.json exports).
     "paths": {
+      // El SDK de MCP publica ESM y CJS bajo dist/ con `exports`; con moduleResolution Node (que ignora `exports`)
+      // se mapea el subpath al build CJS, el mismo que resuelve Node en runtime.
+      "@modelcontextprotocol/sdk/*": ["./node_modules/@modelcontextprotocol/sdk/dist/cjs/*"],
       "@gestion-publica/shared-types": [
         "../../packages/shared-types/dist/index.d.ts"
       ],

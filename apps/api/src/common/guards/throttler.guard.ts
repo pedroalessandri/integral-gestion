@@ -2,23 +2,28 @@ import { Injectable } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 
 /**
- * Custom ThrottlerGuard that uses auth0Sub as the rate-limit key when the user
- * is authenticated, falling back to IP address for unauthenticated requests.
+ * ThrottlerGuard con tracker por usuario autenticado.
  *
- * This prevents a single malicious IP from exhausting the quota of an authenticated user,
- * and avoids throttling all users behind a shared NAT/proxy together.
+ * Debe registrarse como APP_GUARD DESPUÉS de `AuthGuard` (los guards globales corren en orden de
+ * registro): `AuthGuard` verifica el JWT y escribe `request.authContext`; acá solo se lee esa identidad ya
+ * verificada, nunca se decodifica el token. En desarrollo, `DevAuthMiddleware` también escribe
+ * `request.authContext`.
+ *
+ * Rutas públicas (el `AuthGuard` retorna antes de poblar `authContext`) y requests sin identidad caen a la IP.
+ * Con `trust proxy` configurado en `main.ts`, `req.ip` es la del cliente detrás del proxy de Railway.
  */
 
-/** Minimal typed shape for the Express request as seen by this guard. */
-interface RequestWithUser {
-  user?: { auth0Sub?: string };
+/** Forma mínima del request de Express que necesita este guard. */
+interface RequestWithAuthContext {
+  authContext?: { userId?: string; auth0Sub?: string };
   ip?: string;
 }
 
 @Injectable()
 export class CustomThrottlerGuard extends ThrottlerGuard {
-  protected override async getTracker(req: RequestWithUser): Promise<string> {
-    // req.user is populated by AuthGuard before throttle evaluation.
-    return req.user?.auth0Sub ?? req.ip ?? 'unknown';
+  protected override async getTracker(req: RequestWithAuthContext): Promise<string> {
+    const identity = req.authContext?.userId ?? req.authContext?.auth0Sub;
+    if (identity) return `user:${identity}`;
+    return `ip:${req.ip ?? 'unknown'}`;
   }
 }
