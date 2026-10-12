@@ -14,6 +14,7 @@ import type {
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { PrismaService } from '../../auth/prisma/prisma.service.js';
 import { AuditEventEmitterService } from '../../audit/audit-event-emitter.service.js';
+import { DEFAULT_ENABLED_MODULE_KEYS } from './module-enablement.service.js';
 import { OrgUnitService } from './org-unit.service.js';
 import { tenantContextStorage } from '../../auth/context/tenant-context-storage.js';
 import { ORG_UNIT_SCOPE, type OrgUnitScope } from '../../../common/contracts/index.js';
@@ -145,6 +146,30 @@ export class OrganizationService {
 
           // RN-P1: toda organización tiene su raíz central desde el alta (idempotente).
           await this.orgUnitService.ensureCentralRoot(tx, org.id);
+
+          // Módulos por defecto (misma fila y evento que ModuleEnablementService.enableModule).
+          for (const moduleKey of DEFAULT_ENABLED_MODULE_KEYS) {
+            const row = await tx.organizationModule.create({
+              data: {
+                organizationId: org.id,
+                moduleKey,
+                enabledAt: now,
+                enabledByUserId: authContext.userId,
+              },
+            });
+            await this.auditEmitter.emit({
+              action: 'organization_module.enabled',
+              entityType: 'core.organization_module',
+              entityId: `${org.id}:${moduleKey}`,
+              diff: {
+                before: null,
+                after: {
+                  enabledAt: row.enabledAt.toISOString(),
+                  enabledByUserId: authContext.userId,
+                },
+              },
+            });
+          }
 
           return { org, period };
         }),

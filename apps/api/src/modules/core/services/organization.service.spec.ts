@@ -9,6 +9,7 @@ const mockTx = {
     create: vi.fn(),
   },
   period: { create: vi.fn() },
+  organizationModule: { create: vi.fn() },
 };
 const mockPrisma = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,6 +47,9 @@ describe('OrganizationService.create — raíz central (RN-P1)', () => {
       createdAt: now,
       updatedAt: now,
     });
+    mockTx.organizationModule.create.mockImplementation(
+      async ({ data }: { data: { moduleKey: string; enabledAt: Date } }) => data,
+    );
     mockTx.period.create.mockResolvedValue({
       id: 'p1',
       organizationId: 'org-1',
@@ -73,6 +77,29 @@ describe('OrganizationService.create — raíz central (RN-P1)', () => {
     );
     expect(mockOrgUnits.ensureCentralRoot).toHaveBeenCalledWith(mockTx, 'org-1');
     expect(mockPrisma.runInTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('habilita okr e indicadores-gestion con su audit, en la misma transacción', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new OrganizationService(mockPrisma as any, mockAudit as any, mockOrgUnits as any);
+    await service.create(
+      {
+        slug: 's',
+        name: 'Org',
+        firstPeriod: { code: '2026', startsAt: '2026-01-01T00:00:00Z', endsAt: '2026-12-31T00:00:00Z' },
+      },
+      ctx,
+    );
+    const keys = mockTx.organizationModule.create.mock.calls.map(
+      (c: [{ data: { moduleKey: string; enabledByUserId: string } }]) => c[0].data.moduleKey,
+    );
+    expect(keys).toEqual(['okr', 'indicadores-gestion']);
+    expect(mockTx.organizationModule.create.mock.calls[0]?.[0].data.enabledByUserId).toBe('su');
+    const actions = mockAudit.emit.mock.calls.map((c: [{ action: string; entityId: string }]) => c[0]);
+    expect(actions.filter((a: { action: string }) => a.action === 'organization_module.enabled').map((a: { entityId: string }) => a.entityId)).toEqual([
+      'org-1:okr',
+      'org-1:indicadores-gestion',
+    ]);
   });
 });
 
