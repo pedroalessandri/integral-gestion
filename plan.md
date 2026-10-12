@@ -313,6 +313,17 @@ Decisión de Pedro: opción C, terminología por organización. Tres diccionario
 
 ---
 
+## Fase 12b — Seed de una organización sin fines de lucro · rama `feature/plan-f12b-seed-ong`
+
+Pedro (2026-10-12): sumar al demo una tercera org, del sector `nonprofit` (ADR-0011 D8 lo había diferido).
+
+### C32 — Seed "Fundación Semillero del Sur" (backend-dev)
+- ONG ficticia de inclusión laboral y educativa de jóvenes, con sede en Córdoba. Sector `nonprofit`, sin tocar San Carrillo ni Lumbre.
+- Plan estratégico institucional, estructura (Dirección Ejecutiva → áreas → programas), ejes, 6 objetivos con indicadores (jóvenes capacitados con `from_projects` y aportes, inserción laboral, terminalidad educativa, donantes recurrentes, emprendimientos activos, voluntariado) y proyectos con tareas.
+- 🔍 Pedro: recorrer las tres orgs con el selector. Merge.
+
+---
+
 ## Backlog posterior (fuera de este plan)
 
 Objetivos plurianuales · etiquetas configurables por org · copiloto IA sobre el nuevo modelo · notificaciones de cargas vencidas · lectura restringida por unidad · presupuesto de proyectos · portal de transparencia.
