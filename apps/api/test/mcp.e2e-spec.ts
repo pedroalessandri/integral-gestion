@@ -20,6 +20,7 @@ import { PlanningTreeController } from '../src/modules/metrics/controllers/plann
 import { PlanningGanttController } from '../src/modules/metrics/controllers/planning-gantt.controller.js';
 import { MetricController } from '../src/modules/metrics/controllers/metric.controller.js';
 import { PeriodController } from '../src/modules/core/controllers/period.controller.js';
+import { McpConfig } from '../src/modules/mcp/config/mcp-config.service.js';
 import { McpToolRegistry } from '../src/modules/mcp/tools/tool-registry.js';
 import { configureApp } from '../src/app.setup.js';
 
@@ -61,11 +62,13 @@ interface TokenOptions {
   issuerOverride?: string;
   key?: KeyObject;
   omitEmail?: boolean;
+  emailVerified?: boolean;
 }
 
 function signToken(o: TokenOptions): string {
   const payload: Record<string, unknown> = { scope: o.scope ?? 'plan:read', azp: o.azp ?? 'test-client-id' };
   if (!o.omitEmail) payload['email'] = o.email;
+  if (o.emailVerified !== undefined) payload['email_verified'] = o.emailVerified;
   return jwt.sign(payload, (o.key ?? privateKey).export({ type: 'pkcs8', format: 'pem' }) as string, {
     algorithm: 'RS256',
     keyid: KID,
@@ -324,6 +327,9 @@ beforeAll(async () => {
   delete process.env['MCP_AUTH0_AUDIENCE'];
   process.env['MCP_ALLOWED_ORIGINS'] = 'http://localhost:*';
   process.env['MCP_RATE_READ_PER_MIN'] = String(RATE_READ);
+  // Toda la suite sale de 127.0.0.1: los topes HTTP se suben y se ejercen aparte, en su propio test.
+  process.env['MCP_RATE_IP_PER_MIN'] = '100000';
+  process.env['MCP_RATE_HTTP_PER_MIN'] = '100000';
 
   // `ConfigModule.forRoot` valida el entorno al importar AppModule: el import dinámico va DESPUÉS de fijar el entorno.
   const { AppModule } = await import('../src/app.module.js');
@@ -409,7 +415,7 @@ describe.skipIf(!process.env['DATABASE_URL'])('Conector MCP — protocolo, auth 
       expect(res.status, path).toBe(200);
       expect(res.body.resource).toBe(MCP_RESOURCE);
       expect(res.body.authorization_servers).toEqual([issuer]);
-      expect(res.body.scopes_supported).toEqual(expect.arrayContaining(['plan:read', 'plan:write']));
+      expect(res.body.scopes_supported).toEqual(['plan:read']);
       expect(res.body.bearer_methods_supported).toEqual(['header']);
     }
   });
@@ -450,6 +456,15 @@ describe.skipIf(!process.env['DATABASE_URL'])('Conector MCP — protocolo, auth 
     const u = await newUser('no-email', [{ orgId: orgA.orgId, roleId: ADMIN }]);
     const res = await post({ Authorization: `Bearer ${tokenFor(u, { omitEmail: true })}` });
     expect(res.status).toBe(401);
+  });
+
+  it('token con email_verified=false: 401; con true: pasa', async () => {
+    const u = await newUser('unverified', [{ orgId: orgA.orgId, roleId: ADMIN }]);
+    const bad = await post({ Authorization: `Bearer ${tokenFor(u, { emailVerified: false })}` });
+    expect(bad.status).toBe(401);
+    expect(bad.headers['www-authenticate']).toContain('invalid_token');
+    const ok = await post({ Authorization: `Bearer ${tokenFor(u, { emailVerified: true })}` });
+    expect(ok.status).toBe(200);
   });
 
   it('el token del conector no sirve en /api/v1/* (separación de audiencias)', async () => {
@@ -795,6 +810,35 @@ describe.skipIf(!process.env['DATABASE_URL'])('Conector MCP — límites, log op
     const rows = await db.mcpToolCall.findMany({ where: { userId: heavy.user.id }, orderBy: { createdAt: 'asc' } });
     expect(rows.filter((r) => r.outcome === 'rate_limited')).toHaveLength(1);
   }, 120_000);
+
+  it('topes HTTP: por IP antes de autenticar (sin token) y por usuario para initialize/tools/list', async () => {
+    const config = app.get(McpConfig);
+    const original = { ip: config.rateIpPerMin, http: config.rateHttpPerMin };
+    const rpc = (headers: Record<string, string>, body: object) =>
+      request(baseUrl)
+        .post('/mcp')
+        .set({ Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json', ...headers })
+        .send(body);
+    try {
+      // Usuario: tools/list en bucle llega al 429 aunque no ejecute ninguna herramienta.
+      const user = await newUser('http-cap', [{ orgId: orgA.orgId, roleId: READER }]);
+      Object.assign(config, { rateIpPerMin: 100_000, rateHttpPerMin: 3 });
+      const auth = { Authorization: `Bearer ${tokenFor(user)}` };
+      for (let i = 0; i < 3; i += 1) expect((await rpc(auth, { jsonrpc: '2.0', id: i, method: 'tools/list' })).status).toBe(200);
+      const limitedUser = await rpc(auth, { jsonrpc: '2.0', id: 9, method: 'tools/list' });
+      expect(limitedUser.status).toBe(429);
+      expect(Number(limitedUser.headers['retry-after'])).toBeGreaterThan(0);
+
+      // IP: requests SIN token se cortan antes de verificar el JWT.
+      Object.assign(config, { rateIpPerMin: 3, rateHttpPerMin: 100_000 });
+      // La ventana por IP ya tiene los requests anteriores de esta suite: se espera el 429 en pocos intentos.
+      let status = 0;
+      for (let i = 0; i < 5 && status !== 429; i += 1) status = (await rpc({}, { jsonrpc: '2.0', id: i, method: 'ping' })).status;
+      expect(status).toBe(429);
+    } finally {
+      Object.assign(config, { rateIpPerMin: original.ip, rateHttpPerMin: original.http });
+    }
+  });
 
   it('mcp.tool_call: una fila por llamada (también las rechazadas), sin argumentos ni contenido', async () => {
     const { user, client } = await asUser('log', [{ orgId: orgA.orgId, roleId: AUDITOR }], { azp: 'cliente-log' });

@@ -3,6 +3,9 @@ import { McpConfig } from '../config/mcp-config.service.js';
 
 export type RateKind = 'read' | 'write';
 
+/** Cupos HTTP del endpoint (cuentan todo request, también `initialize` y `tools/list`): por IP antes de autenticar y por usuario después. */
+export type HttpRateScope = 'ip' | 'user';
+
 export type RateDecision = { allowed: true } | { allowed: false; retryAfterSeconds: number };
 
 interface Window {
@@ -39,10 +42,23 @@ export class McpRateLimiter {
             { name: 'min', ms: MINUTE_MS, limit: this.config.rateWritePerMin },
             { name: 'day', ms: DAY_MS, limit: this.config.rateWritePerDay },
           ];
+    return this.consume(`mcp:${userId}:${kind}`, windows, nowMs);
+  }
 
+  /**
+   * Tope HTTP por request (ADR-0010 D8, fix C26b): `ip` corre ANTES de verificar el JWT (cota al costo de requests
+   * sin token o con token inválido); `user` corre después y cubre `initialize`/`tools/list`, que no pasan por el
+   * límite de herramientas. Tope holgado: solo corta bucles, no el uso normal.
+   */
+  checkHttp(scope: HttpRateScope, subject: string, nowMs: number = Date.now()): RateDecision {
+    const limit = scope === 'ip' ? this.config.rateIpPerMin : this.config.rateHttpPerMin;
+    return this.consume(`mcp:http:${scope}:${subject}`, [{ name: 'min', ms: MINUTE_MS, limit }], nowMs);
+  }
+
+  private consume(prefix: string, windows: Window[], nowMs: number): RateDecision {
     let retryAfterMs = 0;
     for (const w of windows) {
-      const key = `mcp:${userId}:${kind}:${w.name}`;
+      const key = `${prefix}:${w.name}`;
       const recent = this.prune(key, nowMs - w.ms);
       if (recent.length >= w.limit) {
         const oldest = recent[0] ?? nowMs;
@@ -52,7 +68,7 @@ export class McpRateLimiter {
     if (retryAfterMs > 0) return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)) };
 
     for (const w of windows) {
-      this.hits.get(`mcp:${userId}:${kind}:${w.name}`)?.push(nowMs);
+      this.hits.get(`${prefix}:${w.name}`)?.push(nowMs);
     }
     this.sweepIfLarge(nowMs);
     return { allowed: true };

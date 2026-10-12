@@ -20,6 +20,9 @@ export class McpConfig {
   readonly rateReadPerMin: number;
   readonly rateWritePerMin: number;
   readonly rateWritePerDay: number;
+  /** Tope HTTP por IP (antes de autenticar) y por usuario (después), por minuto. */
+  readonly rateIpPerMin: number;
+  readonly rateHttpPerMin: number;
   readonly maxResponseChars: number;
   /** Issuer de Auth0 con barra final: es el servidor de autorización que se anuncia en la metadata. */
   readonly authorizationServer: string;
@@ -37,6 +40,8 @@ export class McpConfig {
     this.rateReadPerMin = config.get<number>('MCP_RATE_READ_PER_MIN') ?? 60;
     this.rateWritePerMin = config.get<number>('MCP_RATE_WRITE_PER_MIN') ?? 10;
     this.rateWritePerDay = config.get<number>('MCP_RATE_WRITE_PER_DAY') ?? 300;
+    this.rateIpPerMin = config.get<number>('MCP_RATE_IP_PER_MIN') ?? 120;
+    this.rateHttpPerMin = config.get<number>('MCP_RATE_HTTP_PER_MIN') ?? 300;
     this.maxResponseChars = config.get<number>('MCP_MAX_RESPONSE_CHARS') ?? 60_000;
     this.authorizationServer = `${config.getOrThrow<string>('AUTH0_ISSUER_BASE_URL').replace(/\/+$/, '')}/`;
     this.metadataUrl = this.resourceUrl ? buildMetadataUrl(this.resourceUrl) : '';

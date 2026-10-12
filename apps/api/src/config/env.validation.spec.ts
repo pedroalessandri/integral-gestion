@@ -58,4 +58,26 @@ describe('validateEnv — conector MCP', () => {
     expect(env.MCP_MAX_RESPONSE_CHARS).toBe(2000);
     expect(() => validateEnv({ ...base, MCP_RATE_READ_PER_MIN: 'x' })).toThrow(/MCP_RATE_READ_PER_MIN/);
   });
+
+  it('topes HTTP del endpoint con defaults holgados y configurables', () => {
+    const env = validateEnv({ ...base });
+    expect(env.MCP_RATE_IP_PER_MIN).toBe(120);
+    expect(env.MCP_RATE_HTTP_PER_MIN).toBe(300);
+    expect(validateEnv({ ...base, MCP_RATE_IP_PER_MIN: '50' }).MCP_RATE_IP_PER_MIN).toBe(50);
+  });
+
+  it('falla si la audiencia del conector coincide con AUTH0_AUDIENCE', () => {
+    const enabled = { ...base, MCP_ENABLED: 'true', MCP_RESOURCE_URL: 'https://api.example.org/mcp' };
+    // default: la audiencia efectiva es MCP_RESOURCE_URL
+    expect(() => validateEnv({ ...enabled, AUTH0_AUDIENCE: 'https://api.example.org/mcp' })).toThrow(/must differ from AUTH0_AUDIENCE/);
+    // explícita
+    expect(() =>
+      validateEnv({ ...enabled, MCP_AUTH0_AUDIENCE: 'https://web-api', AUTH0_AUDIENCE: 'https://web-api' }),
+    ).toThrow(/must differ from AUTH0_AUDIENCE/);
+    expect(() => validateEnv({ ...enabled, AUTH0_AUDIENCE: 'https://web-api' })).not.toThrow();
+    // apagado: no valida
+    expect(() =>
+      validateEnv({ ...base, MCP_RESOURCE_URL: 'https://api.example.org/mcp', AUTH0_AUDIENCE: 'https://api.example.org/mcp' }),
+    ).not.toThrow();
+  });
 });

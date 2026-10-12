@@ -18,18 +18,20 @@ import { MCP_ENDPOINT_PATH } from '../../../config/mcp-routes.js';
 import { McpAuthGuard, type McpRequest } from '../guards/mcp-auth.guard.js';
 import { McpEnabledGuard } from '../guards/mcp-enabled.guard.js';
 import { McpOriginGuard } from '../guards/mcp-origin.guard.js';
+import { McpIpThrottleGuard, McpUserThrottleGuard } from '../guards/mcp-throttle.guard.js';
 import { McpHttpHandler } from '../server/mcp-http-handler.service.js';
 
 /**
  * Endpoint MCP (ADR-0010 D2). Fuera del prefijo `api` y del versionado. `@Public()` frente al `AuthGuard` global
  * (que valida la audiencia de la web): la autenticación la hace `McpAuthGuard` con la audiencia del conector.
- * Throttler global salteado: el límite es por usuario y por herramienta, dentro del dispatcher (D8).
- * Orden de guards: kill switch (404) -> Origin (403) -> token (401).
+ * Throttler global salteado: los límites son propios (IP/usuario por request, y por herramienta en el dispatcher, D8).
+ * Topes HTTP propios (IP antes de autenticar, usuario después), ver `mcp-throttle.guard.ts`.
+ * Orden de guards: kill switch (404) -> tope por IP (429) -> Origin (403) -> token (401) -> tope por usuario (429).
  */
 @Controller({ path: MCP_ENDPOINT_PATH, version: VERSION_NEUTRAL })
 @Public()
 @SkipThrottle()
-@UseGuards(McpEnabledGuard, McpOriginGuard, McpAuthGuard)
+@UseGuards(McpEnabledGuard, McpIpThrottleGuard, McpOriginGuard, McpAuthGuard, McpUserThrottleGuard)
 export class McpController {
   constructor(private readonly handler: McpHttpHandler) {}
 

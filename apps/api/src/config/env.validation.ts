@@ -127,6 +127,22 @@ class EnvVars {
   @Transform(({ value }: { value: unknown }) => parseIntOrDefault(value, 300))
   MCP_RATE_WRITE_PER_DAY: number = 300;
 
+  /** Tope HTTP por IP del cliente, ANTES de autenticar (cualquier request a `/mcp`). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  @Transform(({ value }: { value: unknown }) => parseIntOrDefault(value, 120))
+  MCP_RATE_IP_PER_MIN: number = 120;
+
+  /** Tope HTTP por usuario autenticado (todo request, incluidos `initialize` y `tools/list`). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  @Transform(({ value }: { value: unknown }) => parseIntOrDefault(value, 300))
+  MCP_RATE_HTTP_PER_MIN: number = 300;
+
   /** Tope duro de caracteres de una respuesta de herramienta (ADR-0010 D9). */
   @IsOptional()
   @IsInt()
@@ -173,6 +189,11 @@ export function validateEnv(config: Record<string, unknown>): EnvVars {
       messages.push('MCP_RESOURCE_URL is required when MCP_ENABLED=true');
     } else if (!isValidResourceUrl(resource, validated.NODE_ENV)) {
       messages.push('MCP_RESOURCE_URL must be an absolute https URL ending in /mcp (http only allowed for localhost), without query or fragment');
+    }
+    // Audiencias separadas (ADR-0010 D3): si coinciden, un token de la web valdría en /mcp y viceversa.
+    const mcpAudience = validated.MCP_AUTH0_AUDIENCE || resource;
+    if (mcpAudience && mcpAudience === validated.AUTH0_AUDIENCE) {
+      messages.push('MCP audience (MCP_AUTH0_AUDIENCE or MCP_RESOURCE_URL) must differ from AUTH0_AUDIENCE');
     }
   }
 

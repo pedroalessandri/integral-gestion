@@ -9,6 +9,7 @@ import { ProtectedResourceMetadataController } from './controllers/protected-res
 import { McpAuthGuard } from './guards/mcp-auth.guard.js';
 import { McpEnabledGuard } from './guards/mcp-enabled.guard.js';
 import { McpOriginGuard } from './guards/mcp-origin.guard.js';
+import { McpIpThrottleGuard, McpUserThrottleGuard } from './guards/mcp-throttle.guard.js';
 import { McpRateLimiter } from './dispatch/mcp-rate-limiter.service.js';
 import { ToolDispatcher } from './dispatch/tool-dispatcher.service.js';
 import { ToolCallRepository } from './repositories/tool-call.repository.js';
@@ -37,6 +38,8 @@ import { McpToolRegistry } from './tools/tool-registry.js';
     McpEnabledGuard,
     McpOriginGuard,
     McpAuthGuard,
+    McpIpThrottleGuard,
+    McpUserThrottleGuard,
   ],
 })
 export class McpModule {}
