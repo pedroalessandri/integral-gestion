@@ -9,7 +9,7 @@ import {
 
 /**
  * ADR-0011 D7 (lado API): el vocabulario del sector público no puede aparecer fuera del diccionario
- * público. Escanea los prompts del copiloto, el módulo `mcp` (cuando exista) y el seed de Lumbre (C31),
+ * público. Escanea los prompts del copiloto, el módulo `mcp` (cuando exista) y los seeds de Lumbre (C31) y Semillero (C32),
  * sin excepciones de archivo, y verifica que los términos de los sectores privado y sin fines de lucro
  * estén limpios.
  */
@@ -42,13 +42,14 @@ describe('ADR-0011 D7 — términos de gobierno fuera del sector público (API)'
     join(SRC, 'modules', 'ai', 'prompts'),
     join(SRC, 'modules', 'mcp'),
     join(SRC, 'database', 'seed-demo-lumbre.ts'),
+    join(SRC, 'database', 'seed-demo-semillero.ts'),
   ].flatMap(listTsFiles);
 
   it('escanea al menos los prompts del copiloto', () => {
     expect(scanned.length).toBeGreaterThan(0);
   });
 
-  it('no hay vocabulario de gobierno en prompts, mcp ni seed de Lumbre', () => {
+  it('no hay vocabulario de gobierno en prompts, mcp ni seeds de Lumbre y Semillero', () => {
     const hits: string[] = [];
     for (const file of scanned) {
       const lines = stripComments(readFileSync(file, 'utf8')).split('\n');
