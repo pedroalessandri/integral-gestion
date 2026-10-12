@@ -17,6 +17,7 @@ import { OkrModule, OkrContractsModule } from './modules/okr/index.js';
 import { HealthModule } from './modules/health/index.js';
 import { AiModule } from './modules/ai/index.js';
 import { MetricsModule } from './modules/metrics/index.js';
+import { McpModule } from './modules/mcp/index.js';
 import { PlanningModule, PlanningContractsModule } from './modules/planning/index.js';
 
 /**
@@ -56,6 +57,7 @@ import { PlanningModule, PlanningContractsModule } from './modules/planning/inde
     HealthModule,
     AiModule,
     MetricsModule,
+    McpModule,
   ],
   providers: [
     {
