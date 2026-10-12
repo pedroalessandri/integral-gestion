@@ -48,3 +48,52 @@ export function computeProgressStatus(progressBp: number): ProgressStatus {
   if (progressBp > 0) return 'in_progress';
   return 'pending';
 }
+
+/** Derived status for a Project: same rule as `computeTaskStatus` applied to the project's progress and end date. */
+export type ProjectStatus = TaskStatus;
+
+/**
+ * Compute the derived status of a Project (ADR-0010). Mismas reglas que `computeTaskStatus`.
+ *
+ * @param progressBp  Project cached progress, integer 0..10000.
+ * @param endsAt      Planned end date of the project.
+ * @param now         Current timestamp (injectable for testability).
+ */
+export function computeProjectStatus(
+  progressBp: number,
+  endsAt: Date,
+  now: Date = new Date(),
+): ProjectStatus {
+  return computeTaskStatus(progressBp, endsAt, now);
+}
+
+export type ProjectDelayReason = 'vencido' | 'tareas_vencidas';
+
+export interface ProjectDelayInput {
+  progressBp: number;
+  endsAt: Date;
+  progressMode: 'from_tasks' | 'from_indicator';
+  tasks: ReadonlyArray<{ progressBp: number; endsAt: Date }>;
+}
+
+/**
+ * Is the project delayed? (ADR-0010 `listar_proyectos_atrasados`).
+ *
+ * - `vencido`: the project itself is `overdue` (not done and past its end date).
+ * - `tareas_vencidas`: some task is `overdue`, ONLY when `progressMode = 'from_tasks'` (in `from_indicator`
+ *   the tasks are informative and do not mark the project as delayed).
+ */
+export function isProjectDelayed(
+  project: ProjectDelayInput,
+  now: Date = new Date(),
+): { atrasado: boolean; motivos: ProjectDelayReason[] } {
+  const motivos: ProjectDelayReason[] = [];
+  if (computeProjectStatus(project.progressBp, project.endsAt, now) === 'overdue') motivos.push('vencido');
+  if (
+    project.progressMode === 'from_tasks' &&
+    project.tasks.some((t) => computeTaskStatus(t.progressBp, t.endsAt, now) === 'overdue')
+  ) {
+    motivos.push('tareas_vencidas');
+  }
+  return { atrasado: motivos.length > 0, motivos };
+}
