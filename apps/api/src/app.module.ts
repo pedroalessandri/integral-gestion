@@ -24,7 +24,7 @@ import { PlanningModule, PlanningContractsModule } from './modules/planning/inde
  *
  * Global providers (registered once here, apply to all modules):
  *  - APP_FILTER: HttpExceptionFilter — maps all exceptions to ErrorResponseDto shape.
- *  - APP_GUARD: CustomThrottlerGuard — rate limiting keyed by auth0Sub or IP.
+ *  - APP_GUARD: CustomThrottlerGuard — rate limiting keyed by user (authContext) or IP; registered AFTER AuthGuard.
  *  - APP_INTERCEPTOR: TenantContextInterceptor — re-enters ALS from request.authContext
  *    (populated by AuthGuard) so Prisma extension always finds a tenant store.
  *
@@ -64,11 +64,12 @@ import { PlanningModule, PlanningContractsModule } from './modules/planning/inde
     },
     {
       provide: APP_GUARD,
-      useClass: CustomThrottlerGuard,
+      useClass: AuthGuard,
     },
+    // Debe ir DESPUÉS de AuthGuard: el tracker lee request.authContext (limite por usuario).
     {
       provide: APP_GUARD,
-      useClass: AuthGuard,
+      useClass: CustomThrottlerGuard,
     },
     {
       provide: APP_INTERCEPTOR,

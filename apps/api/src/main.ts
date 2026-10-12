@@ -10,6 +10,11 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
 
+  // Detrás del proxy de Railway (un salto) req.ip sería la IP del proxy y el fallback por IP del throttler
+  // compartiría cuota entre todos los clientes. Con 1 se confía solo en el último X-Forwarded-For que agrega
+  // el proxy; un cliente no puede falsear la IP con un header propio.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   app.enableCors({
     origin: (origin, cb) => {
       const allowed = (process.env['CORS_ALLOWED_ORIGINS'] ?? 'http://localhost:3001')
