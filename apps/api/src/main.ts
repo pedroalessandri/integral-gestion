@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { VersioningType, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module.js';
+import { configureApp } from './app.setup.js';
 
 const AUTH0_PLACEHOLDER_ISSUER = 'https://placeholder.auth0.com';
 const AUTH0_PLACEHOLDER_AUDIENCE = 'https://api.gestion-publica.placeholder';
@@ -15,24 +16,8 @@ async function bootstrap(): Promise<void> {
   // el proxy; un cliente no puede falsear la IP con un header propio.
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
-  app.enableCors({
-    origin: (origin, cb) => {
-      const allowed = (process.env['CORS_ALLOWED_ORIGINS'] ?? 'http://localhost:3001')
-        .split(',')
-        .map((s) => s.trim());
-      if (!origin || allowed.includes(origin)) return cb(null, true);
-      return cb(new Error('Not allowed by CORS'), false);
-    },
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Organization-Id', 'X-Request-Id'],
-  });
-
-  // Global API prefix + URI versioning: /api/v1/...
-  app.setGlobalPrefix('api');
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1',
-  });
+  // CORS, prefijo global `api` (con `/mcp` y su metadata excluidos) y versionado URI: ver app.setup.ts.
+  configureApp(app);
 
   const port = process.env['PORT'] ?? 3000;
   const nodeEnv = process.env['NODE_ENV'] ?? 'development';
