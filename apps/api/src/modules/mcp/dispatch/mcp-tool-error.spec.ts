@@ -17,7 +17,13 @@ describe('toToolError', () => {
     expect(open?.code).toBe('OpenPeriodNotFound');
     expect(open?.outcome).toBe('error');
     const unprocessable = toToolError(new UnprocessableEntityException('MixedWeightGroup: el grupo mezcla pesos'));
-    expect(unprocessable).toMatchObject({ code: 'MixedWeightGroup', message: 'el grupo mezcla pesos' });
+    expect(unprocessable).toMatchObject({ code: 'MixedWeightGroup', message: 'Los datos no cumplen las reglas del dominio.' });
+  });
+
+  it('texto libre de un service fuera de la lista blanca no llega al modelo', () => {
+    const e = toToolError(new NotFoundException('Objective 3f2a-secret-id not found in schema okr'));
+    expect(e?.message).toBe('No se encontró el recurso pedido.');
+    expect(e?.message).not.toContain('secret');
   });
 
   it('usa el código por estado cuando el mensaje es libre', () => {

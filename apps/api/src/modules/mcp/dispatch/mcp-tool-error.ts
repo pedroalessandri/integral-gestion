@@ -37,6 +37,16 @@ const STATUS_CODES: Record<number, string> = {
   422: 'UnprocessableEntity',
 };
 
+/** Mensaje genérico por status para códigos fuera de la lista blanca: nunca se reenvía texto libre de un service. */
+const STATUS_MESSAGES: Record<number, string> = {
+  400: 'La solicitud no es válida.',
+  401: 'No autenticado.',
+  403: 'No tenés permiso para esta operación.',
+  404: 'No se encontró el recurso pedido.',
+  409: 'La operación entra en conflicto con el estado actual.',
+  422: 'Los datos no cumplen las reglas del dominio.',
+};
+
 /** Traduce una excepción de un service a un error de herramienta; `null` si no es una `HttpException`. */
 export function toToolError(err: unknown): McpToolError | null {
   if (err instanceof McpToolError) return err;
@@ -53,8 +63,9 @@ export function toToolError(err: unknown): McpToolError | null {
 
   const prefixed = /^([A-Z][A-Za-z0-9]+)(?::\s*([\s\S]*))?$/.exec(raw);
   const code = prefixed?.[1] ?? STATUS_CODES[status] ?? 'Error';
-  const detail = prefixed?.[2]?.trim();
-  const message = MESSAGES_ES[code] ?? (detail && detail.length > 0 ? detail : raw);
+  // Lista blanca: solo los códigos conocidos llevan su texto; el resto, un mensaje genérico por status. El texto
+  // libre de un service (ids, nombres, SQL, rutas) no llega al modelo (hallazgo #4 de la revisión de C26).
+  const message = MESSAGES_ES[code] ?? STATUS_MESSAGES[status] ?? 'No se pudo completar la operación.';
   const denied = status === 401 || status === 403;
   return new McpToolError(code, message.slice(0, 500), undefined, denied ? 'denied' : 'error');
 }

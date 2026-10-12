@@ -2,7 +2,7 @@ import { Controller, Get, Header, UseGuards, VERSION_NEUTRAL } from '@nestjs/com
 import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../../auth/index.js';
 import { MCP_ENDPOINT_PATH, PROTECTED_RESOURCE_METADATA_PATH } from '../../../config/mcp-routes.js';
-import { MCP_SCOPE_READ, MCP_SCOPE_WRITE, McpConfig } from '../config/mcp-config.service.js';
+import { MCP_SCOPE_READ, McpConfig } from '../config/mcp-config.service.js';
 import { McpEnabledGuard } from '../guards/mcp-enabled.guard.js';
 
 export interface ProtectedResourceMetadata {
@@ -16,7 +16,8 @@ export interface ProtectedResourceMetadata {
 /**
  * Metadata de recurso protegido (RFC 9728, ADR-0010 D3). Pública y estática. Se sirve con y sin el sufijo `/mcp`
  * (RFC 9728 §3.1 usa la ruta del recurso; algunos clientes piden la ruta sin sufijo). La metadata del servidor de
- * autorización la sirve Auth0.
+ * autorización la sirve Auth0. Anuncia solo `plan:read` hasta C27 (no hay herramientas de escritura); `offline_access`
+ * no se anuncia: es un scope de OIDC del servidor de autorización (Auth0 ya lo publica), no del recurso.
  */
 @Controller({ version: VERSION_NEUTRAL })
 @Public()
@@ -32,7 +33,7 @@ export class ProtectedResourceMetadataController {
     return {
       resource: this.config.resourceUrl,
       authorization_servers: [this.config.authorizationServer],
-      scopes_supported: [MCP_SCOPE_READ, MCP_SCOPE_WRITE, 'offline_access'],
+      scopes_supported: [MCP_SCOPE_READ],
       bearer_methods_supported: ['header'],
       resource_name: 'Gestión Integral - Conector MCP',
     };

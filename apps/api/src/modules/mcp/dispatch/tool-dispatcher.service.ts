@@ -259,7 +259,7 @@ export class ToolDispatcher {
   }
 
   private buildError(error: McpToolError): CallToolResult {
-    const body = { codigo: error.code, mensaje: error.message, ...(error.details ?? {}) };
+    const body = scrubDeep({ codigo: error.code, mensaje: error.message, ...(error.details ?? {}) });
     return { isError: true, content: [{ type: 'text', text: JSON.stringify(body) }] };
   }
 }
