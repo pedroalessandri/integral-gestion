@@ -5,14 +5,14 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { TenantMembershipResolver } from '../services/tenant-membership-resolver.service.js';
 import { tenantContextStorage } from '../context/tenant-context-storage.js';
-import { hasPermission, ALL_PERMISSIONS } from '@gestion-publica/shared-types/auth';
+import { hasPermission } from '@gestion-publica/shared-types/auth';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 
 @Injectable()
 export class TenantGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly resolver: TenantMembershipResolver) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context
@@ -29,55 +29,8 @@ export class TenantGuard implements CanActivate {
     const orgId = request.headers['x-organization-id'];
     if (!orgId) throw new BadRequestException('MissingTenantHeader');
 
-    // Validate org exists and is active (applies to all users, including superadmins).
-    const org = await this.prisma.raw.organization.findUnique({
-      where: { id: orgId },
-      select: { id: true, status: true },
-    });
-    if (!org) throw new ForbiddenException('OrganizationNotFound');
-    if (org.status !== 'active') throw new ForbiddenException('OrganizationInactive');
-
-    // Superadmin bypass — org is verified above; skip membership check, grant wildcard permissions.
-    if (authCtx.isSuperadmin) {
-      const enriched: AuthContext = {
-        ...authCtx,
-        organizationId: orgId,
-        permissions: [ALL_PERMISSIONS],
-        orgUnitId: null,
-      };
-      tenantContextStorage.enterWith(enriched);
-      (request as Record<string, unknown>)['authContext'] = enriched;
-      return true;
-    }
-
-    // Validate membership and load permissions via role → role_permission.
-    const membership = await this.prisma.raw.userOrganizationRole.findUnique({
-      where: {
-        userId_organizationId: {
-          userId: authCtx.userId,
-          organizationId: orgId,
-        },
-      },
-      include: {
-        role: {
-          include: {
-            rolePermissions: { select: { permissionKey: true } },
-          },
-        },
-      },
-    });
-    if (!membership) {
-      throw new ForbiddenException('TenantMembershipDenied');
-    }
-
-    const permissions = membership.role.rolePermissions.map((rp) => rp.permissionKey);
-
-    const enriched: AuthContext = {
-      ...authCtx,
-      organizationId: orgId,
-      permissions,
-      orgUnitId: membership.orgUnitId,
-    };
+    // Org activa, membresía (o bypass de superadmin) y permisos: la lógica vive en TenantMembershipResolver.
+    const enriched = await this.resolver.resolve(authCtx, orgId, { allowSuperadminBypass: true });
     tenantContextStorage.enterWith(enriched);
     (request as Record<string, unknown>)['authContext'] = enriched;
     return true;

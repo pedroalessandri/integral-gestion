@@ -12,3 +12,9 @@ export { Public } from './decorators/public.decorator.js';
 export { CurrentUser } from './decorators/current-user.decorator.js';
 export { Permissions, PERMISSIONS_KEY } from './decorators/permissions.decorator.js';
 export { SuperadminOnly } from './decorators/superadmin-only.decorator.js';
+export { AccessTokenVerifier, type VerifyTokenOptions } from './services/access-token-verifier.service.js';
+export {
+  TenantMembershipResolver,
+  type ResolveTenantOptions,
+  type UserMembershipSummary,
+} from './services/tenant-membership-resolver.service.js';
