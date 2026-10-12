@@ -164,6 +164,16 @@
 - Por qué: en el modelo nuevo "indicador" es el `ObjectiveIndicator` y "gestión" es el avance de proyectos y tareas; la página `/metrics` es el catálogo de métricas sueltas y el nombre confunde (pasó en la preparación de la demo). Candidatos: "Métricas" o "Catálogo de métricas", vía `lib/labels.ts`.
 - Origen: cierre de la Fase 5 (2026-10-08), aprobado por Pedro.
 
+### [B] Sanear links y HTML de textos de usuario antes de las escrituras del conector (C26b, hallazgo #5)
+- Por qué: los textos libres (nombres, descripciones) llegan al modelo con saneo de controles e imágenes (`![`), pero no de links Markdown ni HTML. Con C27 (escrituras) un texto cargado por un usuario podría inducir exfiltración vía links.
+- Posible solución: extender `text.presenter.ts` (neutralizar `[x](url)` y etiquetas HTML) antes de C27.
+- Origen: revisión de seguridad de C26.
+
+### [B] La web enlaza usuarios por email sin exigir `email_verified` (C26b)
+- Por qué: `UserSyncService.upsertFromJwt` enlaza por email también para la web (`AuthGuard`); el conector ya rechaza `email_verified === false`, la web no. Cambiarlo afecta a la web, así que queda fuera de C26b.
+- Posible solución: pedir el claim `email_verified` en el access token de la web y rechazar `false` en `AuthGuard`.
+- Origen: revisión de seguridad de C26.
+
 ## 🔵 Prioridad baja / cuando haya tiempo
 
 ### [R] Convergir CascadeResponse local en (app)/objectives/[id]/page.tsx con ObjectiveCascadeDto

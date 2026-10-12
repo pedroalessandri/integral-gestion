@@ -15,6 +15,35 @@ Formato:
 
 ---
 
+## 2026-10-12 · C26b · backend-dev · feature/plan-f11-conector-mcp
+- Hecho: fixes de la revisión de seguridad de C26 (conector MCP).
+  1. **Topes HTTP propios (MEDIO)**: `/mcp` sigue con `@SkipThrottle()` (no se agregaron throttlers nombrados a `forRoot`, bug de v6) pero ahora lleva `McpIpThrottleGuard` (segundo guard, ANTES de autenticar; 120/min por `req.ip`, que respeta `trust proxy`) y `McpUserThrottleGuard` (último guard, 300/min por usuario sobre todo request, incluidos `initialize` y `tools/list`). Ambos usan `McpRateLimiter.checkHttp` (misma ventana deslizante, contadores separados de los de herramientas), responden 429 con `Retry-After`. Orden: kill switch → IP → Origin → token → usuario.
+  2. **Audiencias (MEDIO)**: `validateEnv` falla el arranque con `MCP_ENABLED=true` si la audiencia efectiva (`MCP_AUTH0_AUDIENCE` o, por defecto, `MCP_RESOURCE_URL`) es igual a `AUTH0_AUDIENCE`.
+  3. **Email sin verificar (MEDIO)**: `McpAuthGuard` rechaza con 401 (`invalid_token`) un token con `email_verified === false`, antes de `upsertFromJwt`. El claim es `email_verified` (sin namespace), que ahora emite la Action (texto abajo). Un token sin el claim sigue pasando (la Action ya no emite `email` si no está verificado). La web no se tocó (ver TODO).
+  4. **Errores (BAJO #4)**: `toToolError` ya no reenvía texto libre de un service: usa el mensaje de la lista blanca de códigos (`MESSAGES_ES`) o uno genérico por status; `buildError` pasa todo por `scrubDeep`. El código tipado (`MixedWeightGroup`, etc.) se conserva.
+  5. **Metadata (BAJO #8)**: `scopes_supported: ["plan:read"]`. `plan:write` vuelve en C27. `offline_access` se quita: es un scope OIDC del servidor de autorización (Auth0 lo publica en su propia metadata y los refresh tokens se habilitan con *Allow Offline Access* en la API), no un scope del recurso. El `scope` del `WWW-Authenticate` ya era `plan:read`.
+  6. Deuda anotada en `TODO.md` y `docs/tech-debt.md`: saneo de links/HTML antes de C27 (#5), limitador distribuido (#6), `trust proxy` (#7), FKs `ON DELETE RESTRICT` de `mcp.tool_call` y `email_verified` en la web.
+- Env vars nuevas (en `.env.example`): `MCP_RATE_IP_PER_MIN` (default 120) y `MCP_RATE_HTTP_PER_MIN` (default 300).
+- Verificación: ver el reporte de la corrida; `pnpm audit --prod` marca `@modelcontextprotocol/sdk@1.30.1` (high, GHSA de OAuth *client*, parcheado en >=1.31.0; el conector usa solo el servidor, el cliente solo en tests) y `fast-uri` transitivo vía `ajv` del SDK (hasta 3.1.7/3.1.8). `zod` sin hallazgos. No se subió el SDK (fuera del alcance pedido).
+- Action de Auth0 actualizada (reemplaza la de C26, paso 4 de la configuración): ahora emite también `email_verified: true`:
+```js
+exports.onExecutePostLogin = async (event, api) => {
+  const MCP = 'https://gestion-publicaapi-production.up.railway.app/mcp';
+  if (event.resource_server?.identifier !== MCP) return;
+  // `email` solo se emite si Auth0 lo marca como verificado: el backend enlaza al usuario local por email
+  // (UserSyncService), así que un email sin verificar permitiría tomar la cuenta de otra persona.
+  if (event.user.email_verified !== true) {
+    api.access.deny('Verificá tu email antes de usar el conector.');
+    return;
+  }
+  api.accessToken.setCustomClaim('email', event.user.email);
+  api.accessToken.setCustomClaim('email_verified', true); // el McpAuthGuard rechaza el token si viene en false
+};
+```
+- **Acción para Pedro**: pegar esta versión en la Action de Auth0 y, si ya tenés `MCP_AUTH0_AUDIENCE` o `MCP_RESOURCE_URL` igual a `AUTH0_AUDIENCE` en Railway, corregirlo (la API no arranca).
+
+---
+
 ## 2026-10-12 · C26 · backend-dev · feature/plan-f11-conector-mcp
 - Hecho: MVP de solo lectura del conector MCP (ADR-0010) dentro de la API.
   - **Módulo `mcp`** (`apps/api/src/modules/mcp/`): `POST /mcp` Streamable HTTP sin sesiones y con respuesta JSON (un `McpServer` + transporte por request), `GET`/`DELETE` 405, batches 400, validación de `Origin` (403, allow-list `MCP_ALLOWED_ORIGINS`, admite `http://localhost:*`), kill switch `MCP_ENABLED` (default `false`: `/mcp` y la metadata dan 404). SDK `@modelcontextprotocol/sdk` **1.30.1** exacta.
@@ -71,11 +100,14 @@ No toqué Railway ni Auth0. Todo lo de abajo lo hacés vos; lo marcado **[sin ve
 exports.onExecutePostLogin = async (event, api) => {
   const MCP = 'https://gestion-publicaapi-production.up.railway.app/mcp';
   if (event.resource_server?.identifier !== MCP) return;
-  if (!event.user.email_verified) {
+  // `email` solo se emite si Auth0 lo marca como verificado: el backend enlaza al usuario local por email
+  // (UserSyncService), así que un email sin verificar permitiría tomar la cuenta de otra persona.
+  if (event.user.email_verified !== true) {
     api.access.deny('Verificá tu email antes de usar el conector.');
     return;
   }
   api.accessToken.setCustomClaim('email', event.user.email);
+  api.accessToken.setCustomClaim('email_verified', true); // el McpAuthGuard rechaza el token si viene en false
 };
 ```
   (`UserSyncService` reclama invitaciones pendientes por email, por eso se exige `email_verified`.) Una allow-list de `redirect_uri` en la Action depende de qué campo del evento lo exponga **[sin verificar]**.

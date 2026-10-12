@@ -167,10 +167,22 @@
 - **Posible solución**: inyectar `UserSyncService` por el token exportado de `core/index.ts` (el APP_GUARD vive en `AppModule`, que ya importa `CoreModule`) o mover el upsert a un puerto en `common/contracts`.
 - **Prioridad**: baja.
 
-### Limitador del conector MCP en memoria y sin límite antes de autenticar (C26)
-- **Qué**: `McpRateLimiter` guarda las marcas por usuario en un `Map` del proceso (ventana deslizante); el endpoint `/mcp` saltea el throttler global y no tiene límite propio antes de autenticar (solo cuesta una verificación de JWT con JWKS cacheado).
-- **Por qué importa**: con más de una réplica en Railway el cupo se multiplica por réplica; un flood de requests sin token no tiene freno.
-- **Posible solución**: store compartido (Redis) cuando se escale, y un límite por IP solo para respuestas 401 si aparece abuso (ADR-0010, Consecuencias).
+### Limitador del conector MCP en memoria (C26, actualizado en C26b)
+- **Qué**: `McpRateLimiter` (topes por herramienta, por IP y por usuario) guarda las marcas en un `Map` del proceso. C26b sumó los topes HTTP por IP (antes de autenticar) y por usuario.
+- **Por qué importa**: con más de una réplica en Railway cada cupo se multiplica por réplica.
+- **Posible solución**: store compartido (Redis) cuando se escale a más de una réplica.
+- **Prioridad**: baja.
+
+### `trust proxy` fijo en 1 condiciona el límite por IP del conector (C26b)
+- **Qué**: `main.ts` fija `trust proxy` en 1 (un proxy, Railway); el tope por IP de `/mcp` usa `req.ip`.
+- **Por qué importa**: si cambia la topología (CDN delante, más saltos), `req.ip` sería la del proxy (todos comparten cupo) o spoofeable por `X-Forwarded-For`.
+- **Posible solución**: revisar el valor de `trust proxy` en cualquier cambio de hosting o proxy.
+- **Prioridad**: baja.
+
+### FKs `ON DELETE RESTRICT` de `mcp.tool_call` frente a pedidos de supresión (C26b)
+- **Qué**: `mcp.tool_call` referencia usuario y organización con `ON DELETE RESTRICT`; no hay borrado de usuarios que lo contemple (la purga a 180 días solo borra por fecha).
+- **Por qué importa**: un pedido de supresión de datos personales no podría borrar al usuario mientras tenga filas en el log.
+- **Posible solución**: decidir la política (anonimizar `userId`, `SET NULL` o purga previa por usuario) cuando exista el flujo de supresión.
 - **Prioridad**: baja.
 
 ### Los e2e del conector MCP dejan datos en la DB local (C26)
