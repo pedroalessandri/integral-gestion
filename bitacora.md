@@ -15,6 +15,12 @@ Formato:
 
 ---
 
+## 2026-10-12 · Módulos por defecto · backend-dev · fix/modulos-por-defecto
+
+- Decisión de Pedro: toda org nueva nace con `okr` (Planificación) e `indicadores-gestion` habilitados. `mcp` (ADR-0010 D7) e `indicadores-okr` quedan apagados: la UI de objetivos solo usa `indicadoresOkrEnabled` como flag opcional, no lo necesita para funcionar.
+- `OrganizationService.create` crea las filas de `core.organization_module` dentro de la misma transacción del alta (`enabled_by_user_id` = superadmin que crea) y emite `organization_module.enabled` por módulo, igual que `ModuleEnablementService.enableModule`. No se reutilizó el método porque abre su propia transacción y valida contra una org todavía no commiteada; se compartió la constante `DEFAULT_ENABLED_MODULE_KEYS` (en `module-enablement.service.ts`).
+- Test unitario nuevo. Los e2e que habilitan `okr` a mano siguen andando (enableModule es upsert, sin PK duplicada). Los 19 e2e por `firstPeriod` siguen igual.
+
 ## 2026-10-12 · C26b · backend-dev · feature/plan-f11-conector-mcp
 - Hecho: fixes de la revisión de seguridad de C26 (conector MCP).
   1. **Topes HTTP propios (MEDIO)**: `/mcp` sigue con `@SkipThrottle()` (no se agregaron throttlers nombrados a `forRoot`, bug de v6) pero ahora lleva `McpIpThrottleGuard` (segundo guard, ANTES de autenticar; 120/min por `req.ip`, que respeta `trust proxy`) y `McpUserThrottleGuard` (último guard, 300/min por usuario sobre todo request, incluidos `initialize` y `tools/list`). Ambos usan `McpRateLimiter.checkHttp` (misma ventana deslizante, contadores separados de los de herramientas), responden 429 con `Retry-After`. Orden: kill switch → IP → Origin → token → usuario.

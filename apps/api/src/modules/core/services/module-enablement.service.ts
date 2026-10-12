@@ -28,6 +28,13 @@ export const MODULE_DEPENDENCIES: Readonly<Record<string, readonly string[]>> = 
 };
 
 /**
+ * Módulos que se habilitan al crear una organización: Planificación (`okr`) e
+ * Indicadores de gestión. `mcp` (ADR-0010 D7) e `indicadores-okr` quedan
+ * apagados hasta que un superadmin los habilite.
+ */
+export const DEFAULT_ENABLED_MODULE_KEYS: readonly string[] = ['okr', 'indicadores-gestion'];
+
+/**
  * ModuleEnablementService — manages which modules are enabled for an organization.
  *
  * Per ADR 0002 D4-B: module_key is a row in core.module; enabling/disabling
