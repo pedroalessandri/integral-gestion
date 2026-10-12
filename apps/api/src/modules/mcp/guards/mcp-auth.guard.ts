@@ -52,6 +52,12 @@ export class McpAuthGuard implements CanActivate {
       this.logger.warn('Access token del conector sin sub o email');
       return this.reject(response, 'JwtClaimsMissing', true);
     }
+    // La Action emite `email_verified` junto con `email`; un email sin verificar permitiría tomar la cuenta local
+    // de otra persona (UserSyncService enlaza por email). Solo se rechaza el `false` explícito.
+    if (payload['email_verified'] === false) {
+      this.logger.warn('Access token del conector con email sin verificar');
+      return this.reject(response, 'EmailNotVerified', true);
+    }
     const name = typeof payload['name'] === 'string' ? payload['name'] : email;
 
     // El guard corre antes de los interceptores: se da un contexto de request para el audit del alta de usuario.
