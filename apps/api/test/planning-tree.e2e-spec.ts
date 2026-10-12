@@ -65,6 +65,9 @@ async function bootstrapBase(suffix: string, userId: string) {
     .post(`/api/v1/orgs/${orgId}/modules/indicadores-gestion/enable`)
     .set(h);
   expect([200, 201], JSON.stringify(enabled.body)).toContain(enabled.status);
+  // El módulo de planificación (`okr`) también debe estar habilitado (ModuleEnabledGuard, C25b).
+  const enabledOkr = await request(httpServer).post(`/api/v1/orgs/${orgId}/modules/okr/enable`).set(h);
+  expect([200, 201], JSON.stringify(enabledOkr.body)).toContain(enabledOkr.status);
   const member = await request(httpServer)
     .post(`/api/v1/orgs/${orgId}/members`)
     .set(h)

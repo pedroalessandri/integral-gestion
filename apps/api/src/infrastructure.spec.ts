@@ -47,14 +47,14 @@ describe('RequestContextInterceptor', () => {
   }
 
   it('sets X-Request-Id response header from provided header', async () => {
-    const ctx = makeContext({ 'x-request-id': 'test-id-123' });
+    const ctx = makeContext({ 'x-request-id': '3f2b8c1e-5a4d-4e7b-9c1a-2d6f8e0b7a41' });
     const res = ctx.switchToHttp().getResponse<Response>();
     const setHeaderSpy = vi.spyOn(res, 'setHeader');
 
     const obs = interceptor.intercept(ctx, makeHandler());
     await lastValueFrom(obs);
 
-    expect(setHeaderSpy).toHaveBeenCalledWith('X-Request-Id', 'test-id-123');
+    expect(setHeaderSpy).toHaveBeenCalledWith('X-Request-Id', '3f2b8c1e-5a4d-4e7b-9c1a-2d6f8e0b7a41');
   });
 
   it('generates a UUID when X-Request-Id header is absent', async () => {
@@ -77,7 +77,7 @@ describe('RequestContextInterceptor', () => {
   });
 
   it('populates requestContextStorage ALS during handler execution', async () => {
-    const ctx = makeContext({ 'x-request-id': 'als-test-id' });
+    const ctx = makeContext({ 'x-request-id': '9d1e7a52-0c3b-4f6a-8b2d-4e5f6a7b8c9d' });
     let capturedId: string | undefined;
 
     const handler = makeHandler(() => {
@@ -88,7 +88,7 @@ describe('RequestContextInterceptor', () => {
     const obs = interceptor.intercept(ctx, handler);
     await lastValueFrom(obs);
 
-    expect(capturedId).toBe('als-test-id');
+    expect(capturedId).toBe('9d1e7a52-0c3b-4f6a-8b2d-4e5f6a7b8c9d');
   });
 });
 

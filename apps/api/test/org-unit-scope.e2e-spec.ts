@@ -59,6 +59,9 @@ async function bootstrapOrg(suffix: string) {
   if (periodRes.body.status === 'future') await request(httpServer).post(`/api/v1/periods/${periodId}/open`).set(orgHeaders(orgId));
   const enabled = await request(httpServer).post(`/api/v1/orgs/${orgId}/modules/indicadores-gestion/enable`).set(orgHeaders(orgId));
   expect([200, 201], JSON.stringify(enabled.body)).toContain(enabled.status);
+  // El módulo de planificación (`okr`) también debe estar habilitado (ModuleEnabledGuard, C25b).
+  const enabledOkr = await request(httpServer).post(`/api/v1/orgs/${orgId}/modules/okr/enable`).set(orgHeaders(orgId));
+  expect([200, 201], JSON.stringify(enabledOkr.body)).toContain(enabledOkr.status);
   const member = await request(httpServer)
     .post(`/api/v1/orgs/${orgId}/members`)
     .set(orgHeaders(orgId))

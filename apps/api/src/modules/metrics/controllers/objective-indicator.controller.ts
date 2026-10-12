@@ -16,6 +16,8 @@ import {
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
+import { ModuleEnabledGuard } from '../../../common/guards/module-enabled.guard.js';
+import { RequiresModule } from '../../../common/decorators/requires-module.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import { ObjectiveIndicatorService } from '../services/objective-indicator.service.js';
@@ -44,8 +46,8 @@ function requireOrgId(user: AuthContext): string {
  * Lectura `okr:read`, escritura `okr:write` (el indicador es parte del objetivo). Crear una métrica nueva en el
  * mismo paso también alcanza con `okr:write` (decisión de Pedro).
  */
-// TODO: add ModuleEnabledGuard once it is implemented for okr (mismo criterio que ProjectController)
-@UseGuards(TenantGuard, PermissionsGuard)
+@UseGuards(TenantGuard, ModuleEnabledGuard, PermissionsGuard)
+@RequiresModule('okr', 'indicadores-gestion')
 @Controller('okr')
 export class ObjectiveIndicatorController {
   constructor(

@@ -15,6 +15,8 @@ import {
 } from '@nestjs/common';
 import { TenantGuard } from '../../auth/guards/tenant.guard.js';
 import { PermissionsGuard } from '../../auth/guards/permissions.guard.js';
+import { ModuleEnabledGuard } from '../../../common/guards/module-enabled.guard.js';
+import { RequiresModule } from '../../../common/decorators/requires-module.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -37,8 +39,8 @@ function requireOrgId(user: AuthContext): string {
   return user.organizationId;
 }
 
-// TODO: add ModuleEnabledGuard once it is implemented
-@UseGuards(TenantGuard, PermissionsGuard)
+@UseGuards(TenantGuard, ModuleEnabledGuard, PermissionsGuard)
+@RequiresModule('okr')
 @Controller('okr/objectives')
 export class ObjectiveController {
   constructor(private readonly objectiveService: ObjectiveService) {}
