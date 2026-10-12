@@ -526,7 +526,7 @@ async function main(): Promise<void> {
     update: {},
   });
 
-  for (const moduleKey of ['okr', 'indicadores-gestion', 'indicadores-okr']) {
+  for (const moduleKey of ['okr', 'indicadores-gestion', 'indicadores-okr', 'mcp']) {
     await prisma.organizationModule.upsert({
       where: { organizationId_moduleKey: { organizationId: orgId, moduleKey } },
       create: { organizationId: orgId, moduleKey, enabledByUserId: user.id, disabledAt: null },

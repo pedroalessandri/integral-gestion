@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // Prisma schema — gestion-publica
 //
-// Multi-schema setup: core, auth, okr, audit, ai, metrics, planning
+// Multi-schema setup: core, auth, okr, audit, ai, metrics, planning, mcp
 // Numeric weights and percentages use Decimal (never Float).
 // All business tables carry organizationId for multi-tenant scoping.
 // ─────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["core", "auth", "okr", "audit", "ai", "metrics", "planning"]
+  schemas  = ["core", "auth", "okr", "audit", "ai", "metrics", "planning", "mcp"]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -678,4 +678,36 @@ model Axis {
   @@index([deletedAt], map: "idx_axis_deleted_at")
   @@map("axis")
   @@schema("planning")
+}
+
+// ─────────────────────────────────────────────────────────────
+// mcp schema — Log operativo del conector MCP (ADR-0010 D10). NO es audit: es purgable (180 días), sin trigger
+// append-only. No guarda argumentos ni contenido de respuestas. FKs a core.organization y core.user, los CHECK
+// de kind/outcome y las constraints cross-schema van por SQL manual en la migración.
+// ─────────────────────────────────────────────────────────────
+
+model McpToolCall {
+  id             String   @id @default(cuid())
+  /// NULL solo en `listar_organizaciones` o si la llamada falló antes de resolver la org.
+  organizationId String?  @map("organization_id")
+  userId         String   @map("user_id")
+  /// `azp` del access token (client ID de OAuth del cliente MCP).
+  clientId       String   @map("client_id") @db.VarChar(128)
+  toolName       String   @map("tool_name") @db.VarChar(64)
+  /// 'read' | 'write' — CHECK en la migración.
+  kind           String   @db.VarChar(8)
+  /// 'ok' | 'error' | 'denied' | 'rate_limited' — CHECK en la migración.
+  outcome        String   @db.VarChar(16)
+  errorCode      String?  @map("error_code") @db.VarChar(64)
+  latencyMs      Int      @map("latency_ms")
+  responseChars  Int      @map("response_chars")
+  requestId      String   @map("request_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([organizationId, createdAt(sort: Desc)], map: "idx_tool_call_org_created")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_tool_call_user_created")
+  @@index([requestId], map: "idx_tool_call_request")
+  @@index([createdAt], map: "idx_tool_call_created")
+  @@map("tool_call")
+  @@schema("mcp")
 }
