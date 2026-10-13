@@ -452,10 +452,17 @@ describe.skipIf(!process.env['DATABASE_URL'])('Conector MCP — protocolo, auth 
     }
   });
 
-  it('token sin email: 401 (no se puede resolver al usuario)', async () => {
+  it('token sin email: pasa si el sub ya está vinculado a un usuario local', async () => {
     const u = await newUser('no-email', [{ orgId: orgA.orgId, roleId: ADMIN }]);
     const res = await post({ Authorization: `Bearer ${tokenFor(u, { omitEmail: true })}` });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+  });
+
+  it('token sin email y con un sub desconocido: 403 McpUserNotLinked, sin crear usuario', async () => {
+    const sub = `auth0|mcp-unlinked-${Date.now()}`;
+    const res = await post({ Authorization: `Bearer ${signToken({ sub, email: 'x', omitEmail: true })}` });
+    expect(res.status).toBe(403);
+    expect(await db.user.findUnique({ where: { auth0Sub: sub } })).toBeNull();
   });
 
   it('token con email_verified=false: 401; con true: pasa', async () => {
