@@ -24,6 +24,12 @@ const KNOWN_MODULES: KnownModule[] = [
     description: 'Mostrar indicadores de contexto (solo visuales, no entran en el avance) en la ficha de cada objetivo.',
     requires: 'indicadores-gestion',
   },
+  {
+    key: 'mcp',
+    label: 'Conector para asistentes de IA',
+    description:
+      'Permite consultar el plan desde asistentes de IA como Claude, con la identidad y los permisos de cada usuario. Los datos consultados pasan por el proveedor del asistente: habilitalo solo con la aceptación de la organización.',
+  },
 ];
 
 function isEnabled(modules: OrgModuleInfo[], key: string): boolean {
