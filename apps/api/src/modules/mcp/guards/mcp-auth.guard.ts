@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import type { AuthContext } from '@gestion-publica/shared-types/auth';
@@ -46,10 +46,8 @@ export class McpAuthGuard implements CanActivate {
     }
 
     const sub = payload['sub'];
-    const email = payload['email'];
-    if (typeof sub !== 'string' || sub.length === 0 || typeof email !== 'string' || email.length === 0) {
-      // Sin `sub` o `email` no se puede resolver al usuario local (la Action de Auth0 agrega `email`).
-      this.logger.warn('Access token del conector sin sub o email');
+    if (typeof sub !== 'string' || sub.length === 0) {
+      this.logger.warn('Access token del conector sin sub');
       return this.reject(response, 'JwtClaimsMissing', true);
     }
     // La Action emite `email_verified` junto con `email`; un email sin verificar permitiría tomar la cuenta local
@@ -58,12 +56,25 @@ export class McpAuthGuard implements CanActivate {
       this.logger.warn('Access token del conector con email sin verificar');
       return this.reject(response, 'EmailNotVerified', true);
     }
-    const name = typeof payload['name'] === 'string' ? payload['name'] : email;
 
-    // El guard corre antes de los interceptores: se da un contexto de request para el audit del alta de usuario.
-    const user = await requestContextStorage.run({ requestId: randomUUID() }, () =>
-      this.userSync.upsertFromJwt({ auth0_sub: sub, email, name }),
-    );
+    const email = payload['email'];
+    let user;
+    if (typeof email === 'string' && email.length > 0) {
+      const name = typeof payload['name'] === 'string' ? payload['name'] : email;
+      // El guard corre antes de los interceptores: se da un contexto de request para el audit del alta de usuario.
+      user = await requestContextStorage.run({ requestId: randomUUID() }, () =>
+        this.userSync.upsertFromJwt({ auth0_sub: sub, email, name }),
+      );
+    } else {
+      // El token puede llegar sin `email`: pasó con el cliente que Claude registra por DCR (app de terceros en
+      // Auth0), aunque la Action lo agregue. Sin email no se crea usuario ni se reclaman invitaciones:
+      // solo se acepta a quien ya está vinculado por `sub` (ingresó al menos una vez por la web).
+      user = await this.userSync.findLinkedByAuth0Sub(sub);
+      if (user === null) {
+        this.logger.warn('Access token del conector sin email y sin usuario local vinculado');
+        throw new ForbiddenException('McpUserNotLinked');
+      }
+    }
 
     const authContext: AuthContext = {
       userId: user.id,

@@ -43,6 +43,25 @@ export class UserSyncService {
   ) {}
 
   /**
+   * Busca al usuario local ya vinculado a ese `auth0_sub`, sin crear ni reclamar invitaciones por email.
+   * Lo usa el conector MCP cuando el access token no trae `email` (pasó con el cliente que Claude registra
+   * por DCR: el token llega sin el claim aunque la Action lo agregue). El `sub` está verificado por la firma,
+   * así que alcanza para identificar a un usuario que ya ingresó alguna vez por la web.
+   */
+  async findLinkedByAuth0Sub(auth0Sub: string): Promise<SyncedUser | null> {
+    const user = await this.prismaService.raw.user.findUnique({ where: { auth0Sub } });
+    if (!user) return null;
+    await this.prismaService.raw.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
+    return {
+      id: user.id,
+      auth0Sub: user.auth0Sub,
+      email: user.email,
+      displayName: user.displayName,
+      isSuperadmin: user.isSuperadmin,
+    };
+  }
+
+  /**
    * Resolves the local user from a JWT payload. Called on every authenticated request.
    * Idempotent and safe to call concurrently (P2002 races fall back to a refresh).
    */

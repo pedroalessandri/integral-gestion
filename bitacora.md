@@ -15,6 +15,12 @@ Formato:
 
 ---
 
+## 2026-10-13 · Conector MCP: usuario por `sub` cuando el token no trae email · Claude · fix/mcp-usuario-por-sub
+- Hecho: en la primera conexión real desde Claude, el login con Auth0 funcionó (DCR, consentimiento, audiencia correcta, scope `plan:read offline_access`) pero cada `POST /mcp` daba 401 `JwtClaimsMissing`: el access token llegaba sin `email`, aunque las dos Actions post-login lo agregan (una sin condición). El cliente de Claude es de terceros en Auth0. `McpAuthGuard` ahora, si el token no trae `email`, resuelve al usuario por `sub` (`UserSyncService.findLinkedByAuth0Sub`) sin crear usuarios ni reclamar invitaciones por email; si no hay usuario vinculado, 403 `McpUserNotLinked` (hay que ingresar una vez por la web). Con `email` presente sigue el camino de siempre.
+- Configuración de Auth0 que hizo falta (Pedro): en la API del conector, Application Access → User-delegated "All apps allowed" y "Default Permissions for third-party applications" → User-delegated con `plan:read` (y `plan:write`).
+- Verificación: api typecheck y lint sin errores, 595 tests unitarios, e2e `mcp` 88/88.
+- Pendiente: confirmar con Claude real después del deploy.
+
 ## 2026-10-12 · Módulos por defecto · backend-dev · fix/modulos-por-defecto
 
 - Decisión de Pedro: toda org nueva nace con `okr` (Planificación) e `indicadores-gestion` habilitados. `mcp` (ADR-0010 D7) e `indicadores-okr` quedan apagados: la UI de objetivos solo usa `indicadoresOkrEnabled` como flag opcional, no lo necesita para funcionar.
