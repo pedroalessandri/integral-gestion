@@ -5,6 +5,12 @@
 
 ## Producto
 
+### Lista de módulos hardcodeada en Configuración → Módulos
+- **Qué**: `apps/web/src/components/settings/modules-panel.tsx` muestra una lista fija (`KNOWN_MODULES`) en vez del catálogo `core.module`. El módulo `mcp` (C26) existía en la DB pero no aparecía para habilitarlo, hasta que se sumó a mano.
+- **Por qué importa**: cada módulo nuevo exige tocar la web; si se olvida, no se puede habilitar desde la UI.
+- **Posible solución**: listar desde el catálogo (`GET` de módulos con nombre, descripción y dependencias) y dejar en la web solo los textos de ayuda opcionales.
+- **Prioridad**: baja.
+
 ### Permission gating en gestión de períodos usa isSuperadmin
 - **Qué**: los botones "Crear período", "Cerrar período" y "Activar período" usan `isSuperadmin` en lugar de un permiso granular del RBAC.
 - **Por qué importa**: cuando aparezcan roles como `org-admin` no-superadmin, esos usuarios no van a poder gestionar períodos en su propia org.
